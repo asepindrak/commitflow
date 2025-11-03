@@ -1,4 +1,4 @@
-# 🧠 CommitFlow
+# 🧠 CommitFlow - Smart Project Insights
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 ![Docker](https://img.shields.io/badge/Docker-ready-blue)
