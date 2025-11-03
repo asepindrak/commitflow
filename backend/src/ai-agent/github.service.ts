@@ -54,42 +54,62 @@ export async function getContributors(repo: string, retries = 3) {
     }
 }
 
+// =================== FETCH REPOS WITH RETRY ===================
+export async function getRepos(retries = 3) {
+    const owner = process.env.GITHUB_OWNER;
+    console.log("getRepos", owner);
 
-// =================== FETCH REPOS ===================
-export async function getRepos() {
-    try {
-        const owner = process.env.GITHUB_OWNER;
-        console.log("getRepos", owner);
+    const allRepos: any[] = [];
+    let page = 1;
+    const perPage = 100;
 
+    while (true) {
+        const url = `https://api.github.com/orgs/${owner}/repos?per_page=${perPage}&page=${page}`;
 
-        // Fetch semua repos dengan pagination
-        const allRepos: any[] = [];
-        let page = 1;
-        const perPage = 100; // maksimum 100 per page
+        let success = false;
+        for (let attempt = 1; attempt <= retries; attempt++) {
+            try {
+                const res = await axios.get(url, { headers });
 
-        while (true) {
-            const url = `https://api.github.com/orgs/${owner}/repos?per_page=${perPage}&page=${page}`;
-            const res = await axios.get(url, { headers });
-
-            if (res.data.length === 0) break; // tidak ada repo lagi
-            allRepos.push(...res.data);
-            page++;
+                if (Array.isArray(res.data) && res.data.length > 0) {
+                    allRepos.push(...res.data);
+                    success = true;
+                    break; // keluar dari retry loop
+                } else if (res.data.length === 0) {
+                    success = true; // tidak ada repo lagi
+                    break;
+                }
+            } catch (err) {
+                console.log(`Error fetching page ${page}, attempt ${attempt}/${retries}:`, err.message);
+                if (attempt < retries) {
+                    await new Promise((r) => setTimeout(r, 3000)); // tunggu 3 detik sebelum retry
+                }
+            }
         }
 
-        const repos = allRepos.map((r: any) => ({
-            owner: owner,
-            name: r.name,
-            fullName: r.full_name,
-            description: r.description,
-            stars: r.stargazers_count,
-            forks: r.forks_count,
-            updatedAt: r.updated_at,
-        }));
+        if (!success) {
+            console.log(`Failed to fetch page ${page} after ${retries} retries. Stopping.`);
+            break;
+        }
 
-        console.log(`Fetched ${repos.length} repos from GitHub`);
-        return repos;
-    } catch (error) {
-        logger.error("error fetching repo", error)
-        return [];
+        if (allRepos.length < page * perPage) {
+            break; // tidak ada repos lagi
+        }
+
+        page++;
     }
+
+    const repos = allRepos.map((r: any) => ({
+        owner: owner,
+        name: r.name,
+        fullName: r.full_name,
+        description: r.description,
+        stars: r.stargazers_count,
+        forks: r.forks_count,
+        updatedAt: r.updated_at,
+    }));
+
+    console.log(`Fetched ${repos.length} repos from GitHub`);
+    return repos;
 }
+
