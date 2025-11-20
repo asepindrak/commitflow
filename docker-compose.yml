@@ -43,12 +43,15 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       target: production
+      args:
+        VITE_API_URL: ${VITE_API_URL}
     container_name: commitflow-ui
     restart: unless-stopped
     ports:
       - "${FE_PORT:-3000}:80"
     environment:
       - NODE_ENV=production
+      # runtime env (optional, untuk entrypoint-based solution)
       - VITE_API_URL=${VITE_API_URL}
       - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
       - LOG_LEVEL=${LOG_LEVEL}

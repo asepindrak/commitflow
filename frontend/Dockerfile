@@ -18,15 +18,9 @@ RUN npm install
 # =========================
 FROM deps AS builder
 
-# --- Tambahan ENV untuk Vite ---
 ARG VITE_API_URL
-ARG DISCORD_WEBHOOK_URL
-ARG LOG_LEVEL
 
-ENV VITE_API_URL=$VITE_API_URL
-ENV DISCORD_WEBHOOK_URL=$DISCORD_WEBHOOK_URL
-ENV LOG_LEVEL=$LOG_LEVEL
-# --------------------------------
+ENV VITE_API_URL=${VITE_API_URL}
 
 COPY . .
 RUN npm run build
