@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.1
+
+### Patch Changes
+
+- a86467a: fixing prisma error libssl/openssl
+
 ## 1.2.0
 
 ### Minor Changes
