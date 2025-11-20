@@ -24,7 +24,7 @@ services:
     depends_on:
       - db
   backend:
-    build: 
+    build:
       context: ./backend
       dockerfile: Dockerfile
       target: production
@@ -49,7 +49,11 @@ services:
       - "${FE_PORT:-3000}:80"
     environment:
       - NODE_ENV=production
+      - VITE_API_URL=${VITE_API_URL}
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
+      - LOG_LEVEL=${LOG_LEVEL}
     depends_on:
       - backend
+
 volumes:
   pgdata:
