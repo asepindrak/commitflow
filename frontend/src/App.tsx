@@ -2,18 +2,28 @@
 import Welcome from "./components/Welcome";
 import AiAgent from "./components/AiAgent";
 import ChatWindow from "./components/ChatWindow";
-import packageJson from "../package.json";
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import 'react-toastify/dist/ReactToastify.css';
-import { ToastContainer } from 'react-toastify';
+import "react-toastify/dist/ReactToastify.css";
+import { ToastContainer } from "react-toastify";
+import ProjectManagement from "./components/ProjectManagement";
+import AuthCard from "./components/Auth/AuthCard";
+import { useAuthStore } from "./utils/store";
 
 function App() {
   const [isShow, setIsShow] = useState(false);
+  const [isLogin, setIsLogin] = useState(false);
+  const setAuth = useAuthStore((s) => s.setAuth); // ambil setter dari store
+
+  const initSession = useAuthStore((s) => s.initSession);
+  const token = useAuthStore((s) => s.token);
 
   // untuk kontrol animasi splash logo
   const [showLogo, setShowLogo] = useState(true);
 
+  useEffect(() => {
+    initSession();
+  }, [isLogin]);
 
   useEffect(() => {
     new Audio("/sounds/send.mp3").load();
@@ -21,7 +31,7 @@ function App() {
     new Audio("/sounds/close.mp3").load();
     setTimeout(() => {
       playSound("/sounds/send.mp3");
-    }, 1000)
+    }, 1000);
   }, []);
 
   const onClose = () => {
@@ -31,9 +41,49 @@ function App() {
   const playSound = (src: string) => {
     const audio = new Audio(src);
     audio.volume = 0.2;
-    audio.play().catch(() => { });
+    audio.play().catch(() => {});
   };
 
+  const handleAuth = (r: any) => {
+    // r adalah AuthResult dari backend: { token, userId, teamMemberId?, ... }
+    if (!r || !r.token) {
+      console.warn("handleAuth: invalid auth result", r);
+      return;
+    }
+
+    // set ke zustand (dan localStorage ditangani di setAuth)
+    setAuth({
+      token: r.token,
+      userId: r.userId,
+      teamMemberId: r.teamMemberId ?? null,
+    });
+
+    // update UI
+    setIsLogin(true);
+  };
+
+  if (!token) {
+    return (
+      <div className="flex flex-col justify-center items-center min-h-screen p-4 text-white relative overflow-hidden">
+        <AnimatePresence>
+          <AuthCard onAuthSuccess={handleAuth} />
+        </AnimatePresence>
+
+        <ToastContainer
+          position="top-right"
+          autoClose={3000} // durasi otomatis hilang (ms)
+          hideProgressBar={false}
+          newestOnTop={false}
+          closeOnClick
+          rtl={false}
+          pauseOnFocusLoss={false}
+          draggable
+          pauseOnHover
+          theme="dark" // <- gunakan dark mode
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col justify-center items-center min-h-screen p-4 text-white relative overflow-hidden">
@@ -46,7 +96,11 @@ function App() {
             transition={{ duration: 2, ease: "easeInOut" }}
             onAnimationComplete={() => setShowLogo(false)}
           >
-            <img src="./logo.png" alt="Logo" className="w-32 h-32 sm:w-48 sm:h-48" />
+            <img
+              src="./logo.png"
+              alt="Logo"
+              className="w-32 h-32 sm:w-48 sm:h-48"
+            />
           </motion.div>
         )}
       </AnimatePresence>
@@ -63,42 +117,42 @@ function App() {
               visible: { opacity: 1, y: 0, transition: { delay: 0.2 } },
             }}
           >
-            <Welcome />
+            <ProjectManagement />
           </motion.div>
-
-
-          {!isShow && <AiAgent setIsShow={setIsShow} />}
-          {isShow && (
-            <ChatWindow
-              onClose={onClose}
-            />
-          )}
         </motion.div>
       )}
 
-      {/* Footer */}
       {!showLogo && (
-        <motion.footer
-          className="mt-6 text-sm text-gray-400 flex justify-center gap-2 pb-20"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.8 }}
+        <motion.div
+          className="flex-1 flex flex-col items-center justify-center w-full"
+          initial="hidden"
+          animate="visible"
         >
-          <span>v{packageJson.version}</span>
-          <span>• Developed by <strong>Asepindrak</strong></span>
-        </motion.footer>
+          <motion.div
+            variants={{
+              hidden: { opacity: 0, y: -20 },
+              visible: { opacity: 1, y: 0, transition: { delay: 0.2 } },
+            }}
+          >
+            <Welcome />
+          </motion.div>
+
+          {!isShow && <AiAgent setIsShow={setIsShow} />}
+          {isShow && <ChatWindow onClose={onClose} />}
+        </motion.div>
       )}
+
       <ToastContainer
         position="top-right"
-        autoClose={3000}       // durasi otomatis hilang (ms)
+        autoClose={3000} // durasi otomatis hilang (ms)
         hideProgressBar={false}
         newestOnTop={false}
         closeOnClick
         rtl={false}
-        pauseOnFocusLoss
+        pauseOnFocusLoss={false}
         draggable
         pauseOnHover
-        theme="dark"           // <- gunakan dark mode
+        theme="dark" // <- gunakan dark mode
       />
     </div>
   );

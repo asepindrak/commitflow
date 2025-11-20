@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Volume2, Loader2 } from "lucide-react"; // Loader2 untuk loading spinner
-import { playTts } from "../lib/playTts";
+import { playTts } from "../utils/playTts";
 
 export default function TtsButton({ text, playSound }: { text: string, playSound: any }) {
     const [isLoading, setIsLoading] = useState(false);

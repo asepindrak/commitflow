@@ -1,4 +1,4 @@
-// src/lib/session.ts
+// src/utils/session.ts
 export async function initSession() {
     const existing = localStorage.getItem('session_token');
     if (existing) return existing;

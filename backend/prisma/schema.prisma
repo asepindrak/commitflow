@@ -12,15 +12,36 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
-
-model user {
-  id            String   @id @default(cuid())
-  email         String?
+model User {
+  id            String      @id @default(cuid())
+  email         String?     @unique
   phone         String?
   name          String?
-  session_token String?  @unique
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  password      String?     // kalau pake password
+  session_token String?     @unique
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  // FK ke TeamMember (one-to-one)
+  teamMemberId  String?     @unique
+  teamMember    TeamMember? @relation(fields: [teamMemberId], references: [id])
+}
+
+model TeamMember {
+  id          String   @id @default(uuid())  // pilih uuid supaya beda style dari user.id
+  clientId    String?  @unique
+  name        String
+  role        String?
+  email       String?  @unique
+  photo       String?
+  phone       String?
+  isTrash     Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime?
+  Task        Task[]
+
+  // back relation ke User
+  user        User?    @relation
 }
 
 model aiToolCache {
@@ -54,4 +75,46 @@ model chatMessage {
   updatedAt DateTime @updatedAt
 
   @@map("chat_message")
+}
+
+model Project {
+  id          String    @id @default(uuid())
+  clientId    String?     @unique
+  name        String
+  description String?
+  isTrash     Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime?
+  tasks       Task[]    @relation("ProjectTasks")
+}
+
+model Task {
+  id          String      @id @default(uuid())
+  title       String
+  description String?
+  status      String      @default("todo")
+  projectId   String?
+  project     Project?    @relation("ProjectTasks", fields: [projectId], references: [id])
+  assigneeId  String?
+  startDate   String?
+  dueDate     String?
+  priority    String?
+  assignee    TeamMember? @relation(fields: [assigneeId], references: [id])
+  isTrash     Boolean     @default(false)
+  comments    Comment[]   @relation("TaskComments")
+  clientId    String?     @unique
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime?
+}
+
+model Comment {
+  id          String   @id @default(uuid())
+  taskId      String
+  task        Task     @relation("TaskComments", fields: [taskId], references: [id])
+  author      String
+  body        String
+  attachments Json? // optional JSON array of attachments metadata
+  isTrash     Boolean   @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime?
 }

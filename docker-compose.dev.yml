@@ -24,7 +24,7 @@ services:
     depends_on:
       - db
   backend:
-    build: 
+    build:
       context: ./backend
       dockerfile: Dockerfile
       target: development

@@ -7,7 +7,6 @@ export class SessionGuard implements CanActivate {
     canActivate(context: ExecutionContext): boolean {
         const req = context.switchToHttp().getRequest();
         const token = req.headers['x-session-token'];
-        console.log(`[SessionGuard] Checking token: ${token}`);
         console.log(`[SessionGuard] Active sessions: ${Array.from(globalThis.__sessions.keys()).join(', ')}`);
         const sessions = globalThis.__sessions;
 
