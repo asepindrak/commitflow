@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.0
+
+### Minor Changes
+
+- 6f4e606: feat: login& register, mcp tools project management AI Agent, assigned to me, follow up task to whatsapp
+
 ## 1.0.4
 
 ### Patch Changes
