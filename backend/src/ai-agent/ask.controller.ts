@@ -1,22 +1,15 @@
-import {
-  Body,
-  Controller,
-  Post,
-  Req,
-  Res,
-  UseGuards,
-} from '@nestjs/common';
-import { AskService } from './ask.service';
+import { Body, Controller, Post, Req, Res, UseGuards } from "@nestjs/common";
+import { AskService } from "./ask.service";
 import { AskGateway } from "./ask.gateway";
 import { JwtGuard } from "src/common/guards/jwt.guard";
 
-@Controller('ask')
+@Controller("ask")
 @UseGuards(JwtGuard)
 export class AskController {
   constructor(
     private readonly askService: AskService,
-    private readonly askGateway: AskGateway,
-  ) { }
+    private readonly askGateway: AskGateway
+  ) {}
 
   @Post()
   chat(@Body() data: any, @Res() res: Response, @Req() req: any) {

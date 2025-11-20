@@ -12,8 +12,6 @@ It connects with your **GitHub repositories** to automatically analyze commits, 
 
 With CommitFlow, you can **plan, track, and analyze your projects** — all in one place.
 
-> 🧪 **Note:** Project Management features (Kanban board, task tracking, comments, etc.) are currently **under development** and will be available in upcoming releases.
-
 ---
 
 ## 📁 Folder Structure
@@ -34,23 +32,43 @@ With CommitFlow, you can **plan, track, and analyze your projects** — all in o
 ## ✨ Features
 
 ### 🔧 Project Management
-- 🗂 **Kanban Board** – Organize your project visually with drag-and-drop task management.  
-- 👥 **Assignees & Collaboration** – Assign tasks to contributors and manage team workloads.  
-- 💬 **Task Comments & Reports** – Add comments or report directly within each task for clear communication and issue tracking.  
-- 🗄️ **S3 Storage Integration** – Upload and store documents or images securely in AWS S3, linked directly to related tasks.  
-- ⏱ **Task Tracking** – Track progress, completion time, and project milestones.  
-- 🧾 **Project Overview** – View all tasks, commits, and discussions in one unified dashboard.  
-> ⚙️ *This module is currently in development and will be released in a future update.*
+
+A beautiful, AI-assisted workspace for managing your projects and tasks:
+
+- 🗂 **Kanban Board** – Organize tasks visually using drag-and-drop.  
+  Each task card shows **priority color accents**, **assignee avatars**, and **due dates**.  
+- 📋 **List View** – See all tasks in a clean table layout; click any row to open task details.  
+- 📆 **Timeline View** – A Gantt-style horizontal timeline to visualize progress and overlaps between tasks.  
+- 💬 **Task Details Modal** –  
+  - **Rich text editor** (React Quill) for descriptions  
+  - **File attachments** (via AWS S3 integration)  
+  - **Inline comments** with author, timestamp, and preview links  
+- 🎨 **Smart Selectors** –  
+  - Assignee and Priority fields powered by **React Select**, dynamically colored per user or priority level  
+- 🧍 **Team Management** –  
+  Add or remove team members using modern UI components, with color-coded avatars automatically generated.  
+- 🧱 **Project Management Sidebar** –  
+  - Create or delete projects easily  
+  - Integrated **SweetAlert2** confirmations for safe deletions  
+  - **Toast notifications** (`react-toastify`) for success actions (e.g., project or member added)
+- 🌙 **Dark/Light Mode Aware** –  
+  Smooth color transitions and well-tuned contrast for both themes.
+
+---
 
 ### 📊 Developer Insights
 - 📈 **GitHub Analytics** – Fetch organization repositories, commits, and contributor stats.
 - 🔍 **Contribution Breakdown** – Understand who contributes what and when.
 - 📆 **Activity Timeline** – Visualize commit frequency and collaboration trends.
 
+---
+
 ### 🤖 AI-Powered Insights
 - 💡 **AI Recommendations** – Get automatic suggestions for prioritization and sprint planning.
 - 🧠 **Smart Summaries** – Let AI summarize repository activity and project status.
 - 🗣️ **Insight Chatbot** – Ask questions like “Who’s most active this week?” or “Which repo grew fastest?”
+
+---
 
 ### 🐳 Infrastructure & Security
 - 🧩 **PostgreSQL Storage** – Store structured task and analytics data.

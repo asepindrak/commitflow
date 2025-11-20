@@ -273,3 +273,162 @@
     color: #f1f5f9 !important;
   }
 }
+
+/* ================================
+   🌗 Quill Editor Theming
+   ================================ */
+
+/* --- Placeholder color (for blank editor) --- */
+.ql-editor.ql-blank::before {
+  color: #9ca3af !important;
+  /* Tailwind gray-400 */
+  opacity: 0.6;
+}
+
+.dark .ql-editor.ql-blank::before {
+  color: #9ca3af !important;
+  opacity: 0.4;
+}
+
+/* --- Editor text color --- */
+.ql-editor {
+  color: #111827;
+  /* Tailwind gray-900 for light mode */
+}
+
+.dark .ql-editor {
+  color: #e5e7eb;
+  /* Tailwind gray-200 for dark mode */
+}
+
+/* --- Toolbar background --- */
+.ql-toolbar {
+  background-color: #f9fafb;
+  /* gray-50 */
+  border-color: #e5e7eb;
+}
+
+.dark .ql-toolbar {
+  background-color: #1f2937;
+  /* gray-800 */
+  border-color: #374151;
+}
+
+/* --- Toolbar icons --- */
+.ql-toolbar .ql-stroke {
+  stroke: #374151;
+  /* gray-700 */
+}
+
+.ql-toolbar .ql-fill {
+  fill: #374151;
+  /* gray-700 */
+}
+
+.dark .ql-toolbar .ql-stroke {
+  stroke: #d1d5db !important;
+  /* gray-300 */
+}
+
+.dark .ql-toolbar .ql-fill {
+  fill: #d1d5db !important;
+  /* gray-300 */
+}
+
+/* --- Active / hover icons --- */
+.ql-toolbar button:hover .ql-stroke,
+.ql-toolbar button:hover .ql-fill,
+.ql-toolbar button.ql-active .ql-stroke,
+.ql-toolbar button.ql-active .ql-fill {
+  stroke: #0ea5e9 !important;
+  /* Tailwind sky-500 */
+  fill: #0ea5e9 !important;
+}
+
+.dark .ql-toolbar button:hover .ql-stroke,
+.dark .ql-toolbar button:hover .ql-fill,
+.dark .ql-toolbar button.ql-active .ql-stroke,
+.dark .ql-toolbar button.ql-active .ql-fill {
+  stroke: #38bdf8 !important;
+  /* sky-400 */
+  fill: #38bdf8 !important;
+}
+
+/* --- Dropdowns and pickers --- */
+.ql-toolbar .ql-picker {
+  color: #374151;
+}
+
+.dark .ql-toolbar .ql-picker {
+  color: #d1d5db;
+}
+
+.ql-toolbar .ql-picker-options {
+  background-color: #f9fafb;
+  border-color: #e5e7eb;
+}
+
+.dark .ql-toolbar .ql-picker-options {
+  background-color: #1f2937;
+  border-color: #374151;
+}
+
+/* Toolbar: no border, slightly translucent background for contrast */
+.ql-toolbar {
+  background-color: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0.25rem 0.5rem !important;
+  /* sedikit ruang agar tombol tak mepet */
+}
+
+/* Toolbar icons color adjusted by existing rules; keep hover/active highlights */
+
+/* Container (editor wrapper): transparent and no border */
+.ql-container {
+  background-color: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  /* let inner editor control padding */
+}
+
+/* Editor area itself: keep internal padding so text doesn't touch edges */
+.ql-editor {
+  padding: 0.75rem 0.5rem !important;
+  /* comfortable padding */
+  min-height: 160px;
+  /* atau sesuaikan */
+  background: transparent !important;
+  color: inherit;
+  /* inherit color from parent so dark/light works */
+}
+
+/* Placeholder color (keep visible) */
+.ql-editor.ql-blank::before {
+  color: #9ca3af !important;
+  /* gray-400 */
+  opacity: 0.6;
+}
+
+.dark .ql-editor.ql-blank::before {
+  color: #9ca3af !important;
+  opacity: 0.5;
+}
+
+/* Keep toolbar button hover / active styles (you already have them),
+   but ensure they don't rely on borders */
+.ql-toolbar button:hover .ql-stroke,
+.ql-toolbar button:hover .ql-fill,
+.ql-toolbar button.ql-active .ql-stroke,
+.ql-toolbar button.ql-active .ql-fill {
+  stroke: #0ea5e9 !important;
+  fill: #0ea5e9 !important;
+}
+
+/* Remove any rounded corners if you prefer completely flush look,
+   otherwise keep the existing rounded class on parent modal */
+.ql-toolbar,
+.ql-container {
+  border-radius: 0 !important;
+}

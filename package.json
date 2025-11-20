@@ -1,6 +1,6 @@
 {
   "name": "commitflow",
-  "version": "1.0.4",
+  "version": "1.1.0",
   "private": false,
   "scripts": {
     "changeset": "changeset",
@@ -15,5 +15,9 @@
     "url": "git+https://github.com/asepindrak/commitflow.git"
   },
   "license": "MIT",
-  "author": "asepindrak"
+  "author": "asepindrak",
+  "dependencies": {
+    "@types/file-saver": "^2.0.7",
+    "@types/xlsx": "^0.0.35"
+  }
 }

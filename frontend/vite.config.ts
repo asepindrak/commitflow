@@ -9,6 +9,8 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      // force all imports to use the single installed copy
+      "@tanstack/react-query": path.resolve(__dirname, "node_modules/@tanstack/react-query"),
     },
   },
 })
