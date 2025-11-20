@@ -4,7 +4,7 @@
 FROM node:22-slim AS base
 WORKDIR /app
 
-# Install dependencies system (buat Prisma & NestJS build)
+# Install system deps (Prisma & build)
 RUN apt-get update && apt-get install -y \
     bash \
     git \
@@ -13,6 +13,8 @@ RUN apt-get update && apt-get install -y \
     g++ \
     libc6-dev \
     dumb-init \
+    openssl \
+    libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Update npm versi terbaru
@@ -21,23 +23,19 @@ RUN npm install -g npm@11
 # Salin dependency info lebih dulu
 COPY package*.json ./
 
-# Install dependencies (gunakan npm install, bukan ci agar fleksibel di dev)
+# Install dependencies (flexible for dev)
 RUN npm install --legacy-peer-deps
 
-# Generate Prisma client lebih cepat (kalau schema belum ada, skip tanpa error)
-COPY prisma ./prisma
-RUN npx prisma generate || echo "Skip prisma generate (schema belum ada)"
+# (JANGAN generate Prisma di sini — kita akan generate di builder setelah copy seluruh schema & source)
 
 # =======================
 # STAGE 2: DEVELOPMENT
 # =======================
 FROM base AS development
 ENV NODE_ENV=development
-# Disable file watching performance warning
 ENV WATCHPACK_POLLING=true
 ENV CHOKIDAR_USEPOLLING=true
 ENV CHOKIDAR_INTERVAL=500
-
 
 WORKDIR /app
 
@@ -47,10 +45,7 @@ COPY . .
 # Expose port NestJS dev server
 EXPOSE 3000
 
-# Gunakan dumb-init agar proses clean shutdown
 ENTRYPOINT ["dumb-init", "--"]
-
-# Jalankan NestJS dev mode (watch mode)
 CMD ["npm", "run", "start:dev"]
 
 # =======================
@@ -58,10 +53,18 @@ CMD ["npm", "run", "start:dev"]
 # =======================
 FROM base AS builder
 WORKDIR /app
+
+# Copy source to builder (schemas, src, tsconfig, dll.)
 COPY . .
+
+# Generate Prisma client inside builder (ensures binaries match this environment)
+RUN npx prisma generate
 
 # Build NestJS (kompilasi ke dist)
 RUN npm run build
+
+# Optional: remove dev deps to slim node_modules if you want
+# RUN npm prune --production
 
 # =======================
 # STAGE 4: PRODUCTION
@@ -69,19 +72,22 @@ RUN npm run build
 FROM node:22-slim AS production
 WORKDIR /app
 
-# Install minimal runtime deps
-RUN apt-get update && apt-get install -y dumb-init && rm -rf /var/lib/apt/lists/*
+# Install minimal runtime deps including openssl
+RUN apt-get update && apt-get install -y \
+    dumb-init \
+    openssl \
+    && rm -rf /var/lib/apt/lists/*
+
 ENV TZ=Asia/Jakarta
 ENV NODE_ENV=production
 
-# Copy hasil build dan dependensi
+# Copy hasil build dan dependensi dari builder
 COPY --from=builder /app/dist ./dist
-COPY --from=base /app/node_modules ./node_modules
-COPY --from=builder /app/package*.json ./
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package*.json ./ 
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/public ./public
 
-# Expose port aplikasi
 EXPOSE 3000
 
 ENTRYPOINT ["dumb-init", "--"]
