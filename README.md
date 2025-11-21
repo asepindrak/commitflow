@@ -36,20 +36,20 @@ With CommitFlow, you can **plan, track, and analyze your projects** — all in o
 A beautiful, AI-assisted workspace for managing your projects and tasks:
 
 - 🗂 **Kanban Board** – Organize tasks visually using drag-and-drop.  
-  Each task card shows **priority color accents**, **assignee avatars**, and **due dates**.  
-- 📋 **List View** – See all tasks in a clean table layout; click any row to open task details.  
-- 📆 **Timeline View** – A Gantt-style horizontal timeline to visualize progress and overlaps between tasks.  
-- 💬 **Task Details Modal** –  
-  - **Rich text editor** (React Quill) for descriptions  
-  - **File attachments** (via AWS S3 integration)  
-  - **Inline comments** with author, timestamp, and preview links  
-- 🎨 **Smart Selectors** –  
-  - Assignee and Priority fields powered by **React Select**, dynamically colored per user or priority level  
+  Each task card shows **priority color accents**, **assignee avatars**, and **due dates**.
+- 📋 **List View** – See all tasks in a clean table layout; click any row to open task details.
+- 📆 **Timeline View** – A Gantt-style horizontal timeline to visualize progress and overlaps between tasks.
+- 💬 **Task Details Modal** –
+  - **Rich text editor** (React Quill) for descriptions
+  - **File attachments** (via AWS S3 integration)
+  - **Inline comments** with author, timestamp, and preview links
+- 🎨 **Smart Selectors** –
+  - Assignee and Priority fields powered by **React Select**, dynamically colored per user or priority level
 - 🧍 **Team Management** –  
-  Add or remove team members using modern UI components, with color-coded avatars automatically generated.  
-- 🧱 **Project Management Sidebar** –  
-  - Create or delete projects easily  
-  - Integrated **SweetAlert2** confirmations for safe deletions  
+  Add or remove team members using modern UI components, with color-coded avatars automatically generated.
+- 🧱 **Project Management Sidebar** –
+  - Create or delete projects easily
+  - Integrated **SweetAlert2** confirmations for safe deletions
   - **Toast notifications** (`react-toastify`) for success actions (e.g., project or member added)
 - 🌙 **Dark/Light Mode Aware** –  
   Smooth color transitions and well-tuned contrast for both themes.
@@ -57,6 +57,7 @@ A beautiful, AI-assisted workspace for managing your projects and tasks:
 ---
 
 ### 📊 Developer Insights
+
 - 📈 **GitHub Analytics** – Fetch organization repositories, commits, and contributor stats.
 - 🔍 **Contribution Breakdown** – Understand who contributes what and when.
 - 📆 **Activity Timeline** – Visualize commit frequency and collaboration trends.
@@ -64,6 +65,7 @@ A beautiful, AI-assisted workspace for managing your projects and tasks:
 ---
 
 ### 🤖 AI-Powered Insights
+
 - 💡 **AI Recommendations** – Get automatic suggestions for prioritization and sprint planning.
 - 🧠 **Smart Summaries** – Let AI summarize repository activity and project status.
 - 🗣️ **Insight Chatbot** – Ask questions like “Who’s most active this week?” or “Which repo grew fastest?”
@@ -71,16 +73,18 @@ A beautiful, AI-assisted workspace for managing your projects and tasks:
 ---
 
 ### 🐳 Infrastructure & Security
+
 - 🧩 **PostgreSQL Storage** – Store structured task and analytics data.
 - 🔐 **Environment Management** – Secure credentials via `.env` file.
 - ⚙️ **Docker Ready** – Run everything locally or in production with one command.
 
 ---
+
 ## ⚙️ Requirements
 
-- [Docker](https://www.docker.com/get-started) and Docker Compose  
-- A **GitHub Personal Access Token** (with `repo` scope)  
-- An **OpenAI API Key** (for AI Insights & Automation)  
+- [Docker](https://www.docker.com/get-started) and Docker Compose
+- A **GitHub Personal Access Token** (with `repo` scope)
+- An **OpenAI API Key** (for AI Insights & Automation)
 - **AWS S3 Credentials** (for document and image storage)
 
 ---
@@ -146,14 +150,19 @@ S3_ENDPOINT_URL=
 ---
 
 ### 2. Build and start all containers
+
 For production:
+
 ```bash
 ./scripts/build.sh
 ```
+
 For development (with hot reload and live updates):
+
 ```bash
 ./scripts/build.dev.sh
 ```
+
 ---
 
 ### 3. Verify running containers
@@ -162,27 +171,27 @@ For development (with hot reload and live updates):
 docker ps
 ```
 
-| Service  | URL                     |
-|-----------|------------------------|
-| Frontend  | http://localhost:3000  |
-| Backend   | http://localhost:8000  |
-| pgAdmin   | http://localhost:8080  |
+| Service  | URL                   |
+| -------- | --------------------- |
+| Frontend | http://localhost:3000 |
+| Backend  | http://localhost:8000 |
+| pgAdmin  | http://localhost:8080 |
 
 ---
 
 ### 4. Access pgAdmin
 
-- Email: `admin@example.com`  
+- Email: `admin@example.com`
 - Password: `admin123`
 
 Then add a new PostgreSQL server:
 
-| Field     | Value        |
-|------------|--------------|
-| Host       | db           |
-| Database   | commitflow   |
-| User       | postgres     |
-| Password   | password     |
+| Field    | Value      |
+| -------- | ---------- |
+| Host     | db         |
+| Database | commitflow |
+| User     | postgres   |
+| Password | password   |
 
 ---
 
@@ -201,16 +210,26 @@ docker exec -it commitflow-api npx prisma db push
 ## 🧠 Running the Application
 
 **Development (hot reload):**
+
 ```bash
 NODE_ENV="development"
 ```
 
 **Production:**
+
 ```bash
 NODE_ENV="production"
 ```
 
 You can switch between development and production using different Docker Compose files.
+
+---
+
+## Swagger Openapi
+
+```
+http://localhost:8000/docs
+```
 
 ---
 
