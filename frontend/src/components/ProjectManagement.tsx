@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import Sidebar from "./Sidebar";
 import TaskModal from "./TaskModal";
-import type { Project, Task, TeamMember } from "../types";
+import type { Project, Task, TeamMember, Workspace } from "../types";
 import { Sun, Moon, PlusCircle } from "lucide-react";
 import TaskView from "./TaskView";
 import ExportImportControls from "./ExportImportControls";
@@ -22,6 +22,7 @@ import {
 } from "../hooks/useTasks";
 import { useAuthStore } from "../utils/store";
 import EditProfileModal from "./EditProfileModal";
+import { playSound } from "../utils/playSound";
 
 // Create local QueryClient so this component works even if app not wrapped globally
 const queryClient = new QueryClient();
@@ -153,13 +154,70 @@ export default function ProjectManagement() {
     return () => document.removeEventListener("click", close);
   }, []);
 
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [activeProjectId, setActiveProjectId] = useState<string>(
     projects[0]?.id ?? ""
   );
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string>(
+    workspaces[0]?.id ?? ""
+  );
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [dragTaskId, setDragTaskId] = useState<string | null>(null);
+  const [dragPos, setDragPos] = useState({ x: 0, y: 0, width: 300 });
+  const offsetRef = useRef({ x: 0, y: 0, width: 300 });
+
+  // dipassing ke KanbanBoard via TaskView
+  function handleDragStart(e: React.DragEvent, id: string) {
+    setDragTaskId(id);
+
+    // sembunyikan ghost image
+    try {
+      e.dataTransfer?.setDragImage(new Image(), 0, 0);
+    } catch (e: any) {
+      console.log(e);
+    }
+
+    // currentTarget seharusnya adalah elemen .task-card yang memicu event
+    const el = e.currentTarget as HTMLElement;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+
+    // simpan offset kursor relatif ke elemen
+    offsetRef.current = {
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
+      width: rect.width,
+    };
+
+    // set initial pos supaya langsung terlihat berpindah
+    setDragPos({
+      x: e.clientX - offsetRef.current.x,
+      y: e.clientY - offsetRef.current.y,
+      width: rect.width,
+    });
+  }
+
+  function handleDrag(e: React.DragEvent) {
+    // some browsers emit clientX/Y = 0 when leaving window — ignore those
+    if (!dragTaskId) return;
+    if (e.clientX === 0 && e.clientY === 0) return;
+
+    setDragPos({
+      x: e.clientX - offsetRef.current.x,
+      y: e.clientY - offsetRef.current.y,
+      width: offsetRef.current.width,
+    });
+  }
+
+  function handleDragEnd(_e: React.DragEvent) {
+    // apply drop is handled by onDrop on columns (you already have onDropTo)
+    setDragTaskId(null);
+    offsetRef.current = { x: 0, y: 0, width: 300 };
+    playSound("/sounds/send.mp3", true);
+  }
+
   const [dark, setDark] = useState<boolean>(() => {
     try {
       // prefer stored user preference, otherwise use system preference
@@ -182,15 +240,32 @@ export default function ProjectManagement() {
 
   // If you already export hooks, use them. If not, the hooks use qcRef internally.
   // We'll call our custom hooks which you said you've created.
-  const tasksQuery = useTasksQuery(activeProjectId); // returns { data, isLoading, ... }
+  const tasksQuery = useTasksQuery(
+    activeProjectId ?? "",
+    activeWorkspaceId ?? ""
+  ); // returns { data, isLoading, ... }
   const createTaskMutation = useCreateTask();
   const updateTaskMutation = useUpdateTask();
   const deleteTaskMutation = useDeleteTask();
 
+  useEffect(() => {
+    (async () => {
+      try {
+        const workspaces = await api.getWorkspaces();
+        if (workspaces && workspaces.length > 0) {
+          setWorkspaces(workspaces);
+          setActiveWorkspaceId((prev) => prev || workspaces[0].id);
+        }
+      } catch (e) {
+        console.log("get workspaces failed.");
+      }
+    })();
+  }, []);
+
   // Persist local copy for offline fallback while migrating:
   useEffect(() => {
     try {
-      const snapshot = { projects, tasks, ui: { dark }, team };
+      const snapshot = { workspaces, projects, tasks, ui: { dark }, team };
       localStorage.setItem(
         "commitflow_local_snapshot",
         JSON.stringify(snapshot)
@@ -198,39 +273,52 @@ export default function ProjectManagement() {
     } catch (e) {
       console.warn("Failed to save local snapshot", e);
     }
-  }, [projects, tasks, dark, team]);
+  }, [workspaces, projects, tasks, dark, team]);
 
   // On mount: load server state (projects, team) so UI reflects persisted data
+  // ubah menjadi hanya tergantung workspace
   useEffect(() => {
     (async () => {
       try {
-        const state = await api.getState();
-        if (state) {
-          if (Array.isArray(state.projects) && state.projects.length > 0) {
-            setProjects(state.projects);
-            // ensure active project selected
-            setActiveProjectId((prev) => prev || state.projects[0].id || "");
-          }
-          if (Array.isArray(state.team) && state.team.length > 0) {
-            setTeam(normalizeTeamInput(state.team));
-          }
-          // tasks are handled by useTasksQuery effect
+        if (!activeWorkspaceId) return;
+        const state = await api.getState(activeWorkspaceId);
+        if (!state) return;
+
+        if (Array.isArray(state.projects) && state.projects.length > 0) {
+          setProjects(state.projects);
+          // set active project only if none selected or current not in list
+          setActiveProjectId((prev) => {
+            if (prev && state.projects.some((p) => p.id === prev)) return prev;
+            return state.projects[0].id ?? "";
+          });
+        } else {
+          setProjects([]);
+          setActiveProjectId("");
+        }
+
+        if (Array.isArray(state.team) && state.team.length > 0) {
+          setTeam(normalizeTeamInput(state.team));
         }
       } catch (e) {
-        // ignore; offline or endpoint not available
+        // ignore
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [activeWorkspaceId]);
 
   // On mount: setup realtime socket + periodic queue flush
   useEffect(() => {
-    const ws = createRealtimeSocket(qcRef.current);
+    // create socket with getters so realtime util can target specific query keys
+    const wsHandle = createRealtimeSocket(
+      qcRef.current,
+      () => activeProjectId,
+      () => activeWorkspaceId
+    );
 
     let intervalId: number | undefined;
+
     const attemptFlush = async () => {
       try {
-        // custom flush so we can remap tmp_ ids returned by create ops to later queued ops
         const q = getQueue();
         if (!q.length) return;
         let processed = 0;
@@ -251,12 +339,10 @@ export default function ProjectManagement() {
                 delete payload.id;
               }
               const created = await api.createTask(payload);
-              // remove processed op
               const cur = getQueue();
               cur.shift();
               localStorage.setItem("cf_op_queue_v1", JSON.stringify(cur));
 
-              // remap any remaining queued ops that reference the tmp id to the new id
               if (originalTmpId && typeof created?.id === "string") {
                 const remaining = getQueue();
                 let changed = false;
@@ -302,9 +388,12 @@ export default function ProjectManagement() {
               const cur = getQueue();
               cur.shift();
               localStorage.setItem("cf_op_queue_v1", JSON.stringify(cur));
-            } else if (op.op === "create_project") {
+            } // --- replace the create_project branch inside attemptFlush with this ---
+            else if (op.op === "create_project") {
               const originalTmpId = op.payload?.id ?? op.payload?.clientId;
               const payload = { ...op.payload } as any;
+
+              // keep clientId logic (do not remove workspaceId!)
               if (
                 payload &&
                 typeof payload.id === "string" &&
@@ -313,7 +402,26 @@ export default function ProjectManagement() {
                 payload.clientId = payload.id;
                 delete payload.id;
               }
+
+              // Ensure we have a workspaceId to send to backend.
+              // Prefer payload.workspaceId (if queued correctly), otherwise fall back to current activeWorkspaceId from closure.
+              const workspaceIdToUse = payload.workspaceId ?? activeWorkspaceId;
+              if (!workspaceIdToUse || typeof workspaceIdToUse !== "string") {
+                // Defensive: do not attempt to send request that will fail.
+                // Stop processing queue now; will retry later when workspaceId becomes available.
+                console.warn(
+                  "flushQueue: create_project missing workspaceId — will retry later",
+                  op
+                );
+                return;
+              }
+
+              // attach the workspaceId to the payload before sending
+              payload.workspaceId = workspaceIdToUse;
+
               const created = await api.createProject(payload);
+
+              // remove processed op
               const cur = getQueue();
               cur.shift();
               localStorage.setItem("cf_op_queue_v1", JSON.stringify(cur));
@@ -377,12 +485,10 @@ export default function ProjectManagement() {
               cur.shift();
               localStorage.setItem("cf_op_queue_v1", JSON.stringify(cur));
 
-              // remap remaining ops referencing tmp team member id (if any)
               if (originalTmpId && typeof created?.id === "string") {
                 const remaining = getQueue();
                 let changed = false;
                 for (const rem of remaining) {
-                  // update_task patches referencing assigneeId
                   if (
                     rem.op === "update_task" &&
                     rem.payload &&
@@ -427,27 +533,43 @@ export default function ProjectManagement() {
           processed++;
         }
 
-        qcRef.current.invalidateQueries(["tasks"]);
-        qcRef.current.invalidateQueries(["projects"]);
-        qcRef.current.invalidateQueries(["team"]);
+        // Use latest active ids (from closures), only invalidate targeted keys when id truthy
+        if (activeProjectId) {
+          qcRef.current.invalidateQueries(["tasks", activeProjectId]);
+        } else {
+          qcRef.current.invalidateQueries(["tasks"], { exact: false });
+        }
+
+        if (activeWorkspaceId) {
+          qcRef.current.invalidateQueries(["projects", activeWorkspaceId]);
+          qcRef.current.invalidateQueries(["team", activeWorkspaceId]);
+        } else {
+          qcRef.current.invalidateQueries(["projects"], { exact: false });
+          qcRef.current.invalidateQueries(["team"], { exact: false });
+        }
       } catch (e) {
         // backend still down — will retry later
       }
     };
 
-    // eslint-disable-next-line prefer-const
+    // start polling flush
     intervalId = window.setInterval(attemptFlush, 7000);
     window.addEventListener("online", attemptFlush);
 
+    // also try immediately
     attemptFlush().catch(() => {});
 
     return () => {
-      if (ws && typeof ws.close === "function") ws.close();
+      // cleanup socket + interval + listener
+      try {
+        wsHandle?.close();
+      } catch (_) {}
       if (intervalId) clearInterval(intervalId);
       window.removeEventListener("online", attemptFlush);
     };
+    // re-run effect when active ids change so closure + socket use latest values
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [activeProjectId, activeWorkspaceId]);
 
   // Apply dark class to document root and persist preference
   useEffect(() => {
@@ -467,28 +589,33 @@ export default function ProjectManagement() {
       setTasks((localTasks) => {
         const serverTasks = tasksQuery.data as Task[];
         const tmp = localTasks.filter((t) => nid(t.id).startsWith("tmp_"));
+        // Keep tmp items that belong to this project only (or keep all tmp but remap later)
         const others = localTasks.filter(
-          (t) => t.projectId !== activeProjectId || nid(t.id).startsWith("tmp_")
+          (t) =>
+            !nid(t.id).startsWith("tmp_") && t.projectId !== activeProjectId
         );
         const merged = [
-          ...others.filter((o) => !nid(o.id).startsWith("tmp_")),
+          ...others,
           ...serverTasks,
-          ...tmp,
+          ...tmp.filter((t) => t.projectId === activeProjectId),
         ];
         const map = new Map<string, Task>();
         for (const t of merged) map.set(nid(t.id), t);
         return Array.from(map.values());
       });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tasksQuery.data, activeProjectId]);
 
   // UI handlers using mutations (optimistic)
   async function handleAddTask(title: string) {
+    if (!activeProjectId) {
+      toast.dark("Select a project first");
+      return;
+    }
     // prevent double-clicks creating multiple optimistic items
     if (creatingTask) return;
     setCreatingTask(true);
-
+    playSound("/sounds/incoming.mp3", true);
     const optimistic: Task = {
       id: `tmp_${Math.random().toString(36).slice(2, 9)}`,
       title,
@@ -529,7 +656,7 @@ export default function ProjectManagement() {
       );
 
       // ensure queries updated
-      qcRef.current.invalidateQueries(["tasks"]);
+      qcRef.current.invalidateQueries(["tasks", activeProjectId]);
       toast.dark("Task created");
     } catch (err) {
       console.error(
@@ -656,7 +783,7 @@ export default function ProjectManagement() {
 
       // invalidate queries so server state refreshes
       try {
-        qcRef.current.invalidateQueries(["tasks"]);
+        qcRef.current.invalidateQueries(["tasks", activeProjectId]);
       } catch (e) {
         /* best-effort */
       }
@@ -695,6 +822,7 @@ export default function ProjectManagement() {
       // replace tmp id with server id if returned
       setTeam((prev) => prev.map((t) => (t.id === m.id ? created : t)));
       toast.dark(`${created.name} added`);
+      playSound("/sounds/send.mp3", true);
     } catch (err) {
       try {
         enqueueOp({
@@ -824,19 +952,33 @@ export default function ProjectManagement() {
     <QueryClientProvider client={qcRef.current}>
       <div className="fixed z-20 inset-0 flex bg-white dark:bg-gray-900 text-slate-900 dark:text-slate-100">
         <Sidebar
+          workspaces={workspaces}
+          activeWorkspaceId={activeWorkspaceId}
+          setActiveWorkspaceId={setActiveWorkspaceId}
           projects={projects}
           activeProjectId={activeProjectId}
           setActiveProjectId={setActiveProjectId}
           addProject={(name) => {
+            if (!activeWorkspaceId) {
+              toast.dark("Select a workspace first");
+              return;
+            }
+
             const p: Project = {
               id: `tmp_${Math.random().toString(36).slice(2, 9)}`,
               name,
+              workspaceId: activeWorkspaceId, // <-- penting
             };
+
             setProjects((s) => [...s, p]);
             setActiveProjectId(p.id);
 
             api
-              .createProject({ ...p, clientId: p.id })
+              .createProject({
+                ...p,
+                clientId: p.id,
+                workspaceId: activeWorkspaceId,
+              })
               .then((created) => {
                 setProjects((prev) =>
                   prev.map((pp) => (pp.id === p.id ? created : pp))
@@ -853,7 +995,11 @@ export default function ProjectManagement() {
                 try {
                   enqueueOp({
                     op: "create_project",
-                    payload: { ...p, clientId: p.id },
+                    payload: {
+                      ...p,
+                      clientId: p.id,
+                      workspaceId: activeWorkspaceId,
+                    }, // <-- include workspaceId
                     createdAt: new Date().toISOString(),
                   });
                 } catch (err) {
@@ -1127,12 +1273,20 @@ export default function ProjectManagement() {
                       }
                       toast.dark("Move queued (offline)");
                     },
-                    onSettled: () => qcRef.current.invalidateQueries(["tasks"]),
+                    onSettled: () =>
+                      qcRef.current.invalidateQueries([
+                        "tasks",
+                        activeProjectId,
+                      ]),
                   }
                 );
                 setDragTaskId(null);
               }}
-              onDragStart={(id) => setDragTaskId(id)}
+              onDragStart={handleDragStart}
+              onDrag={handleDrag} // new prop
+              onDragEnd={handleDragEnd} // new prop
+              dragPos={dragPos}
+              dragTaskId={dragTaskId}
               onSelectTask={(t) => setSelectedTask(t)}
               team={team}
             />
@@ -1143,7 +1297,10 @@ export default function ProjectManagement() {
                 activeProjectId={activeProjectId}
                 currentMemberId={authTeamMemberId}
                 task={selectedTask}
-                onClose={() => setSelectedTask(null)}
+                onClose={() => {
+                  playSound("/sounds/close.mp3", true);
+                  setSelectedTask(null);
+                }}
                 onSave={async (u) => {
                   console.log(u);
                   await handleUpdateTask(u);
@@ -1214,7 +1371,7 @@ export default function ProjectManagement() {
                     toast.dark("Comment queued (offline)");
                   } finally {
                     // invalidate tasks query so when server back online it will refresh
-                    qcRef.current.invalidateQueries(["tasks"]);
+                    qcRef.current.invalidateQueries(["tasks", activeProjectId]);
                   }
                 }}
                 team={team}

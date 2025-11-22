@@ -40,6 +40,7 @@ export default function AuthCard({ onAuthSuccess, initialEmail }: Props) {
   const [tab, setTab] = useState<"login" | "register">("login");
 
   // common states
+  const [workspace, setWorkspace] = useState("");
   const [email, setEmail] = useState(initialEmail || "");
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
@@ -64,8 +65,8 @@ export default function AuthCard({ onAuthSuccess, initialEmail }: Props) {
 
   const onRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !email || !password) {
-      toast.error("Name, email, and password are required");
+    if (!workspace || !name || !email || !password) {
+      toast.error("Workspace, Name, email, and password are required");
       return;
     }
 
@@ -77,7 +78,13 @@ export default function AuthCard({ onAuthSuccess, initialEmail }: Props) {
     setLoading(true);
     const clientTempId = generateClientTempId();
     try {
-      const result = await apiRegister({ clientTempId, email, name, password });
+      const result = await apiRegister({
+        clientTempId,
+        workspace,
+        email,
+        name,
+        password,
+      });
       toast.success("Register berhasil");
       try {
         // keep consistent key with the rest of your app
@@ -214,6 +221,16 @@ export default function AuthCard({ onAuthSuccess, initialEmail }: Props) {
             value={passwordConfirm}
             onChange={(e) => setPasswordConfirm(e.target.value)}
             placeholder="••••••••"
+            required
+            disabled={loading}
+          />
+
+          <label className="block text-xs text-gray-300">Workspace</label>
+          <input
+            className="w-full p-2 rounded bg-black/60 text-white"
+            value={workspace}
+            onChange={(e) => setWorkspace(e.target.value)}
+            placeholder="Workspace Name"
             required
             disabled={loading}
           />

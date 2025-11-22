@@ -1,7 +1,7 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { ProjectManagementController } from './project-management.controller';
+import { Test, TestingModule } from "@nestjs/testing";
+import { ProjectManagementController } from "./project-management.controller";
 
-describe('ProjectManagementController', () => {
+describe("ProjectManagementController", () => {
   let controller: ProjectManagementController;
 
   beforeEach(async () => {
@@ -9,10 +9,12 @@ describe('ProjectManagementController', () => {
       controllers: [ProjectManagementController],
     }).compile();
 
-    controller = module.get<ProjectManagementController>(ProjectManagementController);
+    controller = module.get<ProjectManagementController>(
+      ProjectManagementController
+    );
   });
 
-  it('should be defined', () => {
+  it("should be defined", () => {
     expect(controller).toBeDefined();
   });
 });

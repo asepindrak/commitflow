@@ -20,12 +20,38 @@ function makeError(res: Response, parsed: any) {
 }
 
 /**
- * State / bootstrap
+ * Workspaces
  */
-export async function getState() {
-  const res = await apiFetch(`${BASE}/api/project-management/state`, {
+export async function getWorkspaces() {
+  const res = await apiFetch(`${BASE}/api/project-management/workspaces`, {
     method: "GET",
   });
+  const parsed = await parseJson(res);
+  if (!res.ok) throw makeError(res, parsed);
+  return parsed;
+}
+
+export async function createWorkspace(payload: any) {
+  const res = await apiFetch(`${BASE}/api/workspaces`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const parsed = await parseJson(res);
+  if (!res.ok) throw makeError(res, parsed);
+  return parsed;
+}
+
+/**
+ * State / bootstrap
+ */
+export async function getState(workspaceId: string) {
+  const res = await apiFetch(
+    `${BASE}/api/project-management/state/${workspaceId}`,
+    {
+      method: "GET",
+    }
+  );
   const parsed = await parseJson(res);
   if (!res.ok) throw makeError(res, parsed);
   return parsed;
@@ -34,8 +60,10 @@ export async function getState() {
 /**
  * Projects
  */
-export async function getProjects() {
-  const res = await apiFetch(`${BASE}/api/projects`, { method: "GET" });
+export async function getProjects(workspaceId: string) {
+  const res = await apiFetch(`${BASE}/api/projects/${workspaceId}`, {
+    method: "GET",
+  });
   const parsed = await parseJson(res);
   if (!res.ok) throw makeError(res, parsed);
   return parsed;

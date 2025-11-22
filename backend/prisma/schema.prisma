@@ -13,37 +13,6 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
-model User {
-  id            String      @id @default(cuid())
-  email         String?     @unique
-  phone         String?
-  name          String?
-  password      String?     // kalau pake password
-  session_token String?     @unique
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-
-  // FK ke TeamMember (one-to-one)
-  teamMemberId  String?     @unique
-  teamMember    TeamMember? @relation(fields: [teamMemberId], references: [id])
-}
-
-model TeamMember {
-  id          String   @id @default(uuid())  // pilih uuid supaya beda style dari user.id
-  clientId    String?  @unique
-  name        String
-  role        String?
-  email       String?  @unique
-  photo       String?
-  phone       String?
-  isTrash     Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime?
-  Task        Task[]
-
-  // back relation ke User
-  user        User?    @relation
-}
 
 model aiToolCache {
   id         String   @id @default(cuid())
@@ -78,15 +47,63 @@ model chatMessage {
   @@map("chat_message")
 }
 
-model Project {
-  id          String    @id @default(uuid())
-  clientId    String?     @unique
+model User {
+  id            String        @id @default(cuid())
+  email         String?       @unique
+  phone         String?
+  name          String?
+  role          Role?         @default(USER)
+  password      String?       // kalau pake password
+  session_token String?       @unique
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  members       TeamMember[]  @relation("UserMembers")
+
+}
+
+model TeamMember {
+  id          String   @id @default(uuid())  // pilih uuid supaya beda style dari user.id
+  clientId    String?  @unique
+  userId      String
+  workspaceId String
+  name        String
+  role        String?
+  email       String?
+  photo       String?
+  phone       String?
+  isTrash     Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime?
+  Task        Task[]
+
+  // FK ke Workspace
+  workspace     Workspace?  @relation("WorkspaceMembers", fields: [workspaceId], references: [id])
+  user          User?  @relation("UserMembers", fields: [userId], references: [id])
+}
+
+model Workspace {
+  id          String        @id @default(uuid())
+  clientId    String?       @unique
   name        String
   description String?
-  isTrash     Boolean   @default(false)
-  createdAt   DateTime  @default(now())
+  isTrash     Boolean       @default(false)
+  createdAt   DateTime      @default(now())
   updatedAt   DateTime?
-  tasks       Task[]    @relation("ProjectTasks")
+  projects    Project[]     @relation("WorkspaceProjects")
+  members     TeamMember[]        @relation("WorkspaceMembers")
+}
+
+model Project {
+  id              String      @id @default(uuid())
+  workspaceId     String?
+  clientId        String?     @unique
+  name            String
+  description     String?
+  isTrash         Boolean     @default(false)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime?
+  workspace       Workspace?  @relation("WorkspaceProjects", fields: [workspaceId], references: [id])
+  tasks           Task[]      @relation("ProjectTasks")
 }
 
 model Task {
@@ -109,13 +126,18 @@ model Task {
 }
 
 model Comment {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   taskId      String
-  task        Task     @relation("TaskComments", fields: [taskId], references: [id])
+  task        Task      @relation("TaskComments", fields: [taskId], references: [id])
   author      String
   body        String
   attachments Json? // optional JSON array of attachments metadata
   isTrash     Boolean   @default(false)
-  createdAt   DateTime @default(now())
+  createdAt   DateTime  @default(now())
   updatedAt   DateTime?
+}
+
+enum Role {
+  USER
+  ADMIN
 }

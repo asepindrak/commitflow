@@ -15,6 +15,7 @@ import remarkBreaks from "remark-breaks";
 import TtsButton from "./TTSButton";
 import { toast } from "react-toastify";
 import { apiFetch } from "../utils/apiFetch";
+import { playSound } from "../utils/playSound";
 
 interface ChatWindowProps {
   onClose: () => void;
@@ -70,7 +71,7 @@ Siap bantu insight lebih cerdas. 💡`;
 
     if (userMessagesCount > 0) {
       setWelcomeMessage(fullText);
-      playSound("/sounds/send.mp3");
+      playSound("/sounds/send.mp3", isPlaySound);
       return;
     }
 
@@ -87,7 +88,7 @@ Siap bantu insight lebih cerdas. 💡`;
     };
 
     const delayTimer = setTimeout(startTyping, startDelay);
-    setTimeout(() => playSound("/sounds/send.mp3"), 500);
+    setTimeout(() => playSound("/sounds/send.mp3", isPlaySound), 500);
 
     return () => clearTimeout(delayTimer);
   }, [isMessagesReady]);
@@ -110,7 +111,7 @@ Siap bantu insight lebih cerdas. 💡`;
   const closeWindow = () => {
     setIsVisible(false);
     setTimeout(() => {
-      playSound("/sounds/close.mp3");
+      playSound("/sounds/close.mp3", isPlaySound);
       onClose();
     }, 500);
   };
@@ -194,7 +195,7 @@ Siap bantu insight lebih cerdas. 💡`;
     if (text) {
       await navigator.clipboard.writeText(text);
       setCopied(true);
-      playSound("/sounds/close.mp3");
+      playSound("/sounds/close.mp3", isPlaySound);
       setTimeout(() => setCopied(false), 1500);
       toast.dark("Teks berhasil disalin!");
     }
@@ -217,14 +218,14 @@ Siap bantu insight lebih cerdas. 💡`;
         break;
     }
 
-    playSound("/sounds/close.mp3");
+    playSound("/sounds/close.mp3", isPlaySound);
     setShared(true);
     setTimeout(() => setShared(false), 1500);
     window.open(shareUrl, "_blank");
   };
 
   const clearChat = async () => {
-    playSound("/sounds/close.mp3");
+    playSound("/sounds/close.mp3", isPlaySound);
     const result = await Swal.fire({
       title: "Bersihkan chat?",
       text: "Yakin ingin membersihkan semua pesan?",
@@ -260,14 +261,7 @@ Siap bantu insight lebih cerdas. 💡`;
 
   const onOffSound = () => {
     setIsPlaySound(!isPlaySound);
-    playSound("/sounds/close.mp3");
-  };
-
-  const playSound = (src: string) => {
-    if (!isPlaySound) return;
-    const audio = new Audio(src);
-    audio.volume = 0.2;
-    audio.play().catch(() => {});
+    playSound("/sounds/close.mp3", true);
   };
 
   const handleSend = async (textOverride?: string) => {
@@ -275,7 +269,7 @@ Siap bantu insight lebih cerdas. 💡`;
     if (!message.trim() || isLoading) return;
 
     setIsLoading(true);
-    playSound("/sounds/send.mp3");
+    playSound("/sounds/send.mp3", isPlaySound);
 
     const userMsg: Message = { id: uuidv4(), content: message, role: "user" };
     setMessages((m: Message[]) => [...m, userMsg]);
@@ -303,7 +297,7 @@ Siap bantu insight lebih cerdas. 💡`;
       const decoder = new TextDecoder("utf-8");
 
       setIsLoading(false);
-      playSound("/sounds/incoming.mp3");
+      playSound("/sounds/incoming.mp3", isPlaySound);
 
       let hasScrolled = false;
 
@@ -553,6 +547,7 @@ Siap bantu insight lebih cerdas. 💡`;
         isLoading={isLoading}
         placeholder={placeholder}
         playSound={playSound}
+        isPlaySound={isPlaySound}
       />
     </div>
   );

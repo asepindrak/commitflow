@@ -10,13 +10,21 @@ export default function TaskView({
   columns,
   onDropTo,
   onDragStart,
+  onDrag,
+  onDragEnd,
+  dragPos,
+  dragTaskId,
   onSelectTask,
   team,
 }: {
   currentMemberId: any;
   columns: { key: Task["status"]; title: string; items: Task[] }[];
   onDropTo: (s: Task["status"]) => void;
-  onDragStart: (id: string) => void;
+  onDragStart: (e: any, id: string) => void;
+  onDrag: (e: any) => void;
+  onDragEnd: (e: any) => void;
+  dragPos: any;
+  dragTaskId: any;
   onSelectTask: (t: Task) => void;
   team: TeamMember[];
 }) {
@@ -94,10 +102,14 @@ export default function TaskView({
         <KanbanBoard
           currentMemberId={currentMemberId}
           columns={columns}
+          dragTaskId={dragTaskId}
           onDropTo={onDropTo}
-          onDragStart={onDragStart}
+          onDragStart={onDragStart} // sekarang expects (e,id)
+          onDrag={onDrag} // new prop
+          onDragEnd={onDragEnd} // new prop
           onSelectTask={onSelectTask}
           team={team}
+          dragPos={dragPos}
         />
       )}
 

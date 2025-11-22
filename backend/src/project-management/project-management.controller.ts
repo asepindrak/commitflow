@@ -15,6 +15,7 @@ import {
   BadRequestException,
   StreamableFile,
   UseGuards,
+  Req,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import type { Response } from "express";
@@ -27,16 +28,23 @@ import { Request } from "express";
 import * as fs from "fs";
 import { join } from "path";
 import { JwtGuard } from "src/common/guards/jwt.guard";
+import { CreateWorkspaceDto } from "./dto/workspace.dto";
 
 @Controller("api")
 @UseGuards(JwtGuard)
 export class ProjectManagementController {
   constructor(private svc: ProjectManagementService) {}
 
+  @Get("project-management/workspaces")
+  getWorkspaces(@Req() req: any) {
+    const userId = req.user.userId; // <-- ambil userId dari JWT
+    return this.svc.getWorkspaces(userId);
+  }
+
   // State / bootstrap
-  @Get("project-management/state")
-  getState() {
-    return this.svc.getState();
+  @Get("project-management/state/:id")
+  getState(@Param("id") id: string) {
+    return this.svc.getState(id);
   }
 
   // Export XLSX
@@ -67,10 +75,17 @@ export class ProjectManagementController {
     return result;
   }
 
+  // Workspaces
+  @Post("workspaces")
+  createWorkspaces(@Body() dto: CreateWorkspaceDto, @Req() req: any) {
+    const userId = req.user.userId; // <-- ambil userId dari JWT
+    return this.svc.createWorkspaces(dto, userId);
+  }
+
   // Projects
-  @Get("projects")
-  getProjects() {
-    return this.svc.getProjects();
+  @Get("projects/:id")
+  getProjects(@Param("id") id: string) {
+    return this.svc.getProjects(id);
   }
 
   @Post("projects")
@@ -146,9 +161,9 @@ export class ProjectManagementController {
   }
 
   // Team members
-  @Get("team")
-  getTeam() {
-    return this.svc.getTeam();
+  @Get("team/:id")
+  getTeam(@Param("id") id: string) {
+    return this.svc.getTeam(id);
   }
 
   @Post("team")

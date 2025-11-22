@@ -10,6 +10,7 @@ import uploadMultipleFilesToS3 from "../utils/uploadFile";
 import { PrioritySelect } from "./PrioritySelect";
 import { AssigneeSelect } from "./AssigneeSelect";
 import { handleWhatsapp, handleWhatsappTask } from "../utils/sendWhatsapp";
+import WhatsappIcon from "./WhatsappIcon";
 
 export default function TaskModal({
   projects,
@@ -323,7 +324,7 @@ export default function TaskModal({
               title="Remove member"
               className="p-2 rounded bg-green-500 dark:bg-green-500/20 text-white hover:bg-green-500 text-md flex gap-2"
             >
-              <Send /> Whatsapp
+              <WhatsappIcon /> Whatsapp
             </button>
 
             <button

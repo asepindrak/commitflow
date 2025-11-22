@@ -6,6 +6,9 @@ export class RegisterDto {
   @IsString()
   clientTempId?: string; // optional, FE optimistic id
 
+  @IsString()
+  workspace: string;
+
   @IsEmail()
   email: string;
 

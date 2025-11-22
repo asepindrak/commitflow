@@ -42,6 +42,13 @@ export type TeamMember = {
   password?: string;
 };
 
+export type Workspace = {
+  id: string;
+  name: string;
+  description?: string;
+  createdAt?: string;
+};
+
 export type Project = {
   id: string;
   name: string;

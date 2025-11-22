@@ -48,7 +48,7 @@ export class AuthService {
   }
 
   async register(dto: RegisterDto) {
-    const { clientTempId, email, name, role, photo, password } = dto;
+    const { clientTempId, workspace, email, name, role, photo, password } = dto;
 
     // Basic uniqueness check
     const existing = await this.prisma.user.findUnique({ where: { email } });
@@ -56,10 +56,31 @@ export class AuthService {
 
     // Use transaction to create TeamMember then User referencing member.id
     try {
+      console.log(workspace);
       const result = await this.prisma.$transaction(async (tx) => {
-        // 1) create TeamMember first
+        // 1) create Workspace first
+        const createWorkspace = await tx.workspace.create({
+          data: {
+            name: workspace,
+            createdAt: new Date(),
+          },
+        });
+
+        // 2) create User referencing
+        const hashed = password ? hashPassword(password) : undefined;
+        const user = await tx.user.create({
+          data: {
+            email,
+            name,
+            password: hashed,
+          },
+        });
+
+        // 3) create TeamMember
         const teamMember = await tx.teamMember.create({
           data: {
+            userId: user.id,
+            workspaceId: createWorkspace.id,
             name,
             email,
             role: role ?? null,
@@ -70,18 +91,7 @@ export class AuthService {
           },
         });
 
-        // 2) create User referencing teamMember.id
-        const hashed = password ? hashPassword(password) : undefined;
-        const user = await tx.user.create({
-          data: {
-            email,
-            name,
-            password: hashed,
-            teamMemberId: teamMember.id, // <-- link via member id
-          },
-        });
-
-        return { user, teamMember };
+        return { user, teamMember, workspace: createWorkspace };
       });
 
       // Create JWT (you can include teamMemberId in payload too)
@@ -100,6 +110,7 @@ export class AuthService {
         token: jwt,
         user: result.user,
         teamMember: result.teamMember,
+        workspace: result.workspace,
         // optionally map clientTempId => memberId so FE can replace optimistic id
         clientTempId,
       };
@@ -116,9 +127,9 @@ export class AuthService {
     if (!email) throw new UnauthorizedException("Invalid credentials");
 
     // find user and include relation if exists
-    let user = await this.prisma.user.findUnique({
+    const user = await this.prisma.user.findUnique({
       where: { email },
-      include: { teamMember: true },
+      include: { members: true },
     });
 
     if (!user) throw new UnauthorizedException("Invalid credentials");
@@ -127,34 +138,8 @@ export class AuthService {
     const ok = comparePassword(password || "", user.password);
     if (!ok) throw new UnauthorizedException("Invalid credentials");
 
-    // If relation missing, try to find TeamMember by email and attach it (best-effort)
-    let teamMember = (user as any).teamMember ?? null;
-    if (!teamMember) {
-      if (user.email) {
-        const found = await this.prisma.teamMember.findUnique({
-          where: { email: user.email },
-        });
-        if (found) {
-          // attach FK so next time it's present
-          try {
-            await this.prisma.user.update({
-              where: { id: user.id },
-              data: { teamMemberId: found.id },
-            });
-            teamMember = found;
-            // also reflect in local user object
-            user = { ...user, teamMemberId: found.id } as any;
-          } catch (err) {
-            // ignore update failure (concurrency/unique) — still continue
-            console.warn("Failed to attach teamMemberId:", err);
-          }
-        }
-      }
-    }
-
     const jwt = this.jwtService.sign({
       userId: user?.id,
-      teamMemberId: teamMember?.id ?? null,
     });
 
     await this.prisma.user.update({
@@ -162,7 +147,7 @@ export class AuthService {
       data: { session_token: jwt },
     });
 
-    return { token: jwt, user, teamMember };
+    return { token: jwt, user };
   }
 
   async validateUser(token: string) {

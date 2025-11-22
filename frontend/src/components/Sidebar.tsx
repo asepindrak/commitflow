@@ -1,7 +1,7 @@
 // frontend/src/components/Sidebar.tsx
 import React, { useEffect, useState } from "react";
 import { Trash2, PlusCircle, UserPlus } from "lucide-react";
-import type { Project, TeamMember } from "../types";
+import type { Project, TeamMember, Workspace } from "../types";
 import { motion } from "framer-motion";
 import packageJson from "../../package.json";
 import Swal from "sweetalert2";
@@ -9,9 +9,14 @@ import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import TeamModal from "./TeamModal";
 import TeamDetailModal from "./TeamDetailModal";
+import CreateWorkspaceModal from "./CreateWorkspaceModal";
 import * as api from "../api/projectApi";
+import { playSound } from "../utils/playSound";
 
 export default function Sidebar({
+  workspaces,
+  activeWorkspaceId,
+  setActiveWorkspaceId,
   projects,
   activeProjectId,
   setActiveProjectId,
@@ -20,7 +25,11 @@ export default function Sidebar({
   removeTeamMember,
   addTeamMember,
   removeProject,
+  onWorkspaceCreated, // optional callback supaya parent dapat update list
 }: {
+  workspaces: Workspace[];
+  activeWorkspaceId: string;
+  setActiveWorkspaceId: (id: string) => void;
   projects: Project[];
   activeProjectId: string;
   setActiveProjectId: (id: string) => void;
@@ -29,6 +38,7 @@ export default function Sidebar({
   removeTeamMember: (id: string) => void; // accept id
   addTeamMember: (m: TeamMember) => void; // accept TeamMember
   removeProject: (id: string) => void;
+  onWorkspaceCreated?: (w: Workspace) => void;
 }) {
   const [isDark, setIsDark] = useState<boolean>(() => {
     try {
@@ -55,11 +65,27 @@ export default function Sidebar({
     }
   }, []);
 
-  const [showCreate, setShowCreate] = useState(false);
+  const [showCreateTeam, setShowCreateTeam] = useState(false);
   const [detailMember, setDetailMember] = useState<TeamMember | null>(null);
 
   const [newProjectName, setNewProjectName] = useState("");
   const [addingProject, setAddingProject] = useState(false);
+
+  // Workspace modal state + creating state
+  const [showCreateWorkspace, setShowCreateWorkspace] = useState(false);
+  const [creatingWorkspace, setCreatingWorkspace] = useState(false);
+
+  // If parent didn't set a workspace or the current id is invalid, pick first workspace and inform parent.
+  useEffect(() => {
+    if (!workspaces || workspaces.length === 0) return;
+    const exists = workspaces.some((w) => w.id === activeWorkspaceId);
+    if (!exists) {
+      // choose first workspace as fallback
+      setActiveWorkspaceId(workspaces[0].id);
+    }
+    // only run when workspaces changes or activeWorkspaceId changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaces]);
 
   const submitNewProject = async (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -77,6 +103,7 @@ export default function Sidebar({
     setNewProjectName("");
     toast.dark(`Project "${trimmed}" created`);
     setAddingProject(false);
+    playSound("/sounds/send.mp3", true);
   };
 
   const handleRemoveProject = (id: string, name: string) => {
@@ -111,6 +138,45 @@ export default function Sidebar({
     });
   };
 
+  // --- create workspace handler (calls API) ---
+  const handleCreateWorkspace = async (w: Workspace) => {
+    // w is from modal (has id, name, description, createdAt)
+    setCreatingWorkspace(true);
+    try {
+      // call your API; adjust payload shape if backend expects different fields
+      const payload = {
+        name: w.name,
+        description: w.description,
+      };
+      const res = await api.createWorkspace(payload);
+      // API response shape might be { data: workspace } or workspace directly
+      const created =
+        res && typeof res === "object" && "data" in res
+          ? (res as any).data
+          : res;
+
+      toast.dark(`Workspace "${w.name}" created`);
+      playSound("/sounds/send.mp3", true);
+
+      // inform parent so it can update the workspace list
+      if (onWorkspaceCreated) {
+        onWorkspaceCreated(created ?? w);
+      }
+
+      // set as active workspace
+      const idToSet = created?.id ?? w.id;
+      setActiveWorkspaceId(idToSet);
+      setShowCreateWorkspace(false);
+      window.location.reload();
+    } catch (err: any) {
+      console.error("create workspace error", err);
+      toast.dark(err?.message ?? "Failed to create workspace");
+    } finally {
+      setCreatingWorkspace(false);
+    }
+  };
+  // --- end create workspace handler ---
+
   return (
     <aside className="w-72 md:w-80 flex-shrink-0 border-r border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 h-full flex flex-col">
       <ToastContainer
@@ -124,6 +190,40 @@ export default function Sidebar({
       />
 
       <div className="p-6 overflow-auto flex-1">
+        {/* Workspace header with add button */}
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-lg font-semibold">Workspace</h3>
+          <button
+            onClick={() => setShowCreateWorkspace(true)}
+            title="Create workspace"
+            className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-sky-600 hover:bg-sky-700 text-white text-xs"
+          >
+            <PlusCircle size={14} />
+            <span className="hidden sm:inline">Add</span>
+          </button>
+        </div>
+
+        {/* Workspace select */}
+        <div className="mb-6">
+          <div className="mt-1">
+            <select
+              value={activeWorkspaceId}
+              onChange={(e) => setActiveWorkspaceId(e.target.value)}
+              className="w-full text-sm px-3 py-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-800 outline-none focus:ring-1 focus:ring-sky-300"
+            >
+              {workspaces && workspaces.length > 0 ? (
+                workspaces.map((w) => (
+                  <option key={w.id} value={w.id}>
+                    {w.name}
+                  </option>
+                ))
+              ) : (
+                <option value="">No workspace</option>
+              )}
+            </select>
+          </div>
+        </div>
+
         <h3 className="text-lg font-semibold mb-4">Projects</h3>
 
         <div className="space-y-3 mb-6">
@@ -237,7 +337,7 @@ export default function Sidebar({
             <div className="mb-2 text-xs text-gray-500 dark:text-gray-400 flex items-center justify-between">
               <span>Add member</span>
               <button
-                onClick={() => setShowCreate(true)}
+                onClick={() => setShowCreateTeam(true)}
                 className="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-emerald-600 text-white text-sm"
               >
                 <UserPlus size={14} /> New
@@ -269,12 +369,19 @@ export default function Sidebar({
         </div>
       </motion.footer>
 
+      {/* Modals */}
+      <CreateWorkspaceModal
+        open={showCreateWorkspace}
+        onClose={() => setShowCreateWorkspace(false)}
+        onCreate={handleCreateWorkspace}
+      />
+
       <TeamModal
-        open={showCreate}
-        onClose={() => setShowCreate(false)}
+        open={showCreateTeam}
+        onClose={() => setShowCreateTeam(false)}
         onCreate={(m) => {
           addTeamMember(m);
-          setShowCreate(false);
+          setShowCreateTeam(false);
         }}
       />
       <TeamDetailModal

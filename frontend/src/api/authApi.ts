@@ -28,6 +28,7 @@ export type AuthResult = {
 
 export async function apiRegister(payload: {
   clientTempId?: string;
+  workspace: string;
   email: string;
   name: string;
   password?: string;

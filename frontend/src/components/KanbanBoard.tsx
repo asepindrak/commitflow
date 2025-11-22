@@ -22,13 +22,21 @@ export default function KanbanBoard({
   onSelectTask,
   team,
   currentMemberId,
+  onDrag, // now (e) => void
+  onDragEnd, // now (e) => void
+  dragTaskId,
+  dragPos,
 }: {
   columns: { key: Task["status"]; title: string; items: Task[] }[];
   onDropTo: (s: Task["status"]) => void;
-  onDragStart: (id: string) => void;
+  onDragStart: (e: any, id: string) => void;
   onSelectTask: (t: Task) => void;
   team: TeamMember[];
   currentMemberId?: string | null;
+  onDrag: (e: any) => void;
+  onDragEnd: (e: any) => void;
+  dragTaskId: (id: string) => void;
+  dragPos: any;
 }) {
   const [onlyMine, setOnlyMine] = useState(false);
 
@@ -168,7 +176,7 @@ export default function KanbanBoard({
                 onDrop={() => onDropTo(col.key)}
                 className="space-y-3 min-h-[200px] p-2 rounded-lg"
               >
-                {visibleItems.map((task) => {
+                {visibleItems.map((task: any) => {
                   const pill = priorityPill(task.priority);
 
                   // --- derive assignee info robustly ---
@@ -202,10 +210,26 @@ export default function KanbanBoard({
                     <div
                       key={task.id}
                       draggable
-                      onDragStart={() => onDragStart(task.id)}
+                      onDragStart={(e: any) => onDragStart(e, task.id)}
+                      onDrag={(e: any) => onDrag(e)}
+                      onDragEnd={(e: any) => onDragEnd(e)}
                       onClick={() => onSelectTask(task)}
                       className="relative flex flex-col gap-3 p-2 rounded-xl cursor-pointer transform transition-all duration-150 bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm hover:scale-[1.01] hover:shadow-lg"
-                      style={{ border: "1px solid rgba(15,23,42,0.04)" }}
+                      style={{
+                        border: "1px solid rgba(15,23,42,0.04)",
+                        position: task.id === dragTaskId ? "fixed" : undefined,
+                        left:
+                          task.id === dragTaskId ? `${dragPos.x}px` : undefined,
+                        top:
+                          task.id === dragTaskId ? `${dragPos.y}px` : undefined,
+                        width:
+                          task.id === dragTaskId
+                            ? `${dragPos.width}px`
+                            : undefined,
+                        zIndex: task.id === dragTaskId ? 9999 : undefined,
+                        pointerEvents:
+                          task.id === dragTaskId ? "none" : undefined,
+                      }}
                     >
                       <div
                         className={`absolute left-0 top-0 bottom-0 w-1 rounded-l-xl ${priorityAccent(

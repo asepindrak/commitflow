@@ -23,6 +23,9 @@ export class CreateTeamMemberDto {
   @IsOptional()
   @IsString()
   photo?: string;
+
+  @IsString()
+  workspaceId?: string;
 }
 
 export class UpdateTeamMemberDto {
@@ -33,10 +36,6 @@ export class UpdateTeamMemberDto {
   @IsOptional()
   @IsString()
   role?: string;
-
-  @IsOptional()
-  @IsString()
-  email?: string;
 
   @IsOptional()
   @IsString()

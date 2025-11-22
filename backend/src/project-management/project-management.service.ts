@@ -15,15 +15,39 @@ const prisma = new PrismaClient();
 
 @Injectable()
 export class ProjectManagementService {
+  async getWorkspaces(userId) {
+    const members = await prisma.teamMember.findMany({
+      where: { isTrash: false, userId },
+      orderBy: { createdAt: "asc" },
+    });
+
+    const workspaces = await prisma.workspace.findMany({
+      where: {
+        isTrash: false,
+        id: {
+          in: members.map((item: any) => item.workspaceId),
+        },
+      },
+      orderBy: { createdAt: "asc" },
+    });
+
+    return workspaces;
+  }
+
   // state
-  async getState() {
+  async getState(workspaceId) {
     const projects = await prisma.project.findMany({
-      where: { isTrash: false },
+      where: { isTrash: false, workspaceId },
       orderBy: { createdAt: "desc" },
     });
 
     const tasks = await prisma.task.findMany({
-      where: { isTrash: false },
+      where: {
+        isTrash: false,
+        projectId: {
+          in: projects.map((item: any) => item.id),
+        },
+      },
       orderBy: { createdAt: "desc" },
       include: {
         comments: {
@@ -34,7 +58,10 @@ export class ProjectManagementService {
     });
 
     const team = await prisma.teamMember.findMany({
-      where: { isTrash: false },
+      where: {
+        isTrash: false,
+        workspaceId,
+      },
       orderBy: { name: "asc" },
     });
 
@@ -58,11 +85,58 @@ export class ProjectManagementService {
     };
   }
 
+  // Workspaces
+
+  async createWorkspaces(
+    payload: {
+      name: string;
+      description?: string | null;
+      clientId?: string | null;
+    },
+    userId
+  ) {
+    // optional idempotency by clientId (if you add unique constraint later)
+    if (payload.clientId) {
+      const existing = await prisma.workspace.findFirst({
+        where: { clientId: payload.clientId },
+      });
+      if (existing) return existing;
+    }
+
+    const p = await prisma.workspace.create({
+      data: {
+        name: payload.name ?? "Untitled",
+        description: payload.description ?? null,
+        clientId: payload.clientId ?? null,
+      },
+    });
+
+    const user = await prisma.user.findFirst({
+      where: {
+        id: userId,
+      },
+    });
+    if (user) {
+      const createTeam = await prisma.teamMember.create({
+        data: {
+          clientId: payload.clientId ?? null,
+          userId,
+          workspaceId: p.id,
+          name: user?.name ?? "",
+          email: user?.email ?? null,
+          phone: user?.phone ?? null,
+        },
+      });
+    }
+    return p;
+  }
+
   // Projects
-  async getProjects() {
+  async getProjects(workspaceId) {
     const projects = await prisma.project.findMany({
       where: {
         isTrash: false,
+        workspaceId,
       },
       orderBy: { createdAt: "desc" },
     });
@@ -73,6 +147,7 @@ export class ProjectManagementService {
     name: string;
     description?: string;
     clientId?: string | null;
+    workspaceId: string;
   }) {
     // optional idempotency by clientId (if you add unique constraint later)
     if (payload.clientId) {
@@ -443,10 +518,11 @@ export class ProjectManagementService {
   }
 
   // Team
-  async getTeam() {
+  async getTeam(workspaceId) {
     return await prisma.teamMember.findMany({
       where: {
         isTrash: false,
+        workspaceId,
       },
       orderBy: { name: "asc" },
     });
@@ -461,52 +537,36 @@ export class ProjectManagementService {
       phone?: string;
       password?: string;
       clientId?: string | null;
+      workspaceId: string;
     }>
   ) {
-    const { clientId, email, name, role, photo, phone, password } =
+    const { clientId, email, name, role, photo, phone, password, workspaceId } =
       payload as any;
 
     // 1) If clientId provided — try to find existing TeamMember by clientId first.
     if (clientId) {
       const existing = await prisma.teamMember.findFirst({
-        where: { clientId },
+        where: { clientId, workspaceId },
       });
       if (existing) {
-        // Make sure a corresponding User exists and is linked; if not, create it.
-        let user = await prisma.user.findFirst({
-          where: { teamMemberId: existing.id },
-        });
-
-        // If user not exists but email provided, create user (hash password if provided)
-        if (!user) {
-          const hashed = password ? hashPassword(password) : undefined;
-          try {
-            user = await prisma.user.create({
-              data: {
-                name: name ?? existing.name ?? "Unnamed",
-                email: email ?? existing.email ?? null,
-                password: hashed ?? null,
-                phone: phone ?? null,
-                teamMemberId: existing.id,
-              },
-            });
-          } catch (err: any) {
-            // Unique constraint / other errors might occur — ignore or rethrow sensible error
-            if (err?.code === "P2002") {
-              throw new ConflictException("Email already used");
-            }
-            console.error("createTeamMember (attach user) failed", err);
-            throw new InternalServerErrorException("Failed to create user");
-          }
-        }
-
-        return { teamMember: existing, user };
+        return { teamMember: existing };
       }
     }
 
     // 2) Otherwise create both inside a transaction (atomic)
     try {
       const result = await prisma.$transaction(async (tx) => {
+        // create user
+        const hashed = password ? hashPassword(password) : undefined;
+        const user = await tx.user.create({
+          data: {
+            name: name ?? "Unnamed",
+            email: email ?? null,
+            password: hashed ?? null,
+            phone: phone ?? null,
+          },
+        });
+
         // create team member
         const tm = await tx.teamMember.create({
           data: {
@@ -516,19 +576,9 @@ export class ProjectManagementService {
             photo: photo ?? null,
             phone: phone ?? null,
             clientId: clientId ?? null,
+            userId: user.id,
+            workspaceId,
             createdAt: new Date(),
-          },
-        });
-
-        // create user referencing teamMemberId
-        const hashed = password ? hashPassword(password) : undefined;
-        const user = await tx.user.create({
-          data: {
-            name: name ?? tm.name ?? "Unnamed",
-            email: email ?? null,
-            password: hashed ?? null,
-            phone: phone ?? null,
-            teamMemberId: tm.id,
           },
         });
 
@@ -554,7 +604,6 @@ export class ProjectManagementService {
     payload: Partial<{
       name?: string;
       role?: string;
-      email?: string;
       phone?: string;
       password?: string;
       photo?: string;
@@ -568,7 +617,6 @@ export class ProjectManagementService {
     const tmData: any = {};
     if (typeof payload.name !== "undefined") tmData.name = payload.name;
     if (typeof payload.role !== "undefined") tmData.role = payload.role;
-    if (typeof payload.email !== "undefined") tmData.email = payload.email;
     if (typeof payload.phone !== "undefined") tmData.phone = payload.phone;
     if (typeof payload.photo !== "undefined") tmData.photo = payload.photo;
     tmData.updatedAt = new Date();
@@ -576,8 +624,6 @@ export class ProjectManagementService {
     // prepare user update/create data
     const userData: any = {};
     if (typeof payload.name !== "undefined") userData.name = payload.name;
-    if (typeof payload.email !== "undefined")
-      userData.email = payload.email ?? null;
     if (typeof payload.phone !== "undefined")
       userData.phone = payload.phone ?? null;
     // password must be hashed
@@ -594,7 +640,9 @@ export class ProjectManagementService {
         });
 
         // 3) find existing user linked to this teamMember
-        let user = await tx.user.findFirst({ where: { teamMemberId: id } });
+        let user = await tx.user.findFirst({
+          where: { email: updatedTeam.email },
+        });
 
         if (user) {
           // update existing user (only fields present)
@@ -605,27 +653,6 @@ export class ProjectManagementService {
               where: { id: user.id },
               data: userData,
             });
-          }
-        } else {
-          // no linked user exists — create one only if email or name or password present
-          // otherwise skip creating user and return null user
-          if (
-            userData.email ||
-            userData.name ||
-            typeof userData.password !== "undefined" ||
-            typeof userData.phone !== "undefined"
-          ) {
-            user = await tx.user.create({
-              data: {
-                name: userData.name ?? updatedTeam.name ?? "Unnamed",
-                email: userData.email ?? null,
-                password: userData.password ?? null,
-                phone: userData.phone ?? null,
-                teamMemberId: updatedTeam.id,
-              },
-            });
-          } else {
-            user = null;
           }
         }
 

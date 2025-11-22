@@ -6,6 +6,7 @@ import type { TeamMember } from "../types";
 import { toast } from "react-toastify";
 import { normalizePhone } from "../utils/normalizePhone";
 import { handleWhatsapp } from "../utils/sendWhatsapp";
+import WhatsappIcon from "./WhatsappIcon";
 
 export default function TeamDetailModal({
   member,
@@ -73,7 +74,7 @@ export default function TeamDetailModal({
               title="Remove member"
               className="p-2 rounded bg-green-500 dark:bg-green-500/20 text-white hover:bg-green-500 text-md flex gap-2"
             >
-              <Send /> Whatsapp
+              <WhatsappIcon /> Whatsapp
             </button>
             <button
               onClick={onClose}

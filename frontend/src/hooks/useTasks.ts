@@ -4,15 +4,15 @@ import * as api from "../api/projectApi";
 import { enqueueOp } from "../utils/offlineQueue";
 import { toast } from "react-toastify";
 
-export function useTasksQuery(projectId?: string) {
+export function useTasksQuery(projectId: string, workspaceId: string) {
   return useQuery({
     queryKey: ["tasks", projectId ?? "all"],
     queryFn: async () => {
       if (projectId) {
         const tasks = await api.getTasks(projectId);
         return Array.isArray(tasks) ? tasks : [];
-      } else {
-        const state = await api.getState();
+      } else if (workspaceId) {
+        const state = await api.getState(workspaceId);
         return state?.tasks ?? [];
       }
     },
