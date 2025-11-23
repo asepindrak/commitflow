@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.2
+
+### Patch Changes
+
+- 5875383: member isAdmin & fix drag n drop task
+
 ## 1.3.1
 
 ### Patch Changes
