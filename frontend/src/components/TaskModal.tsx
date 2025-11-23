@@ -3,7 +3,17 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import ReactQuill from "react-quill-new";
 import "react-quill-new/dist/quill.snow.css";
 import parse from "html-react-parser";
-import { Check, File, Paperclip, Send, Trash, X } from "lucide-react";
+import {
+  BubblesIcon,
+  Check,
+  File,
+  MessageSquare,
+  Paperclip,
+  Save,
+  Send,
+  Trash,
+  X,
+} from "lucide-react";
 import Swal from "sweetalert2";
 import type { Task, Attachment, TeamMember } from "../types";
 import uploadMultipleFilesToS3 from "../utils/uploadFile";
@@ -12,6 +22,7 @@ import { AssigneeSelect } from "./AssigneeSelect";
 import { handleWhatsapp, handleWhatsappTask } from "../utils/sendWhatsapp";
 import WhatsappIcon from "./WhatsappIcon";
 import { useAuthStore } from "../utils/store";
+import { FaComment } from "react-icons/fa";
 
 export default function TaskModal({
   projects,
@@ -249,7 +260,7 @@ export default function TaskModal({
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-6">
-      <div className="relative w-[86%] h-[92%] rounded-xl p-8 shadow-2xl bg-white dark:bg-gray-900 text-slate-900 dark:text-slate-100 overflow-auto">
+      <div className="relative w-[86%] h-[92%] rounded-xl p-8 shadow-2xl bg-slate-100 dark:bg-gray-900 text-slate-900 dark:text-slate-100 overflow-auto">
         {/* Top controls */}
         <div className="flex items-start justify-between mb-6">
           <div className="w-full pr-6">
@@ -311,7 +322,9 @@ export default function TaskModal({
           </div>
 
           <div className="flex gap-3">
+            {/* Whatsapp (accent) */}
             <button
+              type="button"
               onClick={() =>
                 handleWhatsappTask(
                   assigneePhone ?? "",
@@ -319,13 +332,17 @@ export default function TaskModal({
                   currentProjectName
                 )
               }
-              title="Remove member"
-              className="p-2 rounded bg-green-500 dark:bg-green-500/20 text-white hover:bg-green-500 text-md flex gap-2"
+              title="Whatsapp assignee"
+              aria-label="Send Whatsapp to assignee"
+              className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium shadow-sm
+               bg-green-500/95 hover:bg-green-600/95 text-white
+               dark:bg-green-300/20 dark:text-white dark:hover:bg-green-400/30
+               transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-green-300"
             >
-              <WhatsappIcon /> Whatsapp
+              <WhatsappIcon />
             </button>
-
             <button
+              type="button"
               onClick={() => {
                 const toSave: Task = { ...local };
                 if (!toSave.assigneeId && toSave.assigneeName) {
@@ -342,20 +359,28 @@ export default function TaskModal({
                 onSave(toSave);
                 onClose();
               }}
-              className="flex items-center gap-2 px-4 py-2 bg-sky-600 hover:bg-sky-700 
-   text-white rounded-lg text-sm font-medium shadow transition-colors"
+              className="group inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold
+             bg-gradient-to-r from-sky-500 to-sky-600 text-white
+             hover:from-sky-600 hover:to-sky-700
+             active:scale-95 transition-all duration-300
+             dark:from-sky-600 dark:to-sky-700 dark:hover:from-sky-700 dark:hover:to-sky-800"
             >
-              <Check size={16} />
+              <Save
+                size={16}
+                className="transition-transform duration-300 group-hover:-rotate-6"
+              />
               <span>Save</span>
             </button>
+            {/* Close (neutral) */}
             <button
+              type="button"
               onClick={onClose}
-              className="flex items-center gap-2 px-4 py-2 border border-gray-300 dark:border-gray-700 
-               rounded-lg text-sm font-medium text-gray-700 dark:text-gray-200 
-               hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              className="ml-8 flex items-center gap-2 px-2 py-2 rounded-lg text-sm font-medium
+                bg-slate-100 dark:bg-gray-900
+               text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800
+               transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-200"
             >
-              <X size={16} />
-              <span>Close</span>
+              <X size={24} />
             </button>
           </div>
         </div>
@@ -492,9 +517,19 @@ export default function TaskModal({
                 </div>
 
                 <div className="flex gap-4 my-4 items-center">
-                  <label className="px-4 py-2 border rounded-lg cursor-pointer bg-transparent border-gray-200 dark:border-gray-700 flex items-center gap-3">
-                    <Paperclip size={18} />
-                    <span className="text-sm">Attach files</span>
+                  <label
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg border 
+             border-gray-300 dark:border-gray-700 bg-slate-100 dark:bg-gray-900 
+             text-slate-700 dark:text-slate-200 cursor-pointer text-sm
+             hover:bg-gray-50 dark:hover:bg-gray-800 transition 
+             focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-300 shadow-sm"
+                  >
+                    <Paperclip
+                      size={18}
+                      className="text-slate-600 dark:text-slate-300"
+                    />
+                    <span>Attach files</span>
+
                     <input
                       ref={fileInputRef}
                       type="file"
@@ -508,9 +543,25 @@ export default function TaskModal({
                   <button
                     onClick={handleAddComment}
                     disabled={uploading}
-                    className="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-lg shadow"
+                    className={`group inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold
+              bg-gradient-to-r from-sky-500 to-sky-600 text-white
+              hover:from-sky-600 hover:to-sky-700
+              active:scale-95 transition-all duration-300
+              ${
+                uploading ? "opacity-60 cursor-not-allowed" : "cursor-pointer"
+              }`}
                   >
-                    {uploading ? "Uploading…" : "Comment"}
+                    {uploading ? (
+                      "Uploading…"
+                    ) : (
+                      <>
+                        <MessageSquare
+                          size={16}
+                          className="transition-transform duration-300 group-hover:-rotate-6"
+                        />
+                        <span>Comment</span>
+                      </>
+                    )}
                   </button>
                 </div>
               </div>
@@ -551,7 +602,7 @@ export default function TaskModal({
           <button
             onClick={handleDeleteClick}
             disabled={uploading}
-            className="px-4 py-2 bg-red-500 hover:bg-red-400 text-white rounded-lg shadow-md text-sm flex gap-2"
+            className="px-4 py-2 bg-gray-800 hover:bg-red-400 text-white rounded-lg shadow-md text-sm flex gap-2"
             title="Delete task"
           >
             <Trash size={16} /> Delete task

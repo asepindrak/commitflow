@@ -14,6 +14,51 @@ function hslaStr(h: number, s = 75, l = 50, a = 1) {
   return `hsla(${h} ${s}% ${l}% / ${a})`;
 }
 
+function formatDateShort(d) {
+  if (!d) return null;
+  // expect ISO-like YYYY-MM-DD or any Date-parsable string
+  const dt = new Date(d);
+  if (Number.isNaN(dt.getTime())) return d;
+  return dt.toLocaleDateString(undefined, { month: "short", day: "numeric" }); // e.g. "Nov 23"
+}
+
+// helper: compare dates ignoring time (midnight-to-midnight)
+function toMidnightDate(d?: string | Date | null) {
+  if (!d) return null;
+  const dt = typeof d === "string" ? new Date(d) : d;
+  if (Number.isNaN(dt.getTime())) return null;
+  return new Date(dt.getFullYear(), dt.getMonth(), dt.getDate()); // midnight of that day
+}
+
+// safe parse YYYY-MM-DD or fallback to Date, then normalize to midnight local
+function parseDateOnlySafe(v?: string | null) {
+  if (!v) return null;
+  // if exactly YYYY-MM-DD -> parse as local date (avoid timezone shift)
+  const m = String(v).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (m) {
+    const y = Number(m[1]);
+    const mo = Number(m[2]) - 1;
+    const d = Number(m[3]);
+    return new Date(y, mo, d); // local midnight of that date
+  }
+  // fallback: try Date
+  const dt = new Date(v);
+  if (Number.isNaN(dt.getTime())) return null;
+  return new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
+}
+
+function relativeInfo(d) {
+  if (!d) return null;
+  const dt = new Date(d);
+  const now = new Date();
+  const diffMs = dt.getTime() - now.getTime();
+  const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+  if (diffDays === 0) return "today";
+  if (diffDays > 0) return diffDays === 1 ? "in 1 day" : `in ${diffDays} days`;
+  const past = Math.abs(diffDays);
+  return past === 1 ? "1 day ago" : `${past} days ago`;
+}
+
 // Small, memoized TaskCard to reduce rerenders while dragging
 const TaskCard = React.memo(
   function TaskCard({
@@ -241,31 +286,169 @@ const TaskCard = React.memo(
         />
 
         <div className="flex flex-col gap-2 pl-2">
+          {/* Title */}
           <div className="font-medium text-base text-slate-900 dark:text-slate-100 truncate">
             {task.title}
           </div>
 
+          {/* Description */}
           {task.description && (
             <div className="text-sm text-gray-500 dark:text-gray-400 line-clamp-2">
               {parse(task.description)}
             </div>
           )}
 
-          <div className="flex justify-between items-center mt-2">
+          {/* Status pill */}
+          <div className="mt-2">
             <span
               className={`inline-block px-3 py-1 rounded-full text-xs font-semibold tracking-wide ${pill.classes}`}
             >
               {pill.label}
             </span>
+          </div>
 
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-gray-400 dark:text-gray-500">
-                {task.startDate ? `Start: ${task.startDate}` : ""}
-              </span>
-              <span className="text-xs text-gray-400 dark:text-gray-500">
-                {task.dueDate ? `Due: ${task.dueDate}` : ""}
-              </span>
-            </div>
+          {/* Start & Due (elegant row) */}
+          <div className="flex gap-2 flex-wrap mt-1">
+            {/* Start Date */}
+            {task.startDate
+              ? (() => {
+                  const sd = parseDateOnlySafe(task.startDate);
+                  return sd ? (
+                    <div
+                      className="flex items-center gap-2 px-3 py-1 rounded-full bg-sky-700/10 dark:bg-sky-600/20 
+                   text-xs font-medium text-sky-500 dark:text-sky-300"
+                      title={`Start: ${task.startDate}`}
+                    >
+                      <svg
+                        className="w-3.5 h-3.5"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        aria-hidden
+                      >
+                        <path
+                          d="M8 7V3M16 7V3M3 11h18M5 21h14a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2z"
+                          stroke="currentColor"
+                          strokeWidth="1.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                      <span>{formatDateShort(task.startDate)}</span>
+                    </div>
+                  ) : null;
+                })()
+              : null}
+
+            {/* Due Date with robust parsing and warning if today >= due */}
+            {task.dueDate
+              ? (() => {
+                  const due = parseDateOnlySafe(task.dueDate);
+                  if (!due) return null; // invalid date — don't render
+
+                  const now = new Date();
+                  const today = new Date(
+                    now.getFullYear(),
+                    now.getMonth(),
+                    now.getDate()
+                  ); // midnight local
+
+                  const isOverdue = due.getTime() < today.getTime();
+                  const isToday = due.getTime() === today.getTime();
+                  const baseClasses =
+                    "flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium";
+                  const overdueClasses =
+                    "bg-red-700/10 dark:bg-red-600/20 text-red-500 dark:text-red-300";
+                  const todayClasses =
+                    "bg-amber-700/10 dark:bg-amber-600/20 text-amber-500 dark:text-amber-300";
+                  const okClasses =
+                    "bg-emerald-700/10 dark:bg-emerald-600/20 text-emerald-500 dark:text-emerald-300";
+
+                  const pillClasses = isOverdue
+                    ? overdueClasses
+                    : isToday
+                    ? todayClasses
+                    : okClasses;
+                  const statusLabel = isOverdue
+                    ? "overdue"
+                    : isToday
+                    ? "due today"
+                    : "";
+
+                  return (
+                    <div
+                      className={`${baseClasses} ${pillClasses}`}
+                      title={
+                        statusLabel
+                          ? `${statusLabel} • ${task.dueDate}`
+                          : `Due: ${task.dueDate}`
+                      }
+                      aria-live="polite"
+                    >
+                      {/* icon: warning for overdue / today, calendar otherwise */}
+                      {isOverdue || isToday ? (
+                        <svg
+                          className="w-3.5 h-3.5"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          aria-hidden
+                        >
+                          <path
+                            d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
+                            stroke="currentColor"
+                            strokeWidth="1.2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                          <path
+                            d="M12 9v4"
+                            stroke="currentColor"
+                            strokeWidth="1.6"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                          <path
+                            d="M12 17h.01"
+                            stroke="currentColor"
+                            strokeWidth="1.6"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      ) : (
+                        <svg
+                          className="w-3.5 h-3.5"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          aria-hidden
+                        >
+                          <path
+                            d="M8 7V3M16 7V3M3 11h18M5 21h14a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2z"
+                            stroke="currentColor"
+                            strokeWidth="1.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      )}
+
+                      <div className="flex flex-col leading-tight">
+                        <span className="text-xs text-slate-900 dark:text-slate-100">
+                          {formatDateShort(task.dueDate)}
+                        </span>
+                        {(isOverdue || isToday) && (
+                          <span
+                            className={`text-[11px] ${
+                              isOverdue ? "text-red-300" : "text-amber-300"
+                            }`}
+                          >
+                            {isOverdue ? "overdue" : "due today"}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()
+              : null}
           </div>
         </div>
 
@@ -424,9 +607,7 @@ export default function KanbanBoard({
       {/* Toolbar */}
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-            Board
-          </h3>
+          <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100"></h3>
         </div>
 
         <div className="flex items-center gap-3">

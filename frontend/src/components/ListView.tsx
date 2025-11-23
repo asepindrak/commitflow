@@ -94,8 +94,33 @@ export default function ListView({
     };
   };
 
+  // -------------------------
+  // Date helpers (robust)
+  // -------------------------
+  // parse YYYY-MM-DD as local date (avoid timezone shifts), fallback to Date parse
+  function parseDateOnlySafe(v?: string | null) {
+    if (!v) return null;
+    const s = String(v);
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (m) {
+      const y = Number(m[1]);
+      const mo = Number(m[2]) - 1;
+      const d = Number(m[3]);
+      return new Date(y, mo, d); // local midnight
+    }
+    const dt = new Date(s);
+    if (Number.isNaN(dt.getTime())) return null;
+    return new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
+  }
+
+  function formatDateShort(v?: string | null) {
+    const dt = parseDateOnlySafe(v);
+    if (!dt) return v ?? "—";
+    return dt.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  }
+
   return (
-    <div className="rounded-lg border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-auto">
+    <div className="rounded-lg border border-gray-100 dark:border-gray-800 bg-slate-100 dark:bg-gray-900 overflow-auto">
       {/* Toolbar */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800">
         <div className="flex items-center gap-3">
@@ -118,19 +143,16 @@ export default function ListView({
                 : "bg-white text-slate-700 dark:bg-gray-800 dark:text-slate-100 border border-gray-200 dark:border-gray-700"
             }`}
           >
-            {/* icon */}
+            {/* icon */}{" "}
             <span
               className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs ${
                 onlyMine ? "bg-white/20" : "bg-sky-100 dark:bg-white/5"
               }`}
               aria-hidden
             >
-              {/* small person icon (emoji keeps it simple) */}
               👤
             </span>
-
             <span className="whitespace-nowrap">Assigned to me</span>
-
             <span
               className={`inline-flex items-center justify-center ml-1 px-2 py-0.5 rounded-full text-xs font-semibold ${
                 onlyMine ? "bg-white/20" : "bg-gray-100 dark:bg-white/5"
@@ -152,10 +174,10 @@ export default function ListView({
           <tr className="text-left text-sm text-gray-500 dark:text-gray-400">
             <th className="px-4 py-3">Title</th>
             <th className="px-4 py-3">Status</th>
-            <th className="px-4 py-3">Priority</th>
-            <th className="px-4 py-3">Assignee</th>
-            <th className="px-4 py-3">Start</th>
-            <th className="px-4 py-3">Due</th>
+            <th className="px-4 py-3 md:min-w-40">Priority</th>
+            <th className="px-4 py-3 md:min-w-40">Assignee</th>
+            <th className="px-4 py-3 md:min-w-30">Start</th>
+            <th className="px-4 py-3 md:min-w-30">Due</th>
           </tr>
         </thead>
         <tbody>
@@ -185,6 +207,23 @@ export default function ListView({
                 document.documentElement.classList.contains("dark")
               ? hslStr(hue, 65, 80)
               : hslStr(hue, 75, 25);
+
+            // start/due formatting & states
+            const startShort = formatDateShort(t.startDate);
+            const dueShort = formatDateShort(t.dueDate);
+            const dueDateObj = parseDateOnlySafe(t.dueDate);
+            const today = new Date();
+            const todayMid = new Date(
+              today.getFullYear(),
+              today.getMonth(),
+              today.getDate()
+            );
+            const isDueOverdue = dueDateObj
+              ? dueDateObj.getTime() < todayMid.getTime()
+              : false;
+            const isDueToday = dueDateObj
+              ? dueDateObj.getTime() === todayMid.getTime()
+              : false;
 
             return (
               <tr
@@ -241,11 +280,100 @@ export default function ListView({
                     </div>
                   </div>
                 </td>
+
+                {/* Start */}
                 <td className="px-4 py-3 text-sm text-slate-700 dark:text-slate-200">
-                  {t.startDate || "-"}
+                  {t.startDate ? startShort : "-"}
                 </td>
+
+                {/* Due: render pill + warning */}
                 <td className="px-4 py-3 text-sm text-slate-700 dark:text-slate-200">
-                  {t.dueDate || "-"}
+                  {t.dueDate ? (
+                    <div className="inline-flex items-center">
+                      {/* pill */}
+                      <div
+                        className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium ${
+                          isDueOverdue
+                            ? "bg-red-700/10 dark:bg-red-600/20 text-red-500 dark:text-red-300"
+                            : isDueToday
+                            ? "bg-amber-700/10 dark:bg-amber-600/20 text-amber-500 dark:text-amber-300"
+                            : "bg-emerald-700/10 dark:bg-emerald-600/20 text-emerald-500 dark:text-emerald-300"
+                        }`}
+                        title={
+                          isDueOverdue
+                            ? `overdue • ${t.dueDate}`
+                            : isDueToday
+                            ? `due today • ${t.dueDate}`
+                            : `Due: ${t.dueDate}`
+                        }
+                        aria-live="polite"
+                      >
+                        {/* icon */}
+                        {isDueOverdue || isDueToday ? (
+                          <svg
+                            className="w-3.5 h-3.5"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            aria-hidden
+                          >
+                            <path
+                              d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
+                              stroke="currentColor"
+                              strokeWidth="1.2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                            <path
+                              d="M12 9v4"
+                              stroke="currentColor"
+                              strokeWidth="1.6"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                            <path
+                              d="M12 17h.01"
+                              stroke="currentColor"
+                              strokeWidth="1.6"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        ) : (
+                          <svg
+                            className="w-3.5 h-3.5"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            aria-hidden
+                          >
+                            <path
+                              d="M8 7V3M16 7V3M3 11h18M5 21h14a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2z"
+                              stroke="currentColor"
+                              strokeWidth="1.5"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        )}
+
+                        <div className="flex flex-col leading-tight">
+                          <span className="text-xs text-slate-900 dark:text-slate-100">
+                            {dueShort}
+                          </span>
+                          {(isDueOverdue || isDueToday) && (
+                            <span
+                              className={`text-[11px] ${
+                                isDueOverdue ? "text-red-300" : "text-amber-300"
+                              }`}
+                            >
+                              {isDueOverdue ? "overdue" : "due today"}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    "-"
+                  )}
                 </td>
               </tr>
             );

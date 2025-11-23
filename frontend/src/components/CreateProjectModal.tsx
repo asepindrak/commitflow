@@ -1,3 +1,4 @@
+import { Plus } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
 
 // CreateProjectModal.tsx
@@ -121,7 +122,7 @@ export default function CreateProjectModal({
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Project name"
-              className="mt-1 block w-full px-3 py-2 rounded-lg bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-700 text-sm outline-none focus:ring-1 focus:ring-sky-300"
+              className="mt-1 block w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-gray-900 border border-gray-100 dark:border-gray-700 text-sm outline-none focus:ring-1 focus:ring-sky-300"
               required
             />
           </label>
@@ -134,7 +135,7 @@ export default function CreateProjectModal({
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Short description"
-              className="mt-1 block w-full px-3 py-2 rounded-lg bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-700 text-sm outline-none focus:ring-1 focus:ring-sky-300 min-h-[96px]"
+              className="mt-1 block w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-gray-900 border border-gray-100 dark:border-gray-700 text-sm outline-none focus:ring-1 focus:ring-sky-300 min-h-[96px]"
             />
           </label>
 
@@ -151,23 +152,19 @@ export default function CreateProjectModal({
             <button
               type="submit"
               disabled={busy}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-sm font-medium shadow transition-colors disabled:opacity-60"
+              aria-disabled={busy}
+              className={`group inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold
+    bg-gradient-to-r from-sky-500 to-sky-600 text-white
+    hover:from-sky-600 hover:to-sky-700
+    active:scale-95 transition-all duration-300
+    dark:from-sky-600 dark:to-sky-700 dark:hover:from-sky-700 dark:hover:to-sky-800
+    ${busy ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="inline-block"
-              >
-                <path d="M12 5v14" />
-                <path d="M5 12h14" />
-              </svg>
+              <Plus
+                size={16}
+                className="transition-transform duration-300 group-hover:rotate-90"
+                aria-hidden="true"
+              />
               <span>{busy ? submittingText : "Create"}</span>
             </button>
           </div>

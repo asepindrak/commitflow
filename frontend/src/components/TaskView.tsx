@@ -64,7 +64,7 @@ export default function TaskView({
               onClick={() => setView("kanban")}
               className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition ${
                 view === "kanban"
-                  ? "bg-white dark:bg-gray-900 shadow-sm text-slate-900 dark:text-slate-100"
+                  ? "bg-slate-100 dark:bg-gray-900 shadow-sm text-slate-900 dark:text-slate-100"
                   : "text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700"
               }`}
             >
@@ -76,7 +76,7 @@ export default function TaskView({
               onClick={() => setView("list")}
               className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition ${
                 view === "list"
-                  ? "bg-white dark:bg-gray-900 shadow-sm text-slate-900 dark:text-slate-100"
+                  ? "bg-slate-100 dark:bg-gray-900 shadow-sm text-slate-900 dark:text-slate-100"
                   : "text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700"
               }`}
             >
@@ -88,7 +88,7 @@ export default function TaskView({
               onClick={() => setView("timeline")}
               className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition ${
                 view === "timeline"
-                  ? "bg-white dark:bg-gray-900 shadow-sm text-slate-900 dark:text-slate-100"
+                  ? "bg-slate-100 dark:bg-gray-900 shadow-sm text-slate-900 dark:text-slate-100"
                   : "text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700"
               }`}
             >

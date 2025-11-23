@@ -1514,7 +1514,7 @@ export default function ProjectManagement() {
 
   return (
     <QueryClientProvider client={qcRef.current}>
-      <div className="fixed z-20 inset-0 flex bg-white dark:bg-gray-900 text-slate-900 dark:text-slate-100">
+      <div className="fixed z-20 inset-0 flex bg-slate-100 dark:bg-gray-900 text-slate-900 dark:text-slate-100">
         <Sidebar
           workspaces={workspaces}
           activeWorkspaceId={activeWorkspaceId}
@@ -1580,7 +1580,7 @@ export default function ProjectManagement() {
         <main className="flex-1 h-full overflow-auto">
           <div className="cf-main-container p-8 min-h-full">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-2xl font-bold">
+              <h2 className="text-3xl font-extrabold bg-gradient-to-r from-blue-600 via-sky-500 to-cyan-400 bg-clip-text text-transparent">
                 {projects.find((x) => x.id === activeProjectId)?.name || "—"}
               </h2>
 
@@ -1588,11 +1588,15 @@ export default function ProjectManagement() {
                 <button
                   onClick={() => handleAddTask("New Task")}
                   disabled={creatingTask}
-                  className="group flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-sky-500 to-sky-600 text-white text-sm font-medium shadow-sm hover:shadow-md active:scale-[0.98] transition-all duration-200 dark:from-sky-600 dark:to-sky-700"
+                  className="group inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold
+             bg-gradient-to-r from-sky-500 to-sky-600 text-white
+             hover:from-sky-600 hover:to-sky-700
+             active:scale-95 transition-all duration-300
+             dark:from-sky-600 dark:to-sky-700 dark:hover:from-sky-700 dark:hover:to-sky-800"
                 >
                   <PlusCircle
                     size={18}
-                    className="transition-transform group-hover:rotate-90"
+                    className="transition-transform duration-300 group-hover:rotate-90"
                   />
                   <span>{creatingTask ? "Adding..." : "New Task"}</span>
                 </button>
@@ -1606,7 +1610,7 @@ export default function ProjectManagement() {
 
                 <button
                   onClick={() => setDark(!dark)}
-                  className="p-2 rounded-full border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all duration-200"
+                  className="p-2 rounded-full border border-gray-300 dark:border-gray-700 bg-slate-100 dark:bg-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all duration-200"
                 >
                   {dark ? (
                     <Moon className="w-4 h-4 text-sky-400" />
@@ -1645,18 +1649,18 @@ export default function ProjectManagement() {
                   </button>
 
                   {showProfileMenu && (
-                    <div className="absolute right-0 mt-2 w-40 rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow-lg py-1 z-50">
+                    <div className="absolute right-0 mt-2 w-40 rounded-lg bg-slate-100 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow-lg py-1 z-50">
                       <button
                         onClick={() => {
                           openEditProfile();
                         }}
-                        className="w-full text-left px-4 py-2 text-sm text-slate-900 dark:text-slate-100 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
+                        className="w-full text-left px-4 py-2 text-sm hover:bg-blue-400 hover:text-white text-slate-900 dark:text-slate-100 dark:hover:bg-gray-800 transition"
                       >
                         Edit Profile
                       </button>
                       <button
                         onClick={handleLogout}
-                        className="w-full text-left px-4 py-2 text-sm text-red-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
+                        className="w-full text-left px-4 py-2 text-sm hover:bg-blue-400 hover:text-white text-slate-900 dark:text-slate-100 dark:hover:bg-gray-800 transition"
                       >
                         Logout
                       </button>

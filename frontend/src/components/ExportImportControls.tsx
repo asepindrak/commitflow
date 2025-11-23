@@ -268,27 +268,35 @@ export default function ExportImportControls({
       <button
         onClick={exportXlsx}
         title="Export project to Excel"
-        className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold
-                   bg-gradient-to-r from-sky-500 to-sky-600 text-white shadow-md
-                   hover:from-sky-600 hover:to-sky-700 active:scale-95 transition-transform
-                   dark:from-sky-600 dark:to-sky-700"
         aria-label="Export to Excel"
+        className={`group inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold
+              bg-gradient-to-r from-sky-500 to-sky-600 text-white
+              hover:from-sky-600 hover:to-sky-700
+              active:scale-95 transition-all duration-300
+              dark:from-sky-600 dark:to-sky-700 dark:hover:from-sky-700 dark:hover:to-sky-800`}
       >
-        <Download className="w-4 h-4" />
+        <Download
+          size={16}
+          className="transition-transform duration-300 group-hover:-rotate-6"
+          aria-hidden="true"
+        />
         <span>{selectedProjectId ? "Export project" : "Export all"}</span>
       </button>
 
-      {/* Import button */}
       <label
         htmlFor="cf-import-xlsx"
         title="Import from Excel"
-        className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold
-                   bg-white border border-gray-200 text-gray-700 cursor-pointer
-                   hover:bg-gray-50 active:scale-95 transition-colors
-                   dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-700"
+        className="group inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold
+             bg-white border border-gray-200 text-gray-700 cursor-pointer
+             hover:bg-gray-50 active:scale-95 transition-all duration-300
+             dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-700"
       >
-        <UploadCloud className="w-4 h-4" />
+        <UploadCloud
+          className="w-4 h-4 transition-transform duration-300 
+               group-hover:-rotate-6 group-hover:translate-y-0.5"
+        />
         <span>Import</span>
+
         <input
           id="cf-import-xlsx"
           ref={fileRef}

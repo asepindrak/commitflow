@@ -155,13 +155,7 @@
 }
 
 .background {
-  background-color: #000;
-  background-image: linear-gradient(rgba(0, 0, 0, 0.9), rgba(0, 0, 0, 0.7)),
-    url("/background.jpg");
-  /* note: ada leading / */
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
+  background-color: #101828;
 }
 
 @media screen and (max-width: 768px) {
@@ -427,4 +421,27 @@
 .ql-toolbar,
 .ql-container {
   border-radius: 0 !important;
+}
+
+/* di file css global (tailwind global.css / styles.css) */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: none;
+  opacity: 0.9;
+}
+
+/* override untuk dark mode: invert supaya icon terang di latar gelap */
+@media (prefers-color-scheme: dark) {
+  input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(1) brightness(1.2);
+  }
+}
+
+/* fallback: force white-ish icon when dark class applied on body */
+.dark input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1) brightness(1.2);
+}
+
+/* LIGHT mode: jadikan icon agak gelap */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: brightness(0) opacity(0.6);
 }

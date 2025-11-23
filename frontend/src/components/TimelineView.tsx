@@ -141,7 +141,7 @@ export default function TimelineView({
   );
 
   return (
-    <div className="rounded-lg border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 p-3 overflow-auto">
+    <div className="rounded-lg border border-gray-100 dark:border-gray-800 bg-slate-100 dark:bg-gray-900 p-3 overflow-auto">
       <div className="mb-3 flex items-center justify-between">
         <div>
           <div className="text-sm text-gray-500 dark:text-gray-400">

@@ -89,7 +89,7 @@ export default function CreateWorkspaceModal({
       />
 
       {/* modal */}
-      <div className="relative w-full max-w-md mx-4 bg-white dark:bg-gray-900 rounded-2xl shadow-xl ring-1 ring-black/10 dark:ring-white/10 overflow-hidden">
+      <div className="relative w-full max-w-md mx-4 bg-slate-100 dark:bg-gray-900 rounded-2xl shadow-xl ring-1 ring-black/10 dark:ring-white/10 overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-800">
           <h3 className="text-sm font-semibold">Create workspace</h3>
           <button
@@ -142,11 +142,24 @@ export default function CreateWorkspaceModal({
             </button>
             <button
               type="submit"
-              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-sm font-medium shadow transition-colors"
               disabled={saving}
+              className={`group inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold
+              bg-gradient-to-r from-sky-500 to-sky-600 text-white
+              hover:from-sky-600 hover:to-sky-700
+              active:scale-95 transition-all duration-300
+              disabled:opacity-60 disabled:cursor-not-allowed`}
             >
-              <Check size={14} />
-              <span>{saving ? "Creating..." : "Create"}</span>
+              {saving ? (
+                <span>Creating...</span>
+              ) : (
+                <>
+                  <Check
+                    size={16}
+                    className="transition-transform duration-300 group-hover:-rotate-6"
+                  />
+                  <span>Create</span>
+                </>
+              )}
             </button>
           </div>
         </form>
