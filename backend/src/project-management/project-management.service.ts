@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-base-to-string */
 import {
   Injectable,
   NotFoundException,
@@ -755,6 +756,7 @@ export class ProjectManagementService {
               email: email ?? null,
               password: hashed ?? null,
               phone: phone ?? null,
+              photo: photo ?? null,
             },
           });
         }
@@ -762,10 +764,10 @@ export class ProjectManagementService {
         // create team member
         const tm = await tx.teamMember.create({
           data: {
-            name: name ?? "Unnamed",
+            name: user.name ?? "Unnamed",
             role: role ?? null,
-            email: email ?? null,
-            photo: photo ?? null,
+            email: user.email ?? null,
+            photo: user.photo ? user.photo : photo ?? null,
             phone: phone ?? null,
             clientId: clientId ?? null,
             userId: user.id,
@@ -818,6 +820,8 @@ export class ProjectManagementService {
     if (typeof payload.name !== "undefined") userData.name = payload.name;
     if (typeof payload.phone !== "undefined")
       userData.phone = payload.phone ?? null;
+    if (typeof payload.photo !== "undefined")
+      userData.photo = payload.photo ?? null;
     // password must be hashed
     if (typeof payload.password !== "undefined" && payload.password !== null) {
       userData.password = hashPassword(payload.password);
@@ -844,10 +848,13 @@ export class ProjectManagementService {
             user = await tx.user.update({
               where: { id: user.id },
               data: userData,
+              include: {
+                members: true,
+              },
             });
           }
         }
-
+        console.log(user);
         return { teamMember: updatedTeam, user };
       });
 

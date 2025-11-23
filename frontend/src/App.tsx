@@ -2,24 +2,36 @@
 import Welcome from "./components/Welcome";
 import AiAgent from "./components/AiAgent";
 import ChatWindow from "./components/ChatWindow";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import "react-toastify/dist/ReactToastify.css";
 import { ToastContainer } from "react-toastify";
 import ProjectManagement from "./components/ProjectManagement";
 import AuthCard from "./components/Auth/AuthCard";
 import { useAuthStore } from "./utils/store";
+import { playSound } from "./utils/playSound";
+import { getState, saveState } from "./utils/local";
 
 function App() {
   const [isShow, setIsShow] = useState(false);
   const [isLogin, setIsLogin] = useState(false);
   const setAuth = useAuthStore((s) => s.setAuth); // ambil setter dari store
-
   const initSession = useAuthStore((s) => s.initSession);
   const token = useAuthStore((s) => s.token);
 
   // untuk kontrol animasi splash logo
   const [showLogo, setShowLogo] = useState(true);
+
+  const KEY = "isPlaySound";
+
+  const [isPlaySound, setIsPlaySound] = useState<boolean>(() => {
+    const fromLS = getState(KEY);
+    return fromLS ?? false; // fallback default false
+  });
+
+  useEffect(() => {
+    saveState(KEY, isPlaySound);
+  }, [isPlaySound]);
 
   useEffect(() => {
     initSession();
@@ -29,19 +41,11 @@ function App() {
     new Audio("/sounds/send.mp3").load();
     new Audio("/sounds/incoming.mp3").load();
     new Audio("/sounds/close.mp3").load();
-    setTimeout(() => {
-      playSound("/sounds/send.mp3");
-    }, 1000);
+    playSound("/sounds/send.mp3", isPlaySound);
   }, []);
 
   const onClose = () => {
     setIsShow(false);
-  };
-
-  const playSound = (src: string) => {
-    const audio = new Audio(src);
-    audio.volume = 0.2;
-    audio.play().catch(() => {});
   };
 
   const handleAuth = (r: any) => {
@@ -118,7 +122,10 @@ function App() {
               visible: { opacity: 1, y: 0, transition: { delay: 0.2 } },
             }}
           >
-            <ProjectManagement />
+            <ProjectManagement
+              setIsPlaySound={setIsPlaySound}
+              isPlaySound={isPlaySound}
+            />
           </motion.div>
         </motion.div>
       )}
@@ -139,7 +146,13 @@ function App() {
           </motion.div>
 
           {!isShow && <AiAgent setIsShow={setIsShow} />}
-          {isShow && <ChatWindow onClose={onClose} />}
+          {isShow && (
+            <ChatWindow
+              onClose={onClose}
+              setIsPlaySound={setIsPlaySound}
+              isPlaySound={isPlaySound}
+            />
+          )}
         </motion.div>
       )}
 

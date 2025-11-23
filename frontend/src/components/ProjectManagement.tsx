@@ -3,7 +3,14 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import Sidebar from "./Sidebar";
 import TaskModal from "./TaskModal";
 import type { Project, Task, TeamMember, Workspace } from "../types";
-import { Sun, Moon, PlusCircle, VolumeX, Volume2 } from "lucide-react";
+import {
+  Sun,
+  Moon,
+  PlusCircle,
+  VolumeX,
+  Volume2,
+  RefreshCw,
+} from "lucide-react";
 import TaskView from "./TaskView";
 import ExportImportControls from "./ExportImportControls";
 import { toast } from "react-toastify";
@@ -32,12 +39,20 @@ const queryClient = new QueryClient();
 const nid = (x: any) =>
   typeof x === "undefined" || x === null ? "" : String(x);
 
-export default function ProjectManagement() {
+export default function ProjectManagement({
+  isPlaySound,
+  setIsPlaySound,
+}: {
+  isPlaySound: boolean;
+  setIsPlaySound: (value: boolean) => void;
+}) {
   const initialWorkspaceId = getState("workspaceId");
   const initialProjectId = getState("projectId");
+  const setAuth = useAuthStore((s) => s.setAuth); // ambil setter dari store
 
   const [isLoaded, setIsLoaded] = useState(false);
-  const [isPlaySound, setIsPlaySound] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [isRequestSync, setIsRequestSync] = useState(false);
   const initialTeam: TeamMember[] = normalizeTeamInput([]);
   const [team, setTeam] = useState<TeamMember[]>(() => initialTeam);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
@@ -74,22 +89,20 @@ export default function ProjectManagement() {
   const userWorkspace = user?.members.filter(
     (item: any) => item.workspaceId === activeWorkspaceId
   );
-  console.log("userWorkspace", userWorkspace);
+  const userWorkspaceActive =
+    userWorkspace.length > 0 ? userWorkspace[0] : user;
+  console.log("userWorkspace", userWorkspaceActive);
+  if (!userWorkspaceActive?.photo) {
+    userWorkspaceActive.photo = user?.photo ?? null;
+  }
   // ambil huruf pertama sebagai icon
-  const userInitial = (
-    (userWorkspace &&
-      userWorkspace.length > 0 &&
-      userWorkspace[0]?.name?.slice(0, 1)) ||
-    "U"
-  ).toUpperCase();
-  const userPhoto =
-    (userWorkspace && userWorkspace.length > 0 && userWorkspace[0]?.photo) ||
-    null;
-  // alert(userInitial);
+  const userInitial = user?.name?.slice(0, 1) || "U".toUpperCase();
+  const userPhoto = user?.photo
+    ? user?.photo
+    : userWorkspaceActive.photo || null;
   console.log(userInitial);
 
-  const authTeamMemberId =
-    (userWorkspace && userWorkspace.length > 0 && userWorkspace[0]?.id) || null;
+  const authTeamMemberId = userWorkspaceActive.id || null;
   useEffect(() => {
     if (!authTeamMemberId) return;
     if (team && team.length > 0) return;
@@ -144,10 +157,14 @@ export default function ProjectManagement() {
 
   const openEditProfile = async () => {
     setShowProfileMenu(false);
-    if (userWorkspace && userWorkspace.length > 0) {
-      setEditMember(userWorkspace[0] ?? null);
-    }
+    setEditMember(userWorkspaceActive ?? null);
+
     setShowEditProfile(true);
+  };
+
+  const handleSync = async () => {
+    setSyncing(true);
+    setIsRequestSync(!isRequestSync);
   };
 
   const handleSaveProfile = async (updated: TeamMember) => {
@@ -167,7 +184,17 @@ export default function ProjectManagement() {
         password: updated.password ?? null,
       };
       const saved = await api.updateTeamMember(updated.id, payload);
+      console.log("saved", token);
+      console.log("saved", userId);
+
+      setAuth({
+        token: token ?? "",
+        userId: userId ?? "",
+        user: saved.user,
+        teamMemberId: teamMemberId ?? null,
+      });
       setTeam((prev) => prev.map((t) => (t.id === saved.id ? saved : t)));
+      window.location.reload();
     } catch (err) {
       try {
         enqueueOp({
@@ -209,12 +236,6 @@ export default function ProjectManagement() {
     y: 0,
     width: 300,
   });
-
-  useEffect(() => {
-    if (isLoaded) {
-      playSound("/sounds/close.mp3", isPlaySound);
-    }
-  }, [selectedTask]);
 
   // panggil ini instead of onDragStart untuk pointer devices
   function startPointerDrag(
@@ -476,26 +497,89 @@ export default function ProjectManagement() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeWorkspaceId]);
 
+  // helper: tentukan apakah error itu unrecoverable (tidak perlu retry)
+  function isUnrecoverableError(err: any) {
+    // sesuaikan tergantung shape error dari projectApi (axios, fetch, custom)
+    // contoh: axios: err?.response?.status
+    const status = err?.response?.status ?? err?.status;
+    const msg = (err?.message || "").toString();
+
+    // treat 400/404 as unrecoverable by default (adjust to your API semantics)
+    if (status === 400 || status === 404) return true;
+
+    // match specific message text too (your log showed "Project not found")
+    if (/project not found/i.test(msg)) return true;
+    if (/task not found/i.test(msg)) return true;
+
+    return false;
+  }
+
   useEffect(() => {
+    const prefix = (...args: any[]) =>
+      console.log("[SYNC]", new Date().toISOString(), ...args);
+
+    prefix("useEffect mounted", {
+      activeProjectId,
+      activeWorkspaceId,
+      isRequestSync,
+    });
+
     const wsHandle = createRealtimeSocket(
       qcRef.current,
       () => activeProjectId,
       () => activeWorkspaceId
     );
 
+    prefix("websocket handle created", { wsHandleExists: !!wsHandle });
+
+    let isFlushing = false;
     const attemptFlush = async () => {
+      if (isFlushing) {
+        prefix("attemptFlush skipped because another flush is running");
+        return;
+      }
+      isFlushing = true;
+      prefix("attemptFlush start", { activeProjectId, activeWorkspaceId });
+
       try {
-        const q = getQueue();
-        if (!q.length) return;
+        const rawQueue = getQueue();
+        prefix("rawQueue read", { length: rawQueue?.length ?? 0, rawQueue });
+
+        if (!rawQueue || !rawQueue.length) {
+          prefix("queue empty - nothing to flush");
+          return;
+        }
+
+        // local mutable copy
+        const queue: any[] = [...rawQueue];
+
+        setSyncing(true);
+        prefix("setSyncing(true)");
+
         let processed = 0;
-        while (processed < 6) {
-          const curQueue = getQueue();
-          if (!curQueue.length) break;
-          const op = curQueue[0];
+        const MAX_PER_RUN = 6;
+
+        while (processed < MAX_PER_RUN && queue.length) {
+          const op = queue[0];
+          prefix("processing op", {
+            index: processed,
+            opType: op?.op,
+            opSnapshot: op,
+            currentActiveProjectId: activeProjectId,
+            currentActiveWorkspaceId: activeWorkspaceId,
+            queueLengthBefore: queue.length,
+          });
+
           try {
             if (op.op === "create_task") {
               const originalTmpId = op.payload?.id ?? op.payload?.clientId;
               const payload = { ...op.payload } as any;
+
+              prefix("create_task - before normalize", {
+                originalTmpId,
+                payload,
+              });
+
               if (
                 payload &&
                 typeof payload.id === "string" &&
@@ -503,21 +587,33 @@ export default function ProjectManagement() {
               ) {
                 payload.clientId = payload.id;
                 delete payload.id;
+                prefix("create_task - normalized tmp id -> clientId", {
+                  payload,
+                });
               }
+
+              prefix("API createTask CALL start", { payload });
               const created = await api.createTask(payload);
-              const cur = getQueue();
-              cur.shift();
-              localStorage.setItem("cf_op_queue_v1", JSON.stringify(cur));
+              prefix("API createTask CALL success", { created });
+
+              // remove first item from local queue
+              queue.shift();
+              processed++;
+
+              prefix("create_task - update remaining refs start", {
+                originalTmpId,
+                remainingBefore: queue.length + 1,
+              });
 
               if (originalTmpId && typeof created?.id === "string") {
-                const remaining = getQueue();
                 let changed = false;
-                for (const rem of remaining) {
+                for (const rem of queue) {
                   if (
                     rem.op === "update_task" &&
                     rem.payload &&
                     rem.payload.id === originalTmpId
                   ) {
+                    prefix("updating rem.update_task.id", { rem });
                     rem.payload.id = created.id;
                     changed = true;
                   }
@@ -526,6 +622,7 @@ export default function ProjectManagement() {
                     rem.payload &&
                     rem.payload.id === originalTmpId
                   ) {
+                    prefix("updating rem.delete_task.id", { rem });
                     rem.payload.id = created.id;
                     changed = true;
                   }
@@ -534,29 +631,36 @@ export default function ProjectManagement() {
                     rem.payload &&
                     rem.payload.taskId === originalTmpId
                   ) {
+                    prefix("updating rem.create_comment.taskId", { rem });
                     rem.payload.taskId = created.id;
                     changed = true;
                   }
                 }
-                if (changed)
-                  localStorage.setItem(
-                    "cf_op_queue_v1",
-                    JSON.stringify(remaining)
-                  );
+                prefix("create_task - update remaining refs done", { changed });
               }
             } else if (op.op === "update_task") {
+              prefix("API updateTaskApi CALL start", {
+                id: op.payload.id,
+                patch: op.payload.patch,
+              });
               await api.updateTaskApi(op.payload.id, op.payload.patch);
-              const cur = getQueue();
-              cur.shift();
-              localStorage.setItem("cf_op_queue_v1", JSON.stringify(cur));
+              prefix("API updateTaskApi CALL success", { id: op.payload.id });
+              queue.shift();
+              processed++;
             } else if (op.op === "delete_task") {
+              prefix("API deleteTaskApi CALL start", { id: op.payload.id });
               await api.deleteTaskApi(op.payload.id);
-              const cur = getQueue();
-              cur.shift();
-              localStorage.setItem("cf_op_queue_v1", JSON.stringify(cur));
+              prefix("API deleteTaskApi CALL success", { id: op.payload.id });
+              queue.shift();
+              processed++;
             } else if (op.op === "create_project") {
               const originalTmpId = op.payload?.id ?? op.payload?.clientId;
               const payload = { ...op.payload } as any;
+
+              prefix("create_project - before normalize", {
+                originalTmpId,
+                payload,
+              });
 
               if (
                 payload &&
@@ -565,40 +669,55 @@ export default function ProjectManagement() {
               ) {
                 payload.clientId = payload.id;
                 delete payload.id;
+                prefix("create_project - normalized tmp id -> clientId", {
+                  payload,
+                });
               }
 
               const workspaceIdToUse = payload.workspaceId ?? activeWorkspaceId;
+              prefix("create_project - workspaceIdToUse computed", {
+                workspaceIdToUse,
+                activeWorkspaceId,
+                payloadWorkspaceId: op.payload.workspaceId,
+              });
+
               if (!workspaceIdToUse || typeof workspaceIdToUse !== "string") {
                 console.warn(
-                  "flushQueue: create_project missing workspaceId — will retry later",
+                  "flushQueue: create_project missing workspaceId — skipping for now, will retry later",
                   op
                 );
-                return;
+                prefix(
+                  "create_project - MISSING workspaceId, will break and retry later",
+                  { op }
+                );
+                // don't remove this op; break to retry later
+                break;
               }
 
               payload.workspaceId = workspaceIdToUse;
 
+              prefix("API createProject CALL start", { payload });
               const created = await api.createProject(payload);
+              prefix("API createProject CALL success", { created });
 
-              const cur = getQueue();
-              cur.shift();
-              localStorage.setItem("cf_op_queue_v1", JSON.stringify(cur));
+              queue.shift();
+              processed++;
 
               if (originalTmpId && typeof created?.id === "string") {
-                const remaining = getQueue();
-                let changed = false;
-                for (const rem of remaining) {
+                for (const rem of queue) {
                   if (rem.payload && rem.payload.projectId === originalTmpId) {
+                    prefix("updating rem.projectId -> created.id", { rem });
                     rem.payload.projectId = created.id;
-                    changed = true;
                   }
                   if (
                     rem.op === "create_task" &&
                     rem.payload &&
                     rem.payload.projectId === originalTmpId
                   ) {
+                    prefix("updating rem.create_task.projectId -> created.id", {
+                      rem,
+                    });
                     rem.payload.projectId = created.id;
-                    changed = true;
                   }
                   if (
                     rem.op === "update_task" &&
@@ -606,26 +725,29 @@ export default function ProjectManagement() {
                     rem.payload.patch &&
                     rem.payload.patch.projectId === originalTmpId
                   ) {
+                    prefix(
+                      "updating rem.update_task.patch.projectId -> created.id",
+                      { rem }
+                    );
                     rem.payload.patch.projectId = created.id;
-                    changed = true;
                   }
                 }
-                if (changed)
-                  localStorage.setItem(
-                    "cf_op_queue_v1",
-                    JSON.stringify(remaining)
-                  );
               }
             } else if (op.op === "update_project") {
+              prefix("API updateProjectApi CALL start", {
+                id: op.payload.id,
+                patch: op.payload.patch,
+              });
               await api.updateProjectApi(op.payload.id, op.payload.patch);
-              const cur = getQueue();
-              cur.shift();
-              localStorage.setItem("cf_op_queue_v1", JSON.stringify(cur));
+              prefix("API updateProjectApi success", { id: op.payload.id });
+              queue.shift();
+              processed++;
             } else if (op.op === "delete_project") {
+              prefix("API deleteProjectApi CALL start", { id: op.payload.id });
               await api.deleteProjectApi(op.payload.id);
-              const cur = getQueue();
-              cur.shift();
-              localStorage.setItem("cf_op_queue_v1", JSON.stringify(cur));
+              prefix("API deleteProjectApi success", { id: op.payload.id });
+              queue.shift();
+              processed++;
             } else if (op.op === "create_team") {
               const originalTmpId = op.payload?.id ?? op.payload?.clientId;
               const payload = { ...op.payload } as any;
@@ -636,74 +758,186 @@ export default function ProjectManagement() {
               ) {
                 payload.clientId = payload.id;
                 delete payload.id;
+                prefix("create_team - normalized tmp id -> clientId", {
+                  payload,
+                });
               }
+              prefix("API createTeamMember CALL start", { payload });
               const created = await api.createTeamMember(payload);
-              const cur = getQueue();
-              cur.shift();
-              localStorage.setItem("cf_op_queue_v1", JSON.stringify(cur));
+              prefix("API createTeamMember success", { created });
+
+              queue.shift();
+              processed++;
 
               if (originalTmpId && typeof created?.id === "string") {
-                const remaining = getQueue();
-                let changed = false;
-                for (const rem of remaining) {
+                for (const rem of queue) {
                   if (
                     rem.op === "update_task" &&
                     rem.payload &&
                     rem.payload.patch &&
                     rem.payload.patch.assigneeId === originalTmpId
                   ) {
+                    prefix(
+                      "updating rem.update_task.patch.assigneeId -> created.id",
+                      { rem }
+                    );
                     rem.payload.patch.assigneeId = created.id;
-                    changed = true;
                   }
                 }
-                if (changed)
-                  localStorage.setItem(
-                    "cf_op_queue_v1",
-                    JSON.stringify(remaining)
-                  );
               }
             } else if (op.op === "delete_team") {
+              prefix("API deleteTeamMember CALL start", { id: op.payload.id });
               await api.deleteTeamMember(op.payload.id);
-              const cur = getQueue();
-              cur.shift();
-              localStorage.setItem("cf_op_queue_v1", JSON.stringify(cur));
+              prefix("API deleteTeamMember success", { id: op.payload.id });
+              queue.shift();
+              processed++;
             } else if (op.op === "create_comment") {
+              prefix("API createComment CALL start", {
+                taskId: op.payload.taskId,
+                preview: { author: op.payload.author, body: op.payload.body },
+              });
               await api.createComment(op.payload.taskId, {
                 author: op.payload.author,
                 body: op.payload.body,
                 attachments: op.payload.attachments || [],
               });
-              const cur = getQueue();
-              cur.shift();
-              localStorage.setItem("cf_op_queue_v1", JSON.stringify(cur));
+              prefix("API createComment success", {
+                taskId: op.payload.taskId,
+              });
+              queue.shift();
+              processed++;
             } else {
-              console.warn("Unknown queued op", op);
-              const cur = getQueue();
-              cur.shift();
-              localStorage.setItem("cf_op_queue_v1", JSON.stringify(cur));
+              prefix("Unknown queued op - shifting and continuing", { op });
+              queue.shift();
+              processed++;
             }
-          } catch (err) {
-            console.warn("flushQueue op failed", err, op);
-            return;
-          }
-          processed++;
-        }
 
+            // Persist queue state after each successful op to localStorage to survive reloads/crashes
+            localStorage.setItem("cf_op_queue_v1", JSON.stringify(queue));
+            prefix("persisted queue to localStorage", {
+              remaining: queue.length,
+            });
+          } catch (err: any) {
+            // per-op failure (network/server).
+            // Decide whether to retry later (network/server error) or drop op (unrecoverable)
+            console.warn("flushQueue op failed (raw)", err, op);
+            prefix("op failed", { err: err?.message || err, op });
+
+            // attach and increment retryCount on the op (so we don't retry forever)
+            op.__retryCount = (op.__retryCount || 0) + 1;
+
+            const UNRECOVERABLE = isUnrecoverableError(err);
+
+            if (UNRECOVERABLE) {
+              // Remove the bad op — it won't succeed by retrying (e.g., project/task gone)
+              prefix("op considered UNRECOVERABLE -> removing from queue", {
+                op,
+                reason: err?.message ?? err,
+              });
+
+              // shift it off the local queue and persist
+              queue.shift();
+              localStorage.setItem("cf_op_queue_v1", JSON.stringify(queue));
+
+              // Optionally: push to a dead-letter store so user/admin can review
+              try {
+                const dlKey = "cf_op_queue_v1_dead";
+                const dlRaw = localStorage.getItem(dlKey);
+                const dlArr = dlRaw ? JSON.parse(dlRaw) : [];
+                dlArr.push({
+                  op,
+                  error: err?.message ?? err,
+                  timestamp: new Date().toISOString(),
+                });
+                localStorage.setItem(dlKey, JSON.stringify(dlArr));
+              } catch (e) {
+                console.warn("failed to write dead-letter", e);
+              }
+
+              // continue processing next op (don't break)
+              continue;
+            }
+
+            // If recoverable, but retry count exceeded threshold -> move to dead-letter and continue
+            const RETRY_LIMIT = 4;
+            if (op.__retryCount >= RETRY_LIMIT) {
+              prefix("op exceeded retry limit -> moving to dead-letter", {
+                op,
+                retryCount: op.__retryCount,
+              });
+              queue.shift();
+              try {
+                const dlKey = "cf_op_queue_v1_dead";
+                const dlRaw = localStorage.getItem(dlKey);
+                const dlArr = dlRaw ? JSON.parse(dlRaw) : [];
+                dlArr.push({
+                  op,
+                  error: err?.message ?? err,
+                  retryCount: op.__retryCount,
+                  timestamp: new Date().toISOString(),
+                });
+                localStorage.setItem(dlKey, JSON.stringify(dlArr));
+              } catch (e) {
+                console.warn("failed to write dead-letter", e);
+              }
+              localStorage.setItem("cf_op_queue_v1", JSON.stringify(queue));
+              continue;
+            }
+
+            // If recoverable and under retry limit, persist the incremented retryCount and break to retry later.
+            prefix(
+              "op recoverable -> persisting retryCount and will retry later",
+              {
+                op,
+                retryCount: op.__retryCount,
+              }
+            );
+            // persist current queue (with updated op.__retryCount)
+            localStorage.setItem("cf_op_queue_v1", JSON.stringify(queue));
+            // break out so we don't hammer API this run; next run will attempt again
+            break;
+          }
+        } // end while
+
+        // finished processing up to MAX_PER_RUN items
+        prefix("syncing finish", {
+          processed,
+          remaining: queue.length,
+        });
+
+        // ensure remote cache invalidation if needed
         if (activeProjectId) {
+          prefix("invalidateQueries tasks for activeProjectId", {
+            activeProjectId,
+          });
           qcRef.current.invalidateQueries(["tasks", activeProjectId]);
         } else {
+          prefix("invalidateQueries tasks (all)");
           qcRef.current.invalidateQueries(["tasks"], { exact: false });
         }
 
         if (activeWorkspaceId) {
+          prefix("invalidateQueries projects/team for activeWorkspaceId", {
+            activeWorkspaceId,
+          });
           qcRef.current.invalidateQueries(["projects", activeWorkspaceId]);
           qcRef.current.invalidateQueries(["team", activeWorkspaceId]);
         } else {
+          prefix("invalidateQueries projects/team (all)");
           qcRef.current.invalidateQueries(["projects"], { exact: false });
           qcRef.current.invalidateQueries(["team"], { exact: false });
         }
       } catch (e) {
-        // backend still down — will retry later
+        console.error("attemptFlush top-level error", e);
+        prefix("attemptFlush top-level error", e);
+      } finally {
+        isFlushing = false;
+        prefix("isFlushing set false");
+        // keep a short delay so UI shows the syncing state visibly (optional)
+        setTimeout(() => {
+          setSyncing(false);
+          prefix("setSyncing(false)");
+        }, 2000);
       }
     };
 
@@ -713,18 +947,30 @@ export default function ProjectManagement() {
     );
     window.addEventListener("online", attemptFlush);
 
-    attemptFlush().catch(() => {});
+    prefix("attemptFlush scheduled and initial call", { intervalMs: 7000 });
+    attemptFlush().catch((err) => {
+      console.error("initial attemptFlush failed", err);
+      prefix("initial attemptFlush catch", err);
+    });
 
     return () => {
+      prefix("useEffect cleanup start");
       try {
         wsHandle?.close();
+        prefix("wsHandle closed");
       } catch (e) {
-        console.log(e);
+        console.warn("wsHandle close error", e);
+        prefix("wsHandle close error", e);
       }
-      if (intervalId) clearInterval(intervalId);
+      if (intervalId) {
+        clearInterval(intervalId);
+        prefix("cleared interval", { intervalId });
+      }
       window.removeEventListener("online", attemptFlush);
+      prefix("removed online listener");
+      prefix("useEffect cleanup done");
     };
-  }, [activeProjectId, activeWorkspaceId]);
+  }, [activeProjectId, activeWorkspaceId, isRequestSync]);
 
   useEffect(() => {
     try {
@@ -1394,6 +1640,7 @@ export default function ProjectManagement() {
       for (const c of commentsForTask) {
         const payload = {
           author: c.author ?? c.Author ?? "Imported",
+          // eslint-disable-next-line no-constant-binary-expression
           body: c.body ?? c.Body ?? String(c) ?? "",
           attachments: c.attachments ?? c.Attachments ?? [],
         };
@@ -1475,6 +1722,7 @@ export default function ProjectManagement() {
             payload: {
               taskId: f.tmpId,
               author: c.author ?? "Imported",
+              // eslint-disable-next-line no-constant-binary-expression
               body: c.body ?? String(c) ?? "",
               attachments: c.attachments ?? [],
             },
@@ -1585,6 +1833,48 @@ export default function ProjectManagement() {
               </h2>
 
               <div className="flex items-center gap-5">
+                <button
+                  onClick={handleSync}
+                  disabled={syncing}
+                  className={`
+    relative inline-flex items-center gap-2 px-5 py-2.5
+    rounded-2xl text-sm font-semibold backdrop-blur-md
+    transition-all duration-300 
+    ${
+      syncing
+        ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+        : "bg-white/10 dark:bg-white/5 hover:bg-white/20 dark:hover:bg-white/10 border border-white/20 dark:border-white/10"
+    }
+    shadow-[0_4px_12px_rgba(0,0,0,0.1)]
+    hover:shadow-[0_6px_16px_rgba(0,0,0,0.15)]
+    active:scale-95
+  `}
+                >
+                  {/* spinning icon */}
+                  <RefreshCw
+                    size={18}
+                    className={`transition-transform ${
+                      syncing
+                        ? "animate-spin text-emerald-400"
+                        : "group-hover:rotate-180 text-white/80"
+                    }`}
+                  />
+
+                  {/* label */}
+                  <span className={syncing ? "text-emerald-400" : "text-white"}>
+                    {syncing ? "Syncing…" : "Sync"}
+                  </span>
+
+                  {/* glow indicator */}
+                  {!syncing && (
+                    <span className="absolute inset-0 rounded-2xl bg-emerald-500/20 opacity-0 group-hover:opacity-20 transition-opacity"></span>
+                  )}
+
+                  {/* small dot indicator when syncing */}
+                  {syncing && (
+                    <span className="absolute -top-1.5 -right-1.5 h-3 w-3 rounded-full bg-emerald-400 animate-ping"></span>
+                  )}
+                </button>
                 <button
                   onClick={() => handleAddTask("New Task")}
                   disabled={creatingTask}
@@ -1729,6 +2019,7 @@ export default function ProjectManagement() {
                 currentMemberId={authTeamMemberId}
                 task={selectedTask}
                 onClose={() => {
+                  playSound("/sounds/close.mp3", isPlaySound);
                   setSelectedTask(null);
                 }}
                 onSave={async (u) => {
