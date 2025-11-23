@@ -50,6 +50,7 @@ export function normalizeTeamInput(raw: any[] = []): TeamMember[] {
         photo: t.photo,
         workspaceId: t.workspaceId,
         userId: t.userId,
+        isAdmin: t.isAdmin,
       };
     }
     // fallback for weird values (null/undefined/empty)

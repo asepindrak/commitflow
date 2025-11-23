@@ -244,7 +244,7 @@ export default function Sidebar({
       setActiveWorkspaceId(idToSet);
       setShowCreateWorkspace(false);
       // avoid forced reload often, but keep original behaviour if needed:
-      // window.location.reload();
+      window.location.reload();
     } catch (err: any) {
       console.error("create workspace error", err);
       toast.dark(err?.message ?? "Failed to create workspace");

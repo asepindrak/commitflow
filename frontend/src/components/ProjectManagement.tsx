@@ -58,6 +58,7 @@ export default function ProjectManagement({
   const [team, setTeam] = useState<TeamMember[]>(() => initialTeam);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showEditProfile, setShowEditProfile] = useState(false);
+  const [showEditMember, setShowEditMember] = useState(false);
   const [editMember, setEditMember] = useState<TeamMember | null>(null);
   const teamMemberId = useAuthStore((s) => s.teamMemberId);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
@@ -87,12 +88,16 @@ export default function ProjectManagement({
   const logout = useAuthStore((s) => s.logout);
   console.log(user);
   console.log(currentMember?.name);
-  const userWorkspace = user?.members.filter(
-    (item: any) => item.workspaceId === activeWorkspaceId
+  const userWorkspace = team.filter(
+    (item: any) =>
+      item.workspaceId === activeWorkspaceId && item.userId === userId
   );
+
+  console.log("userWorkspace", userWorkspace);
   const userWorkspaceActive =
     userWorkspace.length > 0 ? userWorkspace[0] : user;
 
+  // alert(userWorkspaceActive.isAdmin);
   const isAdmin = userWorkspaceActive?.isAdmin ?? false;
   console.log("userWorkspace", userWorkspaceActive);
   if (!userWorkspaceActive?.photo) {
@@ -166,10 +171,11 @@ export default function ProjectManagement({
   };
 
   const openEditProfileTeam = async (member: any) => {
+    console.log("member", member);
     setShowProfileMenu(false);
     setEditMember(member ?? null);
 
-    setShowEditProfile(true);
+    setShowEditMember(true);
   };
 
   const handleSync = async () => {
@@ -2258,7 +2264,7 @@ export default function ProjectManagement({
                     ) : (
                       <div className="w-full h-full bg-gradient-to-r from-purple-500 to-indigo-500 flex items-center justify-center">
                         <span className="font-semibold text-white text-sm">
-                          {userInitial}
+                          {userInitial.toUpperCase()}
                         </span>
                       </div>
                     )}
@@ -2474,8 +2480,8 @@ export default function ProjectManagement({
       />
 
       <EditMemberModal
-        open={showEditProfile}
-        onClose={() => setShowEditProfile(false)}
+        open={showEditMember}
+        onClose={() => setShowEditMember(false)}
         member={editMember}
         onSave={handleSaveMember}
         dark={dark}
