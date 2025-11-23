@@ -170,7 +170,7 @@ export default function EditProfileModal({
                 Edit Profile
               </h3>
               <p className="text-xs text-gray-500 dark:text-gray-400">
-                Update member details
+                Update user details
               </p>
             </div>
 

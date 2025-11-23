@@ -129,6 +129,8 @@ export class ProjectManagementService {
           name: user?.name ?? "",
           email: user?.email ?? null,
           phone: user?.phone ?? null,
+          photo: user.photo ?? null,
+          isAdmin: true,
         },
       });
     }
