@@ -305,6 +305,7 @@ export default function EditProfileModal({
                     <input
                       type="password"
                       value={password}
+                      autoComplete="false"
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="New password (leave blank to keep)"
                       className="px-3 py-2 rounded-lg border bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-sky-300 dark:focus:ring-sky-600"
@@ -321,6 +322,7 @@ export default function EditProfileModal({
                     <input
                       type="password"
                       value={passwordConfirm}
+                      autoComplete="new-password"
                       onChange={(e) => setPasswordConfirm(e.target.value)}
                       placeholder="Confirm new password"
                       className="px-3 py-2 rounded-lg border bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-sky-300 dark:focus:ring-sky-600"

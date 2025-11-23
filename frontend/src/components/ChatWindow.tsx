@@ -19,9 +19,15 @@ import { playSound } from "../utils/playSound";
 
 interface ChatWindowProps {
   onClose: () => void;
+  isPlaySound: boolean;
+  setIsPlaySound: (value: boolean) => void;
 }
 
-export default function ChatWindow({ onClose }: ChatWindowProps) {
+export default function ChatWindow({
+  onClose,
+  isPlaySound,
+  setIsPlaySound,
+}: ChatWindowProps) {
   const [input, setInput] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
   const [isThinking, setIsThinking] = useState(false);
@@ -33,7 +39,6 @@ export default function ChatWindow({ onClose }: ChatWindowProps) {
   const [placeholder, setPlaceholder] = useState(getRandomPlaceholder());
   const [copied, setCopied] = useState(false);
   const [shared, setShared] = useState(false);
-  const [isPlaySound, setIsPlaySound] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [isMessagesReady, setIsMessagesReady] = useState(false);
 

@@ -52,6 +52,7 @@ model User {
   email         String?       @unique
   phone         String?
   name          String?
+  photo         String?
   role          Role?         @default(USER)
   password      String?       // kalau pake password
   session_token String?       @unique
