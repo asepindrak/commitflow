@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.4
+
+### Patch Changes
+
+- a129bbc: fix: sent email to member
+
 ## 1.3.3
 
 ### Patch Changes
