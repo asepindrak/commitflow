@@ -417,16 +417,16 @@ export class ProjectManagementService {
   ) {
     const exists = await prisma.task.findUnique({ where: { id } });
     if (!exists) throw new NotFoundException("Task not found");
-
+    let project: any = null;
     // validate projectId if present and not null (null means detach project)
     if (
       typeof payload.projectId !== "undefined" &&
       payload.projectId !== null
     ) {
-      const p = await prisma.project.findUnique({
+      project = await prisma.project.findUnique({
         where: { id: payload.projectId },
       });
-      if (!p) throw new NotFoundException("Project not found");
+      if (!project) throw new NotFoundException("Project not found");
     }
     let assignee: any = null;
     // validate assignee if present and not null
@@ -482,24 +482,10 @@ export class ProjectManagementService {
     });
 
     //send email to team members
-    const team = await prisma.teamMember.findFirst({
-      where: { userId, isTrash: false },
-    });
-
-    if (!team) throw new NotFoundException("Team not found");
-
     const teams = await prisma.teamMember.findMany({
-      where: { workspaceId: team.workspaceId, isTrash: false },
+      where: { workspaceId: project.workspaceId, isTrash: false },
       select: { email: true },
     });
-
-    // Ambil nama project (optional, tapi lebih keren)
-    const project = await prisma.project.findFirst({
-      where: { id: payload.projectId ?? "" },
-      select: { name: true },
-    });
-
-    if (!project) throw new NotFoundException("Project not found");
 
     const projectName = project?.name ?? "No Project";
 
