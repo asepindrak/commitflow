@@ -415,19 +415,26 @@ export class ProjectManagementService {
     }>,
     userId: string
   ) {
-    const exists = await prisma.task.findUnique({ where: { id } });
+    const exists: any = await prisma.task.findUnique({ where: { id } });
+    const data: any = exists;
     if (!exists) throw new NotFoundException("Task not found");
+    const updatedAt = exists.updatedAt;
+    const status = exists.status;
+    const priority = exists.priority;
+    const description = exists.description;
+    const startDate = exists.description;
+    const dueDate = exists.dueDate;
+    const assigneeId = exists.assigneeId;
+
     let project: any = null;
     // validate projectId if present and not null (null means detach project)
-    if (
-      typeof payload.projectId !== "undefined" &&
-      payload.projectId !== null
-    ) {
+    if (typeof exists.projectId !== "undefined" && exists.projectId !== null) {
       project = await prisma.project.findUnique({
-        where: { id: payload.projectId },
+        where: { id: exists.projectId },
       });
       if (!project) throw new NotFoundException("Project not found");
     }
+    console.log(project);
     let assignee: any = null;
     // validate assignee if present and not null
     if (
@@ -439,10 +446,15 @@ export class ProjectManagementService {
       });
       if (!m) throw new NotFoundException("Assignee not found");
       assignee = m;
+    } else if (data.assigneeId !== "undefined" && data.assigneeId !== null) {
+      const m = await prisma.teamMember.findUnique({
+        where: { id: data.assigneeId },
+      });
+      if (!m) throw new NotFoundException("Assignee not found");
+      assignee = m;
     }
 
     // build clean data object with allowed fields only
-    const data: any = {};
     if (typeof payload.title !== "undefined") data.title = payload.title;
     if (typeof payload.description !== "undefined")
       data.description = payload.description;
@@ -496,8 +508,45 @@ export class ProjectManagementService {
     const format = (d: any) =>
       d ? new Date(d).toLocaleDateString("en-US") : "—";
 
+    let emailTitle = `➕ New Task Created`;
+    let emailDescription = `➕ A new task has been created on <strong>${projectName}</strong>.`;
+    if (updatedAt) {
+      emailTitle = `📝 Task Updated`;
+      emailDescription = `📝 A task has been updated on <strong>${projectName}</strong>.`;
+    }
+
+    if (status !== data.status) {
+      emailTitle = `➡️ Task Moved To ${data.status}`;
+      emailDescription = `➡️ A task has been moved to ${data.status} on <strong>${projectName}</strong>.`;
+    }
+
+    if (priority !== data.priority) {
+      emailTitle = `⚡ Task Priority Changed To ${data.priority}`;
+      emailDescription = `⚡ A task priority has been changed to ${data.priority} on <strong>${projectName}</strong>.`;
+    }
+
+    if (description !== data.description) {
+      emailTitle = `📝 Task Description has Changed`;
+      emailDescription = `📝 A task description has been changed on <strong>${projectName}</strong>.`;
+    }
+
+    if (startDate !== data.startDate) {
+      emailTitle = `📅 Task Start date has Changed To ${data.startDate}`;
+      emailDescription = `📅 A task Task Start date has been changed to ${data.startDate} on <strong>${projectName}</strong>.`;
+    }
+
+    if (dueDate !== data.dueDate) {
+      emailTitle = `📅 Task Due date has Changed To ${data.dueDate}`;
+      emailDescription = `📅 A task Due date has been changed to ${data.dueDate} on <strong>${projectName}</strong>.`;
+    }
+
+    if (assigneeId !== data.assigneeId) {
+      emailTitle = `👤 Task Assignee has Changed`;
+      emailDescription = `👤 A task Assignee has been changed on <strong>${projectName}</strong>.`;
+    }
+
     const textMsg = `
-    A new task has been created on CommitFlow
+    ${emailDescription}
 
     Task Title:
     ${updated.title}
@@ -520,8 +569,8 @@ export class ProjectManagementService {
 
     const htmlMsg = `
     <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-      <h2 style="margin-bottom: 8px;">📝 New Task Created</h2>
-      <p>A new task has been created on <strong>CommitFlow</strong>.</p>
+      <h2 style="margin-bottom: 8px;">${emailTitle}</h2>
+      <p>${emailDescription}</p>
 
       <div style="padding: 14px 18px; background: #f8f9fa; border-radius: 10px; margin: 20px 0;">
         <p style="margin: 0; font-size: 15px;">
@@ -558,12 +607,12 @@ export class ProjectManagementService {
       </p>
     </div>
     `;
-
+    console.log(textMsg);
     // KIRIM EMAIL
     for (const recipient of toEmails) {
       await this.email.sendMail({
         to: recipient ?? "getechindonesia@gmail.com",
-        subject: "New Task Created | CommitFlow",
+        subject: `${emailTitle} | CommitFlow`,
         text: textMsg,
         html: htmlMsg,
       });
