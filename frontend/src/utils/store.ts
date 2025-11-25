@@ -1,9 +1,10 @@
-//frontend/src/utils/store.ts
-
+/* eslint-disable no-empty */
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { apiLogin, apiRegister } from "../api/authApi";
+import { apiLogin, apiRegister, apiRefresh, apiLogout } from "../api/authApi";
 import type { AuthResult } from "../api/authApi";
+
+const API_BASE = import.meta.env.VITE_API_URL?.replace(/\/$/, "") ?? "";
 
 /**
  * Message store (persisted) — sama seperti yang kamu punya
@@ -36,11 +37,12 @@ const useStore = create<MessageStore>()(
 
 /**
  * Auth store (persisted)
- *
- * - menggantikan anon flow; gunakan register/login/logout
- * - menyimpan token, userId, teamMemberId
- * - initSession: baca dari localStorage / persisted store, set state, dan return token (atau null)
  */
+
+// Top-level guards to prevent refresh storms and duplicate attempts per page load
+let refreshPromise: Promise<string | null> | null = null;
+let refreshAttempted = false; // ensure we only try refresh once per page load unless explicitly desired
+
 type AuthState = {
   token: string | null;
   userId: string | null;
@@ -71,37 +73,63 @@ const useAuthStore = create<AuthState>()(
       userId: null,
       teamMemberId: null,
       user: null,
+
       // Initialize session from persisted state / localStorage
       async initSession() {
-        // If already in-memory, return it
         const current = get();
         if (current.token) return current.token;
 
-        // try reading persisted storage (zustand persist already restores before create listeners run),
-        // but also check localStorage fallback key that some code might use.
+        // Try localStorage first (backwards compat)
         const tokenFromLS =
           localStorage.getItem("session_token") ||
           localStorage.getItem("token");
         const userIdFromLS = localStorage.getItem("userId");
-
-        const userFromLS = localStorage.getItem("userId")
-          ? JSON.stringify(localStorage.getItem("userId"))
+        const userFromLS = localStorage.getItem("user")
+          ? JSON.parse(localStorage.getItem("user")!)
           : null;
 
         if (tokenFromLS) {
-          // set store from localStorage values we found
           set({
             token: tokenFromLS,
             userId: userIdFromLS ?? null,
             user: userFromLS ?? null,
-            // teamMemberId might be stored by our login/register response in persisted store,
-            // but if you saved it to localStorage elsewhere, you can load it here too.
           });
           return tokenFromLS;
         }
 
-        // nothing found
-        return null;
+        // If we've already tried refresh this page load, don't spam the server again
+        if (refreshAttempted) return null;
+
+        // If a refresh request is already in flight, await it
+        if (refreshPromise) return await refreshPromise;
+
+        refreshAttempted = true;
+        refreshPromise = (async () => {
+          try {
+            const parsed = await apiRefresh();
+            if (parsed?.token) {
+              set({
+                token: parsed.token,
+                userId: localStorage.getItem("userId") ?? null,
+                user: userFromLS ?? null,
+              });
+              try {
+                localStorage.setItem("session_token", parsed.token);
+              } catch {}
+              return parsed.token;
+            }
+            return null;
+          } catch (e) {
+            try {
+              localStorage.removeItem("session_token");
+            } catch {}
+            return null;
+          } finally {
+            refreshPromise = null;
+          }
+        })();
+
+        return await refreshPromise;
       },
 
       setAuth(payload) {
@@ -121,9 +149,7 @@ const useAuthStore = create<AuthState>()(
       },
 
       async register(payload: any) {
-        // calls apiRegister and updates store
         const result: AuthResult = await apiRegister(payload);
-        // result: { token, userId, teamMemberId?, clientTempId? }
         set({
           token: result.token,
           userId: result.userId,
@@ -136,15 +162,12 @@ const useAuthStore = create<AuthState>()(
           localStorage.setItem("user", JSON.stringify(result.user));
           if (result.teamMemberId)
             localStorage.setItem("teamMemberId", result.teamMemberId);
-        } catch {
-          console.log("error session_token");
-        }
+        } catch {}
         return result;
       },
 
       async login(payload) {
         const result: AuthResult = await apiLogin(payload);
-        console.log(result);
         set({
           token: result.token,
           userId: result.userId,
@@ -157,30 +180,35 @@ const useAuthStore = create<AuthState>()(
           localStorage.setItem("user", JSON.stringify(result.user));
           if (result.teamMemberId)
             localStorage.setItem("teamMemberId", result.teamMemberId);
-        } catch {
-          console.log("error session_token");
-        }
+        } catch {}
         return result;
       },
 
       logout() {
+        (async () => {
+          try {
+            await apiLogout();
+          } catch (e) {
+            console.warn("Logout request failed:", e);
+          }
+        })();
+
         try {
           localStorage.removeItem("session_token");
           localStorage.removeItem("token");
           localStorage.removeItem("userId");
           localStorage.removeItem("teamMemberId");
-        } catch {
-          console.log("error session_token");
-        }
-        set({ token: null, userId: null, teamMemberId: null });
+          localStorage.removeItem("user");
+        } catch {}
+
+        // clear guards so a new session on the same page load can attempt refresh again
+        refreshAttempted = false;
+        refreshPromise = null;
+
+        set({ token: null, userId: null, teamMemberId: null, user: null });
       },
     }),
-    {
-      name: "auth-storage", // key in localStorage
-      // optionally you can whitelist which fields to persist:
-      // getStorage: () => localStorage, // default
-      // partialize: (state) => ({ token: state.token, userId: state.userId, teamMemberId: state.teamMemberId })
-    }
+    { name: "auth-storage" }
   )
 );
 
