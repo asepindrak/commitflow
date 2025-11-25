@@ -347,6 +347,7 @@ export class ProjectManagementService {
     console.log("[createTask] incoming", {
       clientId: payload.clientId,
       projectId: payload.projectId,
+      assigneeId: payload.assigneeId,
       title: payload.title,
       ts: new Date().toISOString(),
     });
@@ -362,20 +363,28 @@ export class ProjectManagementService {
       if (!p) throw new NotFoundException("Project not found");
     }
 
-    let assigneeId: any = "";
-    if (
-      typeof payload.assigneeId !== "undefined" &&
-      payload.assigneeId !== null
-    ) {
-      const m = await prisma.teamMember.findUnique({
-        where: { id: payload.assigneeId },
-      });
-      if (m) {
-        assigneeId = m?.id ?? null;
+    let assigneeId: string | null = null;
+
+    if (typeof payload.assigneeId !== "undefined") {
+      // client provided something (could be null)
+      if (payload.assigneeId === null) {
+        assigneeId = null;
       } else {
-        const m = await prisma.teamMember.findFirst();
-        assigneeId = m?.id ?? null;
+        // validate it exists
+        const member = await prisma.teamMember.findUnique({
+          where: { id: payload.assigneeId },
+        });
+        if (!member) {
+          throw new BadRequestException(
+            `assigneeId ${payload.assigneeId} not found`
+          );
+        }
+        assigneeId = member.id;
       }
+    } else {
+      // client did NOT provide assigneeId -> pick a sensible default (or null)
+      const member = await prisma.teamMember.findFirst();
+      assigneeId = member?.id ?? null;
     }
 
     // Defensive idempotency: if clientId provided and server already has it, return existing row
@@ -392,6 +401,8 @@ export class ProjectManagementService {
       }
     }
 
+    console.log("assigneeId", assigneeId);
+
     // Create task (store startDate/dueDate as strings to match Prisma schema)
     const t = await prisma.task.create({
       data: {
@@ -400,7 +411,8 @@ export class ProjectManagementService {
         projectId: payload.projectId ?? null,
         status: payload.status ?? "todo",
         priority: payload.priority ?? null,
-        assigneeId: assigneeId ?? null,
+        // always pass either null or a valid id — never empty string
+        assigneeId: assigneeId,
         startDate:
           typeof payload.startDate === "undefined"
             ? null
@@ -1183,7 +1195,7 @@ export class ProjectManagementService {
           - ${workspaceName}
     
           Click the link below to accept the invitation:
-          ${FE_URL}/invite/${invite.id}
+          ${FE_URL}/?inviteToken=${invite.id}
 
           Link Expiry: ${expiryTime}
 
@@ -1214,7 +1226,7 @@ export class ProjectManagementService {
         </div>
 
         <div style="text-align: center; margin: 28px 0;">
-          <a href="${FE_URL}/invite/${invite.id}"
+          <a href="${FE_URL}/?inviteToken=${invite.id}"
             style="
               background-color: #4a6cf7;
               color: #ffffff;

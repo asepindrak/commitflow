@@ -48,17 +48,19 @@ model chatMessage {
 }
 
 model User {
-  id            String        @id @default(cuid())
-  email         String?       @unique
-  phone         String?
-  name          String?
-  photo         String?
-  role          Role?         @default(USER)
-  password      String?       // kalau pake password
-  session_token String?       @unique
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-  members       TeamMember[]  @relation("UserMembers")
+  id                    String        @id @default(cuid())
+  email                 String?       @unique
+  phone                 String?
+  name                  String?
+  photo                 String?
+  role                  Role?         @default(USER)
+  password              String?       // kalau pake password
+  session_token         String?       @unique
+  refreshTokenHash      String?  // simpan hash dari refresh token
+  refreshTokenExpiresAt DateTime? 
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+  members               TeamMember[]  @relation("UserMembers")
 
 }
 

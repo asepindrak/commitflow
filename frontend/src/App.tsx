@@ -1,4 +1,4 @@
-// src/App.tsx
+/* eslint-disable react-hooks/exhaustive-deps */
 import Welcome from "./components/Welcome";
 import AiAgent from "./components/AiAgent";
 import ChatWindow from "./components/ChatWindow";
@@ -47,15 +47,25 @@ function App() {
     saveState(KEY, isPlaySound);
   }, [isPlaySound]);
 
+  // IMPORTANT: run initSession only once on mount to avoid refresh storms.
   useEffect(() => {
+    let mounted = true;
     (async () => {
-      const t = await initSession(); // restores token from persisted store
-      if (t) {
-        // user is logged in — process invite
-        await processInviteIfAny();
+      try {
+        const t = await initSession(); // restores token from persisted store or via refresh cookie
+        if (mounted && t) {
+          // user is logged in — process invite
+          await processInviteIfAny();
+          setIsLogin(true);
+        }
+      } catch (err) {
+        // ignore
       }
     })();
-  }, [isLogin, initSession, processInviteIfAny]);
+    return () => {
+      mounted = false;
+    };
+  }, []); // <-- empty deps: call only once on mount
 
   useEffect(() => {
     if (token) {

@@ -1,4 +1,5 @@
-// src/auth/auth.service.ts
+/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable @typescript-eslint/require-await */
 import {
   ConflictException,
   Injectable,
@@ -10,70 +11,128 @@ import { JwtService } from "@nestjs/jwt";
 import { RegisterDto } from "./dto/register.dto";
 import { comparePassword, hashPassword } from "./utils";
 import { LoginDto } from "./dto/login.dto";
+import * as bcrypt from "bcrypt";
+
+const REFRESH_EXPIRES_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 @Injectable()
 export class AuthService {
-  constructor(private prisma: PrismaClient, private jwtService: JwtService) {}
+  constructor(private prisma: PrismaClient, public jwtService: JwtService) {}
 
+  private async hashToken(token: string) {
+    const salt = await bcrypt.genSalt(10);
+    return bcrypt.hash(token, salt);
+  }
+
+  private async compareToken(hash: string, token: string) {
+    return bcrypt.compare(token, hash);
+  }
+
+  async generateTokens(userId: string, extra: Record<string, any> = {}) {
+    const payload = { sub: userId, userId, ...extra };
+    const accessToken = this.jwtService.sign(payload, { expiresIn: "15m" });
+    const refreshToken = this.jwtService.sign(payload, { expiresIn: "7d" });
+    return { accessToken, refreshToken };
+  }
+
+  async saveRefreshToken(userId: string, refreshToken: string) {
+    const hashed = await this.hashToken(refreshToken);
+    const expiresAt = new Date(Date.now() + REFRESH_EXPIRES_MS);
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { refreshTokenHash: hashed, refreshTokenExpiresAt: expiresAt },
+    });
+  }
+
+  async revokeRefreshToken(userId: string) {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { refreshTokenHash: null, refreshTokenExpiresAt: null },
+    });
+  }
+
+  async refreshTokens(userId: string, providedRefreshToken: string) {
+    // verify the jwt first
+    let payload: any;
+    try {
+      payload = this.jwtService.verify(providedRefreshToken);
+    } catch (e) {
+      return null;
+    }
+
+    if (!payload || (payload.sub !== userId && payload.userId !== userId))
+      return null;
+
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user || !user.refreshTokenHash) return null;
+
+    if (user.refreshTokenExpiresAt && user.refreshTokenExpiresAt < new Date())
+      return null;
+
+    const match = await this.compareToken(
+      user.refreshTokenHash,
+      providedRefreshToken
+    );
+    if (!match) return null;
+
+    // rotation: issue new tokens and replace stored hash
+    const { accessToken, refreshToken } = await this.generateTokens(userId, {
+      teamMemberId: payload.teamMemberId ?? undefined,
+    });
+    await this.saveRefreshToken(userId, refreshToken);
+    return { accessToken, refreshToken };
+  }
+
+  // ---------------- existing methods (adapted to return refresh token) ----------------
   async createOrGetAnonymousUser(clientUserId?: string) {
     let user;
 
     if (clientUserId) {
-      // cek apakah user dengan id FE ini sudah ada
       user = await this.prisma.user.findUnique({ where: { id: clientUserId } });
     }
 
     if (!user) {
-      // kalau belum ada, buat user baru pakai id dari FE atau generate baru
       user = await this.prisma.user.create({
-        data: {
-          id: clientUserId || undefined, // kalau undefined, Prisma buatkan sendiri
-        },
+        data: { id: clientUserId || undefined },
       });
       console.log("Created new anonymous user:", user.id);
     } else {
       console.log("Existing user found:", user.id);
     }
 
-    // bikin JWT
-    const jwt = this.jwtService.sign({ userId: user.id });
+    // generate tokens (access + refresh)
+    const tokens = await this.generateTokens(user.id);
+    await this.saveRefreshToken(user.id, tokens.refreshToken);
 
-    // simpan JWT di DB
+    // save current session token (access) for quick validateUser compat
     await this.prisma.user.update({
       where: { id: user.id },
-      data: { session_token: jwt },
+      data: { session_token: tokens.accessToken },
     });
 
-    return { token: jwt, user };
+    return {
+      token: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      user,
+    };
   }
 
   async register(dto: RegisterDto) {
     const { clientTempId, workspace, email, name, role, photo, password } = dto;
 
-    // Basic uniqueness check
     const existing = await this.prisma.user.findUnique({ where: { email } });
     if (existing) throw new ConflictException("Email already registered");
 
-    // Use transaction to create TeamMember then User referencing member.id
     try {
       console.log(workspace);
       const result = await this.prisma.$transaction(async (tx) => {
-        // 1) create Workspace first
         const createWorkspace = await tx.workspace.create({
-          data: {
-            name: workspace,
-            createdAt: new Date(),
-          },
+          data: { name: workspace, createdAt: new Date() },
         });
 
-        // 2) create User referencing
         const hashed = password ? hashPassword(password) : undefined;
         const user = await tx.user.create({
-          data: {
-            email,
-            name,
-            password: hashed,
-          },
+          data: { email, name, password: hashed },
           select: {
             id: true,
             name: true,
@@ -84,7 +143,6 @@ export class AuthService {
           },
         });
 
-        // 3) create TeamMember
         const teamMember = await tx.teamMember.create({
           data: {
             userId: user.id,
@@ -94,8 +152,6 @@ export class AuthService {
             role: role ?? null,
             photo: photo ?? null,
             isAdmin: true,
-            // optionally store clientTempId if you want mapping
-            // clientTempId: clientTempId ?? null  // uncomment if you added field
             createdAt: new Date(),
           },
         });
@@ -103,40 +159,38 @@ export class AuthService {
         return { user, teamMember, workspace: createWorkspace };
       });
 
-      // Create JWT (you can include teamMemberId in payload too)
-      const jwt = this.jwtService.sign({
-        userId: result.user.id,
+      // issue tokens and save refresh
+      const tokens = await this.generateTokens(result.user.id, {
         teamMemberId: result.teamMember.id,
       });
-      // Save token to user
+      await this.saveRefreshToken(result.user.id, tokens.refreshToken);
+
+      // Save access token in session_token for compat
       await this.prisma.user.update({
         where: { id: result.user.id },
-        data: { session_token: jwt },
+        data: { session_token: tokens.accessToken },
       });
 
-      // Return both ids so FE dapat mapping optimistic
       return {
-        token: jwt,
+        token: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
         user: result.user,
         teamMember: result.teamMember,
         teamMemberId: result.teamMember.id,
         workspace: result.workspace,
-        // optionally map clientTempId => memberId so FE can replace optimistic id
         clientTempId,
       };
-    } catch (err) {
+    } catch (err: any) {
       if (err.code === "P2002")
         throw new ConflictException("Unique constraint failed");
       throw new InternalServerErrorException("Register failed");
     }
   }
 
-  // src/auth/auth.service.ts (login portion — replace or extend existing)
   async login(dto: LoginDto) {
     const { email, password } = dto as any;
     if (!email) throw new UnauthorizedException("Invalid credentials");
 
-    // find user and include relation if exists
     const user = await this.prisma.user.findUnique({
       where: { email },
       select: {
@@ -156,37 +210,39 @@ export class AuthService {
     const ok = comparePassword(password || "", user.password);
     if (!ok) throw new UnauthorizedException("Invalid credentials");
 
-    // find user and include relation if exists
     const teamMember: any = await this.prisma.teamMember.findFirst({
       where: { email },
     });
-
     if (!teamMember) throw new UnauthorizedException("Invalid credentials");
 
-    const jwt = this.jwtService.sign({
-      userId: user?.id,
+    const tokens = await this.generateTokens(user.id, {
       teamMemberId: teamMember.id,
     });
+    await this.saveRefreshToken(user.id, tokens.refreshToken);
 
     await this.prisma.user.update({
-      where: { id: user?.id },
-      data: { session_token: jwt },
+      where: { id: user.id },
+      data: { session_token: tokens.accessToken },
     });
 
-    // Ensure password property is possibly undefined before delete, and avoid type error
     if ("password" in user) {
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
       delete (user as any).password;
     }
 
-    return { token: jwt, user, teamMember, teamMemberId: teamMember.id };
+    return {
+      token: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      user,
+      teamMember,
+      teamMemberId: teamMember.id,
+    };
   }
 
   async validateUser(token: string) {
     try {
       const payload: any = this.jwtService.verify(token);
       const user = await this.prisma.user.findUnique({
-        where: { id: payload.userId },
+        where: { id: payload.userId ?? payload.sub },
       });
       if (!user || user.session_token !== token) return null;
       return user;
