@@ -49,17 +49,27 @@ export const handleWhatsappTask = (
   const descText = htmlToPlainFallback(descHtml);
 
   const dueStatus = getDueStatus(task.dueDate); // <-- NEW
-
+  let deadLine = task.dueDate;
+  if (dueStatus === "(OVERDUE)" || dueStatus === "(DUE TODAY)") {
+    deadLine = dueStatus;
+  }
   const message = `Halo, saya ingin menanyakan update terkait task berikut:
 
-Project: ${projectName}
-Task: ${task.title}
-${descText ? descText + "\n\n" : ""}Status: ${task.status || "-"}
-Deadline: ${task.dueDate || "-"} ${dueStatus}
-Prioritas: ${task.priority || "-"}
+            \`-${projectName}-\`
+
+- \`Task:\`   ${task.title}
+- \`Desc:\`   ${descText ? descText + "\n\n" : ""}
+
+- \`Prioritas:\`   _*${task.priority?.toUpperCase() || "-"}*_
+- \`Status:\`   _*${task.status?.toUpperCase() || "-"}*_
+- \`Deadline:\`   _*${deadLine || "-"}*_
 
 Mohon informasikan perkembangan terbarunya ya.
-Terima kasih.`.trim();
+Terima kasih.
+
+
+\`-CommitFlow developed by Getech Indonesia-\`
+`.trim();
 
   const url = `https://wa.me/${normalized}?text=${encodeURIComponent(message)}`;
   window.open(url, "_blank", "noopener,noreferrer");
