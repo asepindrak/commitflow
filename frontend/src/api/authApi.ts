@@ -29,7 +29,6 @@ export type AuthResult = {
   token: string;
   userId: string;
   user: any | null;
-  teamMemberId?: string | null;
   clientTempId?: string | null;
 };
 

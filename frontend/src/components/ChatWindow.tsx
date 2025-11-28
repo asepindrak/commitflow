@@ -155,7 +155,7 @@ Siap bantu insight lebih cerdas. 💡`;
       setMessages(() => []);
       return;
     }
-    console.log("Fetched messages:", data);
+
     setMessages(() => data);
     setIsMessagesReady(true);
   };

@@ -12,6 +12,7 @@ import { AuthService } from "./auth.service";
 import { RegisterDto } from "./dto/register.dto";
 import { LoginDto } from "./dto/login.dto";
 import type { Request, Response } from "express";
+import { Public } from "./public.decorator";
 
 const REFRESH_COOKIE_NAME = "refresh_token";
 const COOKIE_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 days in ms
@@ -37,6 +38,7 @@ const COOKIE_OPTIONS = {
 export class AuthController {
   constructor(private authService: AuthService) {}
 
+  @Public()
   @Post("anon")
   async anonLogin(
     @Body("userId") userId?: string,
@@ -56,6 +58,7 @@ export class AuthController {
     return { token: result.token, userId: result.user.id };
   }
 
+  @Public()
   @Post("register")
   async register(
     @Body() dto: RegisterDto,
@@ -77,11 +80,11 @@ export class AuthController {
       userId: result.user.id,
       user: result.user,
       workspaceId: result.workspace.id,
-      teamMemberId: result.teamMember.id,
       clientTempId: result.clientTempId ?? null,
     };
   }
 
+  @Public()
   @Post("login")
   async login(
     @Body() dto: LoginDto,
@@ -104,11 +107,11 @@ export class AuthController {
       token: result.token,
       userId: result?.user?.id ?? "",
       user: result.user,
-      teamMemberId: result?.teamMemberId,
     };
   }
 
   // refresh endpoint: reads refresh_token cookie, verifies, rotates
+  @Public()
   @HttpCode(200)
   @Post("refresh")
   async refresh(
@@ -116,7 +119,9 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response
   ) {
     const token = req.cookies?.[REFRESH_COOKIE_NAME];
-    if (!token) throw new UnauthorizedException("No refresh token");
+    if (!token) {
+      throw new UnauthorizedException("No refresh token");
+    }
 
     // attempt to verify and refresh via AuthService
     let payload: any;
@@ -137,9 +142,14 @@ export class AuthController {
     });
 
     // return access token
-    return { token: newTokens.accessToken };
+    return {
+      token: newTokens.token,
+      userId: newTokens?.user?.id ?? "",
+      user: newTokens.user,
+    };
   }
 
+  @Public()
   @Post("logout")
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const token = req.cookies?.[REFRESH_COOKIE_NAME];

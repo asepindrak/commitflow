@@ -86,7 +86,7 @@ function App() {
   };
 
   const handleAuth = (r: any) => {
-    // r adalah AuthResult dari backend: { token, userId, teamMemberId?, ... }
+    // r adalah AuthResult dari backend: { token, userId, ... }
     if (!r || !r.token) {
       console.warn("handleAuth: invalid auth result", r);
       return;
@@ -97,7 +97,6 @@ function App() {
       token: r.token,
       userId: r.userId,
       user: r.user,
-      teamMemberId: r.teamMemberId ?? null,
     });
 
     // update UI

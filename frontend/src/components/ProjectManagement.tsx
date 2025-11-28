@@ -62,7 +62,6 @@ export default function ProjectManagement({
   const [showEditMember, setShowEditMember] = useState(false);
   const [showInviteLink, setShowInviteLink] = useState(false);
   const [editMember, setEditMember] = useState<TeamMember | null>(null);
-  const teamMemberId = useAuthStore((s) => s.teamMemberId);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -82,27 +81,22 @@ export default function ProjectManagement({
   const pendingPosRef = useRef<{ x: number; y: number; width: number } | null>(
     null
   );
-  console.log(team);
-  const currentMember = team.find((t) => t.id === teamMemberId);
 
   const token = useAuthStore((s) => s.token);
   const userId = useAuthStore((s) => s.userId);
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
-  console.log(user);
-  console.log(currentMember?.name);
+
   const userWorkspace = team.filter(
     (item: any) =>
       item.workspaceId === activeWorkspaceId && item.userId === userId
   );
 
-  console.log("userWorkspace", userWorkspace);
   const userWorkspaceActive =
-    userWorkspace.length > 0 ? userWorkspace[0] : user;
+    userWorkspace.length > 0 ? userWorkspace[0] : user ? user : {};
 
   // alert(userWorkspaceActive.isAdmin);
   const isAdmin = userWorkspaceActive?.isAdmin ?? false;
-  console.log("userWorkspace", userWorkspaceActive);
   if (!userWorkspaceActive?.photo) {
     userWorkspaceActive.photo = user?.photo ?? null;
   }
@@ -111,7 +105,6 @@ export default function ProjectManagement({
   const userPhoto = user?.photo
     ? user?.photo
     : userWorkspaceActive.photo || null;
-  console.log(userInitial);
 
   const authTeamMemberId = userWorkspaceActive.id || null;
   useEffect(() => {
@@ -174,7 +167,6 @@ export default function ProjectManagement({
   };
 
   const openEditProfileTeam = async (member: any) => {
-    console.log("member", member);
     setShowProfileMenu(false);
     setEditMember(member ?? null);
 
@@ -203,14 +195,11 @@ export default function ProjectManagement({
         password: updated.password ?? null,
       };
       const saved = await api.updateTeamMember(updated.id, payload);
-      console.log("saved", token);
-      console.log("saved", userId);
 
       setAuth({
         token: token ?? "",
         userId: userId ?? "",
         user: saved.user,
-        teamMemberId: teamMemberId ?? null,
       });
       setTeam((prev) => prev.map((t) => (t.id === saved.id ? saved : t)));
       window.location.reload();
@@ -675,7 +664,6 @@ export default function ProjectManagement({
 
   // dipassing ke KanbanBoard via TaskView
   function handleDragStart(e: React.DragEvent, id: string) {
-    console.log("handleDragStart", id);
     setDragTaskId(id);
 
     try {
@@ -1520,7 +1508,7 @@ export default function ProjectManagement({
 
     try {
       const created = await api.inviteTeamMember({ ...m, clientId: m.id });
-      console.log("inviteTeamMember returned:", created);
+
       if (!created.success) {
         Swal.fire({
           title: "Member Exists",

@@ -343,15 +343,6 @@ export class ProjectManagementService {
       clientId?: string | null; // optional client-generated id for idempotency
     }>
   ) {
-    // quick debug log (remove in production when stable)
-    console.log("[createTask] incoming", {
-      clientId: payload.clientId,
-      projectId: payload.projectId,
-      assigneeId: payload.assigneeId,
-      title: payload.title,
-      ts: new Date().toISOString(),
-    });
-
     // validate projectId/assignee exist if provided (and not null)
     if (
       typeof payload.projectId !== "undefined" &&
@@ -400,8 +391,6 @@ export class ProjectManagementService {
         return existing;
       }
     }
-
-    console.log("assigneeId", assigneeId);
 
     // Create task (store startDate/dueDate as strings to match Prisma schema)
     const t = await prisma.task.create({
@@ -1002,7 +991,7 @@ export class ProjectManagementService {
             },
           });
         }
-        console.log(user);
+
         // create team member
         const tm = await tx.teamMember.create({
           data: {
@@ -1047,7 +1036,6 @@ export class ProjectManagementService {
       photo?: string;
     }>
   ) {
-    console.log(payload);
     // 1) ensure team member exists
     const exists = await prisma.teamMember.findUnique({ where: { id } });
     if (!exists) throw new NotFoundException("Team member not found");
@@ -1101,7 +1089,7 @@ export class ProjectManagementService {
             });
           }
         }
-        console.log(user);
+
         return { teamMember: updatedTeam, user };
       });
 
@@ -1347,12 +1335,6 @@ export class ProjectManagementService {
       where: { isTrash: false },
       orderBy: { name: "asc" },
     });
-    console.log(team);
-
-    // debug logs to help diagnose empty-sheet issues
-    console.log("[exportXlsx] projects:", projects.length);
-    console.log("[exportXlsx] tasks:", tasks.length);
-    console.log("[exportXlsx] team:", team.length);
 
     const wb = new ExcelJS.Workbook();
 
