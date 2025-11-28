@@ -414,13 +414,6 @@ export class ProjectManagementService {
       },
     });
 
-    console.log(
-      "[createTask] created id=",
-      t.id,
-      "clientId=",
-      payload.clientId ?? null
-    );
-
     // return serialized created task (timestamps as ISO)
     return {
       ...t,
@@ -462,7 +455,7 @@ export class ProjectManagementService {
       });
       if (!project) throw new NotFoundException("Project not found");
     }
-    console.log(project);
+
     let assignee: any = null;
     // validate assignee if present and not null
     if (
@@ -569,9 +562,11 @@ export class ProjectManagementService {
     }
 
     if (assigneeId !== data.assigneeId) {
-      emailTitle = `👤 Task Assignee has Changed to ${assignee.name ?? "none"}`;
+      emailTitle = `👤 Task Assignee has Changed to ${
+        assignee?.name ?? "none"
+      }`;
       emailDescription = `👤 A task Assignee has been changed to ${
-        assignee.name ?? "none"
+        assignee?.name ?? "none"
       } on <strong>${projectName}</strong>.`;
     }
 
@@ -584,11 +579,11 @@ export class ProjectManagementService {
     Description:
     ${updated.description ?? "No description"}
 
-    Status: ${updated.status}
-    Assignee: ${assignee.name ?? "none"}
-    Priority: ${updated.priority ?? "none"}
-    Start Date: ${format(updated.startDate)}
-    Due Date: ${format(updated.dueDate)}
+    Status: ${updated?.status}
+    Assignee: ${assignee?.name ?? "none"}
+    Priority: ${updated?.priority ?? "none"}
+    Start Date: ${format(updated?.startDate)}
+    Due Date: ${format(updated?.dueDate)}
 
     Project:
     ${projectName}
@@ -623,22 +618,22 @@ export class ProjectManagementService {
 
             <p style="margin:0 0 14px; font-size:15px;">
               <strong style="color:#2b6cb0;">Status:</strong> ${
-                updated.status
+                updated?.status
               }<br>
               <strong style="color:#2b6cb0;">Assignee:</strong> ${
-                assignee.name ?? "none"
+                assignee?.name ?? "none"
               }<br>
               <strong style="color:#2b6cb0;">Priority:</strong> ${
-                updated.priority ?? "none"
+                updated?.priority ?? "none"
               }
             </p>
 
             <p style="margin:0 0 14px; font-size:15px;">
               <strong style="color:#2b6cb0;">Start Date:</strong> ${format(
-                updated.startDate
+                updated?.startDate
               )}<br>
               <strong style="color:#2b6cb0;">Due Date:</strong> ${format(
-                updated.dueDate
+                updated?.dueDate
               )}
             </p>
 
@@ -667,7 +662,6 @@ export class ProjectManagementService {
       </div>
     `;
 
-    console.log(textMsg);
     // KIRIM EMAIL
     for (const recipient of toEmails) {
       await this.email.sendMail({
@@ -1330,7 +1324,7 @@ export class ProjectManagementService {
       include: { assignee: true },
       orderBy: { createdAt: "desc" },
     });
-    console.log(tasks);
+
     const team = await prisma.teamMember.findMany({
       where: { isTrash: false },
       orderBy: { name: "asc" },

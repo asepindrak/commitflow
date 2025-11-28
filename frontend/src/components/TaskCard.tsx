@@ -144,8 +144,13 @@ export const TaskCard = React.memo(
       }
 
       return () => ro?.disconnect();
-      // intentionally not depending on isBeingDragged here to avoid too frequent re-renders
-    }, [task.id, task.title, (task as any).description]);
+      // include comments in deps so measurement updates when comments are added/removed
+    }, [
+      task.id,
+      task.title,
+      (task as any).description,
+      JSON.stringify((task as any).comments || []),
+    ]);
 
     const origRectRef = useRef<{ left: number; top: number } | null>(null);
     useEffect(() => {
@@ -546,6 +551,31 @@ export const TaskCard = React.memo(
     const nextAssignee =
       (next.task as any).assigneeId ?? (next.task as any).assigneeName ?? null;
     if (prevAssignee !== nextAssignee) return false;
+
+    // --- comments comparison: length + last createdAt (cheap & robust) ---
+    const prevComments: any[] = Array.isArray((prev.task as any).comments)
+      ? (prev.task as any).comments
+      : [];
+    const nextComments: any[] = Array.isArray((next.task as any).comments)
+      ? (next.task as any).comments
+      : [];
+
+    if (prevComments.length !== nextComments.length) return false;
+
+    const getLastCreatedAt = (arr: any[]) =>
+      arr.length === 0
+        ? null
+        : (arr
+            .map((c: any) => c?.createdAt ?? c?.created_at ?? null)
+            .filter(Boolean)
+            .sort()
+            .slice(-1)[0] as string | null);
+
+    const prevLast = getLastCreatedAt(prevComments);
+    const nextLast = getLastCreatedAt(nextComments);
+    if (String(prevLast) !== String(nextLast)) return false;
+    // --- end comments comparison ---
+
     if (prev.isBeingDragged !== next.isBeingDragged) return false;
     if (prev.isBeingDragged) {
       return (

@@ -1,3 +1,4 @@
+/* eslint-disable no-empty */
 import React, { useEffect, useRef, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import Sidebar from "./Sidebar";
@@ -1297,24 +1298,104 @@ export default function ProjectManagement({
   }, [dark]);
 
   useEffect(() => {
-    if (tasksQuery.data && Array.isArray(tasksQuery.data)) {
-      setTasks((localTasks) => {
-        const serverTasks = tasksQuery.data as Task[];
-        const tmp = localTasks.filter((t) => nid(t.id).startsWith("tmp_"));
-        const others = localTasks.filter(
-          (t) =>
-            !nid(t.id).startsWith("tmp_") && t.projectId !== activeProjectId
+    if (!tasksQuery.data || !Array.isArray(tasksQuery.data)) return;
+
+    // Snapshot localTasks to compute merge (we'll still call setTasks with final array)
+    setTasks((localTasks) => {
+      const serverTasks = tasksQuery.data as Task[];
+
+      const tmp = localTasks.filter((t) => nid(t.id).startsWith("tmp_"));
+      const others = localTasks.filter(
+        (t) => !nid(t.id).startsWith("tmp_") && t.projectId !== activeProjectId
+      );
+
+      const localById = new Map(localTasks.map((t) => [nid(t.id), t]));
+      const serverById = new Map(serverTasks.map((t) => [nid(t.id), t]));
+
+      const mergedServerTasks: Task[] = serverTasks.map((st) => {
+        const id = nid(st.id);
+        const lt = localById.get(id);
+
+        const serverComments: any[] = Array.isArray((st as any).comments)
+          ? (st as any).comments
+          : [];
+        const localComments: any[] =
+          lt && Array.isArray((lt as any).comments) ? (lt as any).comments : [];
+
+        const maxCreatedAt = (arr: any[]) => {
+          if (!arr || arr.length === 0) return null;
+          try {
+            return arr
+              .map((c) => c?.createdAt ?? c?.created_at ?? null)
+              .filter(Boolean)
+              .sort()
+              .slice(-1)[0];
+          } catch {
+            return null;
+          }
+        };
+
+        const latestServer = maxCreatedAt(serverComments);
+        const latestLocal = maxCreatedAt(localComments);
+
+        const tmpLocalOnly = localComments.filter(
+          (c: any) =>
+            String(c.id).startsWith("c_tmp_") &&
+            !serverComments.some((sc: any) => nid(sc.id) === nid(c.id))
         );
-        const merged = [
-          ...others,
-          ...serverTasks,
-          ...tmp.filter((t) => t.projectId === activeProjectId),
-        ];
-        const map = new Map<string, Task>();
-        for (const t of merged) map.set(nid(t.id), t);
-        return Array.from(map.values());
+
+        let chosenComments: any[] = serverComments;
+
+        if (
+          localComments.length > 0 &&
+          (!latestServer || (latestLocal && latestLocal > latestServer))
+        ) {
+          chosenComments = localComments;
+        } else if (serverComments.length > 0) {
+          chosenComments = serverComments;
+        } else if (localComments.length > 0) {
+          chosenComments = localComments;
+        } else {
+          chosenComments = [];
+        }
+
+        if (tmpLocalOnly.length > 0) {
+          const existingIds = new Set(
+            chosenComments.map((c: any) => nid(c.id))
+          );
+          const toAppend = tmpLocalOnly.filter(
+            (c: any) => !existingIds.has(nid(c.id))
+          );
+          if (toAppend.length > 0)
+            chosenComments = [...chosenComments, ...toAppend];
+        }
+
+        return { ...st, comments: chosenComments };
       });
-    }
+
+      const merged = [
+        ...others,
+        ...mergedServerTasks,
+        ...tmp.filter((t) => t.projectId === activeProjectId),
+      ];
+
+      // build map for quick lookup
+      const mergedMap = new Map<string, Task>();
+      for (const t of merged) mergedMap.set(nid(t.id), t);
+
+      // update selectedTask to the merged object if currently selected
+      setSelectedTask((cur) => {
+        if (!cur) return cur;
+        const found = mergedMap.get(nid(cur.id));
+        // if found, return merged object (fresh ref) so modal sees up-to-date comments
+        return found ?? cur;
+      });
+
+      // finally return canonical merged array (deduped by id)
+      const map = new Map<string, Task>();
+      for (const t of merged) map.set(nid(t.id), t);
+      return Array.from(map.values());
+    });
   }, [tasksQuery.data, activeProjectId]);
 
   async function handleAddTask(title: string) {
@@ -1384,13 +1465,20 @@ export default function ProjectManagement({
   }
 
   async function handleUpdateTask(updated: Task) {
-    setTasks((s) =>
-      s.map((t) => (nid(t.id) === nid(updated.id) ? updated : t))
-    );
+    // apply local update and ensure selectedTask updated as well
+    setTasks((s) => {
+      const next = s.map((t) => (nid(t.id) === nid(updated.id) ? updated : t));
+      // also update selectedTask to the same reference so modal sees latest immediately
+      setSelectedTask((cur) =>
+        cur && nid(cur.id) === nid(updated.id) ? updated : cur
+      );
+      return next;
+    });
 
+    // handle tmp id case by enqueueing
     if (nid(updated.id).startsWith("tmp_")) {
       try {
-        const patchToQueue = {
+        const patchToQueue: any = {
           id: updated.id,
           patch: {
             title: updated.title,
@@ -1413,17 +1501,29 @@ export default function ProjectManagement({
                 : String((updated as any).dueDate),
           },
         };
+
+        // include comments if present on updated (may be [] or array)
+        if (
+          Object.prototype.hasOwnProperty.call(updated || {}, "comments") ||
+          "comments" in (updated || {})
+        ) {
+          patchToQueue.patch.comments = (updated as any).comments ?? null;
+        } else {
+          console.log("[handleUpdateTask/tmp] no comments in updated");
+        }
+
         enqueueOp({
           op: "update_task",
           payload: patchToQueue,
           createdAt: new Date().toISOString(),
         });
-      } catch (_) {
-        console.log("handle update task enqueue failed");
+      } catch (e) {
+        console.log("handle update task enqueue failed", e);
       }
       return;
     }
 
+    // normal branch: build patch and call mutation
     try {
       const patch: any = {};
       patch.title = updated.title;
@@ -1451,16 +1551,108 @@ export default function ProjectManagement({
             : String((updated as any).dueDate);
       }
 
-      await updateTaskMutation.mutateAsync({ id: updated.id, patch });
+      // include comments when provided (array|null)
+      if (
+        Object.prototype.hasOwnProperty.call(updated || {}, "comments") ||
+        "comments" in (updated || {})
+      ) {
+        patch.comments = (updated as any).comments ?? null;
+      } else {
+        console.log("[handleUpdateTask] no comments property on updated");
+      }
+
+      const result = await updateTaskMutation.mutateAsync({
+        id: updated.id,
+        patch,
+      });
+
+      // Merge updated into react-query cache so a near-immediate refetch won't clobber optimistic comments
+      try {
+        // Prefer server result; but preserve existing comments if server omitted them
+        qcRef.current.setQueryData(["tasks", activeProjectId], (old: any) => {
+          if (!Array.isArray(old)) return old;
+          return (old as Task[]).map((t) => {
+            if (nid(t.id) === nid(updated.id)) {
+              const merged = {
+                ...t, // baseline local
+                ...result, // server authoritative fields
+                // ensure comments fallback: prefer server.comments, else local t.comments
+                comments:
+                  result && typeof result.comments !== "undefined"
+                    ? result.comments
+                    : t.comments,
+              };
+              return merged;
+            }
+            return t;
+          });
+        });
+      } catch (e) {
+        console.warn("[handleUpdateTask] merge to tasks cache failed", e);
+      }
+
+      // Update any single-task/detail cache key too (if used)
+      try {
+        qcRef.current.setQueryData(["task", updated.id], (old: any) => {
+          if (!old) return result;
+          return {
+            ...old,
+            ...result,
+            comments:
+              result && typeof result.comments !== "undefined"
+                ? result.comments
+                : old.comments,
+          };
+        });
+        console.log(
+          "[handleUpdateTask] merged server result into single-task cache"
+        );
+      } catch (e) {
+        // ignore
+      }
+
+      // ensure selectedTask references updated object
+      console.log("[handleUpdateTask] updating selectedTask to updated");
+      // update selectedTask to server result (prefer result so comments kept)
+      setSelectedTask((cur) =>
+        cur && nid(cur.id) === nid(updated.id)
+          ? {
+              ...cur,
+              ...result,
+              comments:
+                result && typeof result.comments !== "undefined"
+                  ? result.comments
+                  : cur.comments,
+            }
+          : cur
+      );
     } catch (err) {
+      console.error(
+        "handleUpdateTask: updateTaskMutation failed, enqueueing fallback",
+        err
+      );
       try {
         enqueueOp({
           op: "update_task",
           payload: { id: updated.id, patch: updated },
           createdAt: new Date().toISOString(),
         });
-      } catch (_) {
-        console.log("handle update task failed");
+      } catch (e) {
+        console.log("handle update task failed", e);
+      }
+    } finally {
+      // Delay invalidation a little so our cache merge has effect before refetch
+      try {
+        setTimeout(() => {
+          try {
+            qcRef.current.invalidateQueries(["tasks", activeProjectId]);
+            console.log("[handleUpdateTask] invalidateQueries fired (delayed)");
+          } catch (e) {
+            console.warn("invalidateQueries failed", e);
+          }
+        }, 300);
+      } catch (e) {
+        console.warn("invalidate scheduling failed", e);
       }
     }
   }
@@ -2393,61 +2585,111 @@ export default function ProjectManagement({
                   setSelectedTask(null);
                 }}
                 onAddComment={async (author, body, attachments) => {
+                  const taskId = selectedTask?.id;
+                  if (!taskId) {
+                    console.warn("onAddComment: no selectedTask available");
+                    return;
+                  }
+
+                  const tmpId = `c_tmp_${Math.random()
+                    .toString(36)
+                    .slice(2, 9)}`;
                   const tmpComment = {
-                    id: `c_tmp_${Math.random().toString(36).slice(2, 9)}`,
+                    id: tmpId,
                     author,
                     body,
                     createdAt: new Date().toISOString(),
-                    attachments,
+                    attachments: attachments ?? [],
                   };
 
-                  setTasks((s) =>
-                    s.map((t) =>
-                      nid(t.id) === nid(selectedTask!.id)
+                  // optimistic update tasks + also update selectedTask so modal sees it
+                  setTasks((prev) => {
+                    const next = prev.map((t) =>
+                      nid(t.id) === nid(taskId)
                         ? {
                             ...t,
-                            comments: [...(t.comments || []), tmpComment],
+                            comments: [tmpComment, ...(t.comments || [])],
                           }
                         : t
-                    )
-                  );
+                    );
+
+                    // update selectedTask to the new object reference (so modal receives new prop)
+                    const updated =
+                      next.find((t) => nid(t.id) === nid(taskId)) ?? null;
+                    setSelectedTask(updated);
+
+                    // persist snapshot so close->open reads the updated tasks immediately
+                    try {
+                      const snapshotRaw = localStorage.getItem(
+                        "commitflow_local_snapshot"
+                      );
+                      const snap = snapshotRaw ? JSON.parse(snapshotRaw) : {};
+                      snap.tasks = next;
+                      localStorage.setItem(
+                        "commitflow_local_snapshot",
+                        JSON.stringify(snap)
+                      );
+                    } catch (e) {
+                      console.warn("persist snapshot failed", e);
+                    }
+
+                    return next;
+                  });
 
                   playSound("/sounds/send.mp3", isPlaySound);
 
-                  const latest =
-                    tasks.find((t) => nid(t.id) === nid(selectedTask!.id)) ||
-                    selectedTask!;
-
                   try {
-                    const created = await api.createComment(latest.id, {
+                    // call API
+                    const created = await api.createComment(taskId, {
                       author,
                       body,
                       attachments,
                     });
-                    setTasks((s) =>
-                      s.map((t) => {
-                        if (nid(t.id) !== nid(latest.id)) return t;
-                        const cs = (t.comments || []).map((c) =>
-                          c.id === tmpComment.id ? created : c
+
+                    // replace tmp comment with server-created comment, update selectedTask too
+                    setTasks((prev) => {
+                      const next = prev.map((t) => {
+                        if (nid(t.id) !== nid(taskId)) return t;
+                        const cs = (t.comments || []).map((c: any) =>
+                          c.id === tmpId ? created : c
                         );
-                        const has = cs.some((c) => c.id === created.id);
+                        const has = cs.some(
+                          (c: any) => nid(c.id) === nid(created.id)
+                        );
                         return { ...t, comments: has ? cs : [...cs, created] };
-                      })
-                    );
+                      });
+
+                      const updated =
+                        next.find((t) => nid(t.id) === nid(taskId)) ?? null;
+                      setSelectedTask(updated);
+
+                      // persist updated snapshot
+                      try {
+                        const snapRaw = localStorage.getItem(
+                          "commitflow_local_snapshot"
+                        );
+                        const snap = snapRaw ? JSON.parse(snapRaw) : {};
+                        snap.tasks = next;
+                        localStorage.setItem(
+                          "commitflow_local_snapshot",
+                          JSON.stringify(snap)
+                        );
+                      } catch (e) {
+                        console.warn("persist updated snapshot failed", e);
+                      }
+
+                      return next;
+                    });
                   } catch (err) {
+                    console.error("create comment failed, enqueueing", err);
                     try {
                       enqueueOp({
                         op: "create_comment",
-                        payload: {
-                          taskId: latest.id,
-                          author,
-                          body,
-                          attachments,
-                        },
+                        payload: { taskId, author, body, attachments },
                         createdAt: new Date().toISOString(),
                       });
-                    } catch (_) {
-                      console.log("create_comment failed");
+                    } catch (e) {
+                      console.warn("enqueue create_comment failed", e);
                     }
                   } finally {
                     qcRef.current.invalidateQueries(["tasks", activeProjectId]);
