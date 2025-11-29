@@ -90,6 +90,16 @@ export const tools = [
     type: "function",
     function: {
       name: "getProjects",
+      parameters: {
+        type: "object",
+        properties: {
+          workspaceId: {
+            type: "string",
+            description: "The target workspaceId.",
+          },
+        },
+        required: ["workspaceId"],
+      },
     },
     outputFormat: {
       projects: [
@@ -125,6 +135,16 @@ export const tools = [
     type: "function",
     function: {
       name: "getMembers",
+      parameters: {
+        type: "object",
+        properties: {
+          workspaceId: {
+            type: "string",
+            description: "The target workspaceId.",
+          },
+        },
+        required: ["workspaceId"],
+      },
     },
     outputFormat: {
       members: [
@@ -162,10 +182,10 @@ export const tools = [
         properties: {
           projectId: {
             type: "string",
-            description:
-              "Optional project ID. If provided, return only tasks from that project.",
+            description: "The target projectId.",
           },
         },
+        required: ["projectId"],
       },
     },
     outputFormat: {
@@ -210,9 +230,10 @@ export const tools = [
         properties: {
           projectId: {
             type: "string",
-            description: "Optional project ID.",
+            description: "The target projectId.",
           },
         },
+        required: ["projectId"],
       },
     },
     outputFormat: {
@@ -236,9 +257,10 @@ export const tools = [
         properties: {
           projectId: {
             type: "string",
-            description: "Optional project ID.",
+            description: "The target projectId.",
           },
         },
+        required: ["projectId"],
       },
     },
     outputFormat: {
@@ -262,9 +284,10 @@ export const tools = [
         properties: {
           projectId: {
             type: "string",
-            description: "Optional project ID.",
+            description: "The target projectId.",
           },
         },
+        required: ["projectId"],
       },
     },
     outputFormat: {
@@ -297,9 +320,10 @@ export const tools = [
         properties: {
           projectId: {
             type: "string",
-            description: "Optional project ID.",
+            description: "The target projectId.",
           },
         },
+        required: ["projectId"],
       },
     },
     outputFormat: {
@@ -324,9 +348,10 @@ export const tools = [
         properties: {
           projectId: {
             type: "string",
-            description: "Optional project ID.",
+            description: "The target projectId.",
           },
         },
+        required: ["projectId"],
       },
     },
     outputFormat: {
@@ -350,9 +375,10 @@ export const tools = [
         properties: {
           projectId: {
             type: "string",
-            description: "Optional project ID.",
+            description: "The target projectId.",
           },
         },
+        required: ["projectId"],
       },
     },
     outputFormat: {
@@ -376,9 +402,10 @@ export const tools = [
         properties: {
           projectId: {
             type: "string",
-            description: "Optional project ID.",
+            description: "The target projectId.",
           },
         },
+        required: ["projectId"],
       },
     },
     outputFormat: {

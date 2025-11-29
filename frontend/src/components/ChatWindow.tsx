@@ -4,7 +4,7 @@ import remarkGfm from "remark-gfm";
 import { v4 as uuidv4 } from "uuid";
 import { io, Socket } from "socket.io-client";
 import packageJson from "../../package.json";
-import { useStore } from "../utils/store";
+import { useStore, useStoreWorkspace } from "../utils/store";
 import type { Message } from "../utils/store";
 import { getRandomPlaceholder } from "../utils/placeholder";
 import { Trash2, X, Copy, Check, Share2, VolumeX, Volume2 } from "lucide-react";
@@ -16,6 +16,7 @@ import TtsButton from "./TTSButton";
 import { toast } from "react-toastify";
 import { apiFetch } from "../utils/apiFetch";
 import { playSound } from "../utils/playSound";
+import { getState } from "../api/projectApi";
 
 interface ChatWindowProps {
   onClose: () => void;
@@ -35,6 +36,7 @@ export default function ChatWindow({
   const [thinkingMessage, setThinkingMessage] = useState(null);
   const socketRef = useRef<Socket | null>(null);
   const { messages, setMessages } = useStore();
+  const { workspaceId, projectId } = useStoreWorkspace();
   const [welcomeMessage, setWelcomeMessage] = useState("");
   const [placeholder, setPlaceholder] = useState(getRandomPlaceholder());
   const [copied, setCopied] = useState(false);
@@ -301,7 +303,11 @@ Ready to deliver smarter insights. 💡`;
       const response = await apiFetch(`${import.meta.env.VITE_API_URL}/ask`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: formattedMessages }),
+        body: JSON.stringify({
+          messages: formattedMessages,
+          workspaceId,
+          projectId,
+        }),
       });
 
       if (!response.ok || !response.body) {

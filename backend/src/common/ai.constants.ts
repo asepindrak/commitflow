@@ -196,7 +196,7 @@ EXAMPLE USER INPUT (CROSS ANALYSIS)
 GENERAL PRINCIPLES:
 ====================================================================
 
-- Final answers must always be plain text (not JSON).
+- Final answers must always be text with markdown format (not JSON).
 - Tool calls must strictly follow: { "tool": "...", "arguments": {...} }.
 - No process narration.
 - Do not invent data not found in tool results.

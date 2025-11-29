@@ -28,7 +28,7 @@ import {
   useDeleteTask,
   useTasksQuery,
 } from "../hooks/useTasks";
-import { useAuthStore } from "../utils/store";
+import { useAuthStore, useStoreWorkspace } from "../utils/store";
 import EditProfileModal from "./EditProfileModal";
 import { playSound } from "../utils/playSound";
 import { getState, saveState } from "../utils/local";
@@ -67,6 +67,9 @@ export default function ProjectManagement({
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [inviteLink, setInviteLink] = useState<string>("");
+
+  const { setWorkspaceId, setProjectId } = useStoreWorkspace();
+
   const [activeProjectId, setActiveProjectId] = useState<string>(
     initialProjectId ? initialProjectId : projects[0]?.id ?? ""
   );
@@ -142,6 +145,7 @@ export default function ProjectManagement({
       playSound("/sounds/close.mp3", isPlaySound);
     }
     saveState("workspaceId", activeWorkspaceId);
+    setWorkspaceId(activeWorkspaceId);
   }, [activeWorkspaceId]);
 
   useEffect(() => {
@@ -151,6 +155,7 @@ export default function ProjectManagement({
       setLastActiveWorkspaceId(activeWorkspaceId);
     }
     saveState("projectId", activeProjectId);
+    setProjectId(activeProjectId);
   }, [activeProjectId]);
 
   const onOffSound = () => {
