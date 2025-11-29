@@ -147,7 +147,7 @@ A beautiful, AI-assisted workspace for managing your projects and tasks:
 
 ---
 
-## 🐳 Infrastructure & Security (Updated)
+## 🐳 Infrastructure & Security
 
 - 🗄️ **PostgreSQL Database** – Structured project and task data.
 - ☁️ **AWS S3 Storage** – Media & attachments.
