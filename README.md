@@ -14,6 +14,14 @@ With CommitFlow, you can **plan, track, and analyze your projects** — all in o
 
 ---
 
+## ![CommitFlow Preview](./images/commitflow.jpg)
+
+| Chat 1                             | Chat 2                             |
+| ---------------------------------- | ---------------------------------- |
+| ![](./images/commitflow-chat1.jpg) | ![](./images/commitflow-chat2.jpg) |
+
+---
+
 ## 📁 Folder Structure
 
 ```
@@ -31,7 +39,15 @@ With CommitFlow, you can **plan, track, and analyze your projects** — all in o
 
 ## ✨ Features
 
-### 🔧 Project Management
+### 🤖 AI-Powered Insights
+
+- 💡 **AI Recommendations** – Get automatic suggestions for prioritization and sprint planning.
+- 🧠 **Smart Summaries** – Let AI summarize repository activity and project status.
+- 🗣️ **Insight Chatbot** – Ask questions like “which tasks are in progress??” or “who contributed the most to the commitflow repo?”
+
+---
+
+### 🧭 Project Management
 
 A beautiful, AI-assisted workspace for managing your projects and tasks:
 
@@ -45,14 +61,38 @@ A beautiful, AI-assisted workspace for managing your projects and tasks:
   - **Inline comments** with author, timestamp, and preview links
 - 🎨 **Smart Selectors** –
   - Assignee and Priority fields powered by **React Select**, dynamically colored per user or priority level
-- 🧍 **Team Management** –  
-  Add or remove team members using modern UI components, with color-coded avatars automatically generated.
+- 🗃️ **Workspace Management** –  
+  Add workspace.
 - 🧱 **Project Management Sidebar** –
   - Create or delete projects easily
   - Integrated **SweetAlert2** confirmations for safe deletions
+- 🧍 **Team Management** –  
+  Add or remove team members using modern UI components, with color-coded avatars automatically generated.
   - **Toast notifications** (`react-toastify`) for success actions (e.g., project or member added)
 - 🌙 **Dark/Light Mode Aware** –  
   Smooth color transitions and well-tuned contrast for both themes.
+- Due date labels: **Due Today** & **Overdue**
+- Filter **Assigned to Me**
+
+---
+
+### 💬 Team Coordination
+
+- **Follow up tasks via WhatsApp**
+  - Generates dynamic `wa.me` link (manual click — no API yet)
+  - Pre-filled message with task title & status
+- Real-time collaboration coming soon
+- **Follow up tasks via WhatsApp**
+- **Automatic email notifications** sent to team members when tasks are updated
+- **Invite team members via email** with secure join links
+
+---
+
+### 🔄 Offline‑First Sync
+
+- Works seamlessly **without internet**
+- Local storage caching (offline‑first approach)
+- Auto‑synchronization when back online
 
 ---
 
@@ -64,19 +104,60 @@ A beautiful, AI-assisted workspace for managing your projects and tasks:
 
 ---
 
-### 🤖 AI-Powered Insights
+### 🎨 Interactive UI
 
-- 💡 **AI Recommendations** – Get automatic suggestions for prioritization and sprint planning.
-- 🧠 **Smart Summaries** – Let AI summarize repository activity and project status.
-- 🗣️ **Insight Chatbot** – Ask questions like “Who’s most active this week?” or “Which repo grew fastest?”
+- Smooth animations
+- Responsive layout
+- Clean, minimalist UX with focus on productivity
 
 ---
 
-### 🐳 Infrastructure & Security
+## 🛠️ Tech Stack
 
-- 🧩 **PostgreSQL Storage** – Store structured task and analytics data.
-- 🔐 **Environment Management** – Secure credentials via `.env` file.
-- ⚙️ **Docker Ready** – Run everything locally or in production with one command.
+### Frontend
+
+- React + Vite
+- TypeScript
+- TailwindCSS
+- Zustand (State Management)
+- LocalStorage / IndexedDB (Offline Sync)
+- React Query (Data Fetching & Sync Management)
+- Socket.IO Client (Real-time updates)
+- React Quill (Rich Text Editor)
+- SweetAlert2 (Dialogs)
+- React Toastify (Notifications)
+- Framer Motion / GSAP (Animations & interactive UI)
+- XLSX (Export Excel)
+
+### Backend
+
+- Nest.js
+- TypeScript
+- Prisma ORM
+- PostgreSQL
+- Socket.IO Gateway (Real-time events)
+- Nodemailer (Email Delivery via SMTP)
+- Multer (File upload middleware)
+- Class Validator / Class Transformer
+- Swagger (API documentation)
+- Google TTS API
+- AWS SDK for S3 Storage
+- JWT Authentication (Access & Refresh Tokens)
+- OpenAI API Integration (AI features / content generation)
+
+---
+
+## 🐳 Infrastructure & Security (Updated)
+
+- 🗄️ **PostgreSQL Database** – Structured project and task data.
+- ☁️ **AWS S3 Storage** – Media & attachments.
+- ✉️ **SMTP Email (Nodemailer)** – Invitations & notifications.
+- 🔐 **Environment Variables (.env)** – Secure credential management.
+- 📡 **WebSocket Gateway** – Realtime updates via Socket.IO.
+- 🔑 **JWT Authentication** – Secure login, workspace access, and API protection.
+- 🤖 **OpenAI Integration** – AI-driven generation (text, automation, suggestions).
+- 📁 **LocalStorage + IndexedDB** – Offline-first data with auto-sync.
+- 📘 **Swagger UI** – API documentation.
 
 ---
 
