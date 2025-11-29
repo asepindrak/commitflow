@@ -364,17 +364,19 @@ export default function TaskModal({
 
   function isEmptyQuill(html?: string | null) {
     if (!html) return true;
-    // replace &nbsp; and other common entities
+
+    // jika ada <img ...> treat as non-empty
+    if (/<img[\s\S]*src=/.test(String(html))) return false;
+
+    // replace common html entities
     let s = String(html)
       .replace(/&nbsp;/g, " ")
       .replace(/&amp;/g, "&")
       .replace(/&lt;/g, "<")
       .replace(/&gt;/g, ">");
 
-    // remove all HTML tags
+    // remove all tags and test remaining text
     s = s.replace(/<[^>]*>/g, "");
-
-    // collapse whitespace
     s = s.replace(/\s+/g, "");
 
     return s.length === 0;
