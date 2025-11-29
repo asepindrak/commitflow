@@ -384,10 +384,7 @@ export class ProjectManagementService {
         where: { clientId: payload.clientId },
       });
       if (existing) {
-        console.log(
-          "[createTask] idempotent hit, returning existing id=",
-          existing.id
-        );
+        console.log("[createTask] idempotent hit, returning existing");
         return existing;
       }
     }

@@ -28,7 +28,7 @@ import {
   useDeleteTask,
   useTasksQuery,
 } from "../hooks/useTasks";
-import { useAuthStore } from "../utils/store";
+import { useAuthStore, useStoreWorkspace } from "../utils/store";
 import EditProfileModal from "./EditProfileModal";
 import { playSound } from "../utils/playSound";
 import { getState, saveState } from "../utils/local";
@@ -67,6 +67,9 @@ export default function ProjectManagement({
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [inviteLink, setInviteLink] = useState<string>("");
+
+  const { setWorkspaceId, setProjectId } = useStoreWorkspace();
+
   const [activeProjectId, setActiveProjectId] = useState<string>(
     initialProjectId ? initialProjectId : projects[0]?.id ?? ""
   );
@@ -142,6 +145,7 @@ export default function ProjectManagement({
       playSound("/sounds/close.mp3", isPlaySound);
     }
     saveState("workspaceId", activeWorkspaceId);
+    setWorkspaceId(activeWorkspaceId);
   }, [activeWorkspaceId]);
 
   useEffect(() => {
@@ -151,6 +155,7 @@ export default function ProjectManagement({
       setLastActiveWorkspaceId(activeWorkspaceId);
     }
     saveState("projectId", activeProjectId);
+    setProjectId(activeProjectId);
   }, [activeProjectId]);
 
   const onOffSound = () => {
@@ -1727,50 +1732,37 @@ export default function ProjectManagement({
     }
   }
 
-  function removeTeamMember(idOrName: string) {
-    Swal.fire({
-      title: "Delete member?",
-      text: `Member will be deleted.`,
-      icon: "warning",
-      showCancelButton: true,
-      confirmButtonText: "Delete",
-      cancelButtonText: "Cancel",
-      confirmButtonColor: "#ef4444",
-      background: "#111827",
-      color: "#e5e7eb",
-    }).then(async (result) => {
-      if (!result.isConfirmed) return;
-      const target = team.find((t) => t.id === idOrName || t.name === idOrName);
-      if (!target) {
-        toast.dark("Member not found");
-        return;
-      }
-      const prevTeam = team;
-      setTeam((s) =>
-        s.filter((tm) => tm.id !== idOrName && tm.name !== idOrName)
-      );
-      setTasks((prev) =>
-        prev.map((task) =>
-          task.assigneeName === target.name
-            ? { ...task, assigneeName: undefined, assigneeId: undefined }
-            : task
-        )
-      );
+  async function removeTeamMember(idOrName: string) {
+    const target = team.find((t) => t.id === idOrName || t.name === idOrName);
+    if (!target) {
+      toast.dark("Member not found");
+      return;
+    }
+    const prevTeam = team;
+    setTeam((s) =>
+      s.filter((tm) => tm.id !== idOrName && tm.name !== idOrName)
+    );
+    setTasks((prev) =>
+      prev.map((task) =>
+        task.assigneeName === target.name
+          ? { ...task, assigneeName: undefined, assigneeId: undefined }
+          : task
+      )
+    );
 
+    try {
+      await api.deleteTeamMember(target.id);
+    } catch (err) {
       try {
-        await api.deleteTeamMember(target.id);
-      } catch (err) {
-        try {
-          enqueueOp({
-            op: "delete_team",
-            payload: { id: target.id },
-            createdAt: new Date().toISOString(),
-          });
-        } catch (_) {
-          console.log("remove team failed");
-        }
+        enqueueOp({
+          op: "delete_team",
+          payload: { id: target.id },
+          createdAt: new Date().toISOString(),
+        });
+      } catch (_) {
+        console.log("remove team failed");
       }
-    });
+    }
   }
 
   const removeProject = (id: string) => {
@@ -1870,6 +1862,7 @@ export default function ProjectManagement({
       const clientId = nid(m.id).startsWith("tmp_") ? m.id : genTmpId();
       const payload = { ...m, clientId, workspaceId: activeWorkspaceId };
       // Return promise that resolves to { status, result, tmpId }
+      console.log("team payload", payload);
       return api
         .createTeamMember(payload)
         .then((created: any) => ({

@@ -4,7 +4,7 @@ import remarkGfm from "remark-gfm";
 import { v4 as uuidv4 } from "uuid";
 import { io, Socket } from "socket.io-client";
 import packageJson from "../../package.json";
-import { useStore } from "../utils/store";
+import { useStore, useStoreWorkspace } from "../utils/store";
 import type { Message } from "../utils/store";
 import { getRandomPlaceholder } from "../utils/placeholder";
 import { Trash2, X, Copy, Check, Share2, VolumeX, Volume2 } from "lucide-react";
@@ -16,6 +16,7 @@ import TtsButton from "./TTSButton";
 import { toast } from "react-toastify";
 import { apiFetch } from "../utils/apiFetch";
 import { playSound } from "../utils/playSound";
+import { getState } from "../api/projectApi";
 
 interface ChatWindowProps {
   onClose: () => void;
@@ -35,6 +36,7 @@ export default function ChatWindow({
   const [thinkingMessage, setThinkingMessage] = useState(null);
   const socketRef = useRef<Socket | null>(null);
   const { messages, setMessages } = useStore();
+  const { workspaceId, projectId } = useStoreWorkspace();
   const [welcomeMessage, setWelcomeMessage] = useState("");
   const [placeholder, setPlaceholder] = useState(getRandomPlaceholder());
   const [copied, setCopied] = useState(false);
@@ -42,28 +44,38 @@ export default function ChatWindow({
   const [isLoading, setIsLoading] = useState(false);
   const [isMessagesReady, setIsMessagesReady] = useState(false);
 
-  const fullText = `Halo! 👋 Selamat datang di **CommitFlow** 🧠.
+  const fullText = `Hello! 👋 Welcome to **CommitFlow** 🧠.
 
-Saya bisa bantu analisis repositori dan kontribusi member dalam bahasa yang mudah dimengerti.
+I can help analyze repositories, contributions, tasks, and projects with easy-to-understand insights.
 
-Coba ketik:
-- \`siapa saja yang berkontribusi di repo commitflow?\`
-- \`siapa yang paling banyak berkontribusi di repo commitflow?\`
-- \`list seluruh repositori.\`
-- \`tampilkan semua project aktif.\`
-- \`project mana yang memiliki task paling banyak?\`
-- \`analisa project commitflow.\`
-- \`tampilkan seluruh task di project commitflow.\`
-- \`apa saja task yang statusnya inprogress?\`
-- \`task todo untuk project commitflow apa saja?\`
-- \`siapa member yang paling banyak task todo?\`
-- \`list semua task yang dimiliki Bob.\`
-- \`siapa yang paling overload di tim?\`
-- \`siapa member yang paling banyak task inprogress di project commitflow?\`
-- \`task mana yang belum punya assignee di project commitflow?\`
-- \`bandingkan jumlah task todo dan done untuk semua project.\`
+=====================
+📦 **GitHub Analysis**
+=====================
+Try typing:
+- \`who has contributed to the commitflow repo?\`
+- \`who contributed the most to the commitflow repo?\`
+- \`list all repositories.\`
+- \`analyze the commitflow project.\`
+- \`what repositories are available?\`
+- \`show contribution details for commitflow.\`
 
-Siap bantu insight lebih cerdas. 💡`;
+==============================
+📋 **Task & Project Management**
+==============================
+Or ask about project workflows:
+- \`show all active projects.\`
+- \`which project has the most tasks?\`
+- \`show all tasks in the commitflow project.\`
+- \`which tasks are in progress?\`
+- \`what are the todo tasks for the commitflow project?\`
+- \`which member has the most todo tasks?\`
+- \`list all tasks owned by Bob.\`
+- \`who is the most overloaded in the team?\`
+- \`which member has the most in-progress tasks in the commitflow project?\`
+- \`which tasks are unassigned in the commitflow project?\`
+- \`compare the number of todo and done tasks across all projects.\`
+
+Ready to deliver smarter insights. 💡`;
 
   useEffect(() => {
     fetchMessages();
@@ -291,7 +303,11 @@ Siap bantu insight lebih cerdas. 💡`;
       const response = await apiFetch(`${import.meta.env.VITE_API_URL}/ask`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: formattedMessages }),
+        body: JSON.stringify({
+          messages: formattedMessages,
+          workspaceId,
+          projectId,
+        }),
       });
 
       if (!response.ok || !response.body) {

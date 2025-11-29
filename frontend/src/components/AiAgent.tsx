@@ -3,14 +3,20 @@ import "./AiAgent.css";
 
 function AiAgent({ setIsShow }: any) {
   const messages = [
-    "📈 Halo, pantau kontribusi yuk!",
-    "💡 Mau analisa cepat?",
-    "🔍 Cari kontributor terbaik?",
-    "🤖 Siap bantu analisa!",
-    "🔍 Siapa aja yang berkontribusi?",
-    "🔍 Ada repo apa aja ya?",
-    "💡 Butuh insight repo?",
-    "🧠 Analisis aktif!",
+    "📈 Hey! Ready to track contributions?",
+    "💡 Need a quick analysis?",
+    "🔍 Looking for the top contributors?",
+    "🤖 I'm here to help with insights!",
+    "🔍 Want to see who contributed?",
+    "📂 What repositories do we have?",
+    "💡 Need repo insights?",
+    "🧠 Analysis activated!",
+    "🗂️ Need help with task management?",
+    "📌 Want to review your task progress?",
+    "📋 Ready to manage your projects?",
+    "🚀 Need an overview of your project status?",
+    "📊 Want to check task assignments?",
+    "📅 Looking to organize your project timeline?",
   ];
 
   const [currentIndex, setCurrentIndex] = useState(0);

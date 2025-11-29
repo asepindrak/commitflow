@@ -36,7 +36,7 @@ export class AskService {
     if (socket) {
       socket.emit("ai_thinking", {
         type: "tool_call",
-        message: `🤖 CommitFlow memproses permintaan tool: ${tool}`,
+        message: `🤖 CommitFlow is processing the tool request: ${tool}`,
         tool,
         args,
       });
@@ -51,7 +51,7 @@ export class AskService {
     if (socket) {
       socket.emit("ai_thinking", {
         type: "tool_result",
-        message: `📊 Hasil tool ${tool} siap.`,
+        message: `📊 Tool result for ${tool} is ready.`,
         tool,
         result,
       });
@@ -62,7 +62,7 @@ export class AskService {
     if (socket) {
       socket.emit("ai_thinking", {
         type: "done",
-        message: `✅ Semua proses selesai.`,
+        message: `✅ All processes completed.`,
       });
     }
   }
@@ -71,32 +71,32 @@ export class AskService {
    * Helper: execute a tool by name (serial)
    * Returns the raw tool result (JS object/array) or { error: ... }
    */
-  private async execToolByName(fn: string, args: any, userId: string) {
+  private async execToolByName(fn: string, args: any) {
     try {
       if (fn === "getRepos") {
         return await getRepos();
       } else if (fn === "getContributors") {
         return await getContributors(args.repo);
       } else if (fn === "getProjects") {
-        return await getProjects(userId);
+        return await getProjects(args.workspaceId);
       } else if (fn === "getMembers") {
-        return await getMembers(userId);
+        return await getMembers(args.workspaceId);
       } else if (fn === "getAllTasks") {
-        return await getAllTasks(args?.projectId || "", userId);
+        return await getAllTasks(args?.projectId);
       } else if (fn === "getTodoTasks") {
-        return await getTodoTasks(args?.projectId || "", userId);
+        return await getTodoTasks(args?.projectId);
       } else if (fn === "getInProgressTasks") {
-        return await getInProgressTasks(args?.projectId || "", userId);
+        return await getInProgressTasks(args?.projectId);
       } else if (fn === "getDoneTasks") {
-        return await getDoneTasks(args?.projectId || "", userId);
+        return await getDoneTasks(args?.projectId);
       } else if (fn === "getUnassignedTasks") {
-        return await getUnassignedTasks(args?.projectId || "", userId);
+        return await getUnassignedTasks(args?.projectId);
       } else if (fn === "getUrgentTasks") {
-        return await getUrgentTasks(args?.projectId || "", userId);
+        return await getUrgentTasks(args?.projectId);
       } else if (fn === "getLowTasks") {
-        return await getLowTasks(args?.projectId || "", userId);
+        return await getLowTasks(args?.projectId);
       } else if (fn === "getMediumTasks") {
-        return await getMediumTasks(args?.projectId || "", userId);
+        return await getMediumTasks(args?.projectId);
       } else {
         return { error: `Unknown tool: ${fn}` };
       }
@@ -132,6 +132,14 @@ export class AskService {
         content: SYSTEM_MESSAGE,
       },
       ...userMessages.map((msg) => ({ role: msg.role, content: msg.content })),
+      {
+        role: "system",
+        content: `User Selected Workspace ID: ${data.workspaceId}`,
+      },
+      {
+        role: "system",
+        content: `User Selected Project ID: ${data.projectId}`,
+      },
       ...data.messages,
     ];
 
@@ -223,7 +231,7 @@ export class AskService {
           } else {
             // Execute actual tool
             this.emitToolCall(socket, fn, args);
-            toolResult = await this.execToolByName(fn, args, userId ?? "");
+            toolResult = await this.execToolByName(fn, args);
             this.emitToolResult(socket, fn, toolResult);
 
             // push tool result into conversation
@@ -289,7 +297,7 @@ export class AskService {
 
       messages.push({
         role: "system",
-        content: "buatkan summary dari hasil tools call jika ada",
+        content: "generate a summary of the tool call results if available",
       });
       // === At this point, modelMessage does NOT request tools anymore ===
       // Start SSE streaming final answer. Ensure we include tools & tool_choice
@@ -379,7 +387,7 @@ export class AskService {
             choices: [
               {
                 delta: {
-                  content: `Terjadi kesalahan: ${
+                  content: `An error occurred: ${
                     error?.message || String(error)
                   }`,
                 },

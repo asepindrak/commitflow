@@ -54,6 +54,21 @@ const useStore = create<MessageStore>()(
   )
 );
 
+export const useStoreWorkspace = create<any>()(
+  persist(
+    (set) => ({
+      workspaceId: "",
+      projectId: "",
+      setWorkspaceId: (value: string) => set({ workspaceId: value }),
+
+      setProjectId: (value: string) => set({ projectId: value }),
+    }),
+    {
+      name: "workspace-storage",
+    }
+  )
+);
+
 /**
  * Auth store (persisted)
  */

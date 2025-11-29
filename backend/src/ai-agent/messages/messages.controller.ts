@@ -22,7 +22,6 @@ export class MessagesController {
 
   @Delete(":id")
   delete(@Req() req: any, @Param("id") id: string) {
-    console.log("delete message id: ", id);
     const userId = req.user.userId; // <-- ambil userId dari JWT
     return this.messagesService.delete(userId, id);
   }
