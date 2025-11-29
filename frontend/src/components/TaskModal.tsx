@@ -226,7 +226,7 @@ export default function TaskModal({
     });
 
     if (!res.isConfirmed) return;
-
+    setIsLoading(true);
     try {
       await onDelete(local.id);
       await Swal.fire({
@@ -249,6 +249,7 @@ export default function TaskModal({
       });
     } finally {
       onClose();
+      setIsLoading(false);
     }
   };
 
@@ -535,11 +536,17 @@ export default function TaskModal({
                 <div className="mt-25">
                   <button
                     onClick={handleDeleteClick}
-                    disabled={uploading}
+                    disabled={isLoading}
                     className="px-4 py-2 bg-gray-800 hover:bg-red-400 text-white rounded-lg shadow-md text-sm flex gap-2"
                     title="Delete task"
                   >
-                    <Trash size={16} /> Delete task
+                    {isLoading ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <>
+                        <Trash size={16} /> Delete task
+                      </>
+                    )}
                   </button>
                 </div>
               </div>

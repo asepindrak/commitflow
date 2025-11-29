@@ -1,6 +1,6 @@
 // frontend/src/components/EditProfileModal.tsx
 import React, { useEffect, useRef, useState } from "react";
-import { X, Camera, Save } from "lucide-react";
+import { X, Camera, Save, Loader2 } from "lucide-react";
 import uploadMultipleFiles from "../utils/uploadFile";
 import type { TeamMember } from "../types";
 import { toast } from "react-toastify";
@@ -33,8 +33,8 @@ export default function EditProfileModal({
   );
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
-  const [saving, setSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
 
   useEffect(() => {
     // when opening or member changes, prefill fields
@@ -47,7 +47,7 @@ export default function EditProfileModal({
       setPhotoPreview(member?.photo ?? null);
       setPassword("");
       setPasswordConfirm("");
-      setSaving(false);
+      setIsLoading(false);
     }
   }, [open, member]);
 
@@ -55,7 +55,7 @@ export default function EditProfileModal({
 
   // handler when user clicks the photo area
   const onClickPhoto = () => {
-    if (inputRef.current && !saving) {
+    if (inputRef.current && !isLoading) {
       inputRef.current.click();
     }
   };
@@ -93,7 +93,7 @@ export default function EditProfileModal({
       }
     }
 
-    setSaving(true);
+    setIsLoading(true);
     try {
       let photoUrl: string | undefined = member.photo ?? undefined;
       if (photoFile) {
@@ -132,7 +132,7 @@ export default function EditProfileModal({
       console.error("EditProfile save failed", err);
       toast.dark(err?.message || "Failed to update profile");
     } finally {
-      setSaving(false);
+      setIsLoading(false);
     }
   }
 
@@ -151,7 +151,7 @@ export default function EditProfileModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
       <div
         className="absolute inset-0 bg-gradient-to-br from-black/40 via-black/30 to-black/20 backdrop-blur-sm"
-        onClick={() => !saving && onClose()}
+        onClick={() => !isLoading && onClose()}
       />
 
       <div className="relative z-10 w-full max-w-2xl">
@@ -176,7 +176,7 @@ export default function EditProfileModal({
 
             <div className="flex items-center gap-2">
               <button
-                onClick={() => !saving && onClose()}
+                onClick={() => !isLoading && onClose()}
                 aria-label="Close edit profile"
                 className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition"
               >
@@ -242,7 +242,7 @@ export default function EditProfileModal({
                   accept="image/*"
                   className="hidden"
                   onChange={onFileChange}
-                  disabled={saving}
+                  disabled={isLoading}
                 />
 
                 <div className="absolute inset-x-0 bottom-0 flex justify-center">
@@ -263,7 +263,7 @@ export default function EditProfileModal({
                     onChange={(e) => setName(e.target.value)}
                     placeholder="Full name"
                     className="w-full px-3 py-2 rounded-lg border bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 outline-none text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-sky-300 dark:focus:ring-sky-600"
-                    disabled={saving}
+                    disabled={isLoading}
                   />
                 </label>
 
@@ -277,7 +277,7 @@ export default function EditProfileModal({
                       onChange={(e) => setPhone(e.target.value)}
                       placeholder="Phone"
                       className="px-3 py-2 rounded-lg border bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-sky-300 dark:focus:ring-sky-600"
-                      disabled={saving}
+                      disabled={isLoading}
                     />
                   </label>
 
@@ -291,7 +291,7 @@ export default function EditProfileModal({
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="Email"
                       className="px-3 py-2 rounded-lg border bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-sky-300 dark:focus:ring-sky-600"
-                      disabled={saving}
+                      disabled={isLoading}
                     />
                   </label>
                 </div>
@@ -310,7 +310,7 @@ export default function EditProfileModal({
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="New password (leave blank to keep)"
                       className="px-3 py-2 rounded-lg border bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-sky-300 dark:focus:ring-sky-600"
-                      disabled={saving}
+                      disabled={isLoading}
                     />
                   </label>
 
@@ -327,7 +327,7 @@ export default function EditProfileModal({
                       onChange={(e) => setPasswordConfirm(e.target.value)}
                       placeholder="Confirm new password"
                       className="px-3 py-2 rounded-lg border bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-sky-300 dark:focus:ring-sky-600"
-                      disabled={saving}
+                      disabled={isLoading}
                     />
                   </label>
                 </div>
@@ -341,7 +341,7 @@ export default function EditProfileModal({
                       value={role ?? "FE"}
                       onChange={(e) => setRole(e.target.value)}
                       className="w-full px-3 py-2 rounded-lg border bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-sky-300 dark:focus:ring-sky-600"
-                      disabled={saving}
+                      disabled={isLoading}
                     >
                       <option value="FE">Frontend</option>
                       <option value="BE">Backend</option>
@@ -357,47 +357,26 @@ export default function EditProfileModal({
             <div className="flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => !saving && onClose()}
-                disabled={saving}
+                onClick={() => !isLoading && onClose()}
+                disabled={isLoading}
                 className="px-4 py-2 rounded-lg border bg-white text-slate-900 dark:bg-gray-800 dark:text-slate-100"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                disabled={saving}
+                disabled={isLoading}
                 className={`group inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold
               bg-gradient-to-r from-sky-500 to-sky-600 text-white
               hover:from-sky-600 hover:to-sky-700
               active:scale-95 transition-all duration-300
               dark:from-sky-600 dark:to-sky-700 dark:hover:from-sky-700 dark:hover:to-sky-800
-              ${saving ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
+              ${
+                isLoading ? "opacity-60 cursor-not-allowed" : "cursor-pointer"
+              }`}
               >
-                {saving ? (
-                  <>
-                    <svg
-                      className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      aria-hidden="true"
-                    >
-                      <circle
-                        className="opacity-25"
-                        cx="12"
-                        cy="12"
-                        r="10"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                      />
-                      <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
-                      />
-                    </svg>
-                    Saving…
-                  </>
+                {isLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
                   <>
                     <Save

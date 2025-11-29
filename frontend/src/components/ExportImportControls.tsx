@@ -1,9 +1,14 @@
 // frontend/src/components/ExportImportControls.tsx
-import React, { useRef } from "react";
+import React, { useRef, useState } from "react";
 import * as XLSX from "xlsx";
 import { toast } from "react-toastify";
-import { Download, UploadCloud } from "lucide-react";
+import { Download, Loader2, Save, UploadCloud } from "lucide-react";
 import type { Project, Task, TeamMember } from "../types";
+import {
+  findDataUrisInHtml,
+  replaceDataUrisInCommentsAndUpload,
+  replaceDataUrisInHtmlAndUpload,
+} from "../utils/dataURItoFile";
 
 /**
  * ExportImportControls (per-project)
@@ -36,6 +41,7 @@ export default function ExportImportControls({
   onImport: (payload: { tasks?: Task[]; team?: TeamMember[] }) => void;
 }) {
   const fileRef = useRef<HTMLInputElement | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
 
   const safeString = (v: any) =>
     v === null || typeof v === "undefined" ? "" : String(v);
@@ -47,12 +53,104 @@ export default function ExportImportControls({
     }
   };
 
-  function exportXlsx() {
+  async function exportXlsx() {
     try {
+      setIsLoading(true);
+      const MAX_EXCEL_CELL = 32767; // Excel limit for a single cell
+      const truncations: string[] = [];
+
+      const truncateForExcel = (value: any, ctx: string) => {
+        const s =
+          value === null || typeof value === "undefined" ? "" : String(value);
+        if (s.length > MAX_EXCEL_CELL) {
+          const kept = s.slice(0, MAX_EXCEL_CELL - 13);
+          truncations.push(`${ctx} (original ${s.length} chars)`);
+          return `${kept}...[truncated]`;
+        }
+        return s;
+      };
+
       // Determine tasks to export (per-project if selected)
       const filteredTasks = selectedProjectId
         ? tasks.filter((t) => t.projectId === selectedProjectId)
         : tasks.slice();
+
+      // ---------------------------
+      // Preprocess comments per-task (existing)
+      // ---------------------------
+      const taskIndexToUpdatedComments: Map<string, any[]> = new Map();
+
+      const tasksWithComments = filteredTasks
+        .map((t, idx) => ({ t, idx }))
+        .filter(
+          ({ t }) =>
+            Array.isArray((t as any).comments) && (t as any).comments.length > 0
+        );
+
+      for (const { t, idx } of tasksWithComments) {
+        try {
+          const originalComments = (t as any).comments ?? [];
+          const updatedComments = await replaceDataUrisInCommentsAndUpload(
+            originalComments
+          );
+          taskIndexToUpdatedComments.set(t.id ?? String(idx), updatedComments);
+        } catch (err) {
+          console.error(
+            "Failed uploading embedded files for task (comments)",
+            t.id,
+            err
+          );
+          toast.dark(
+            `Warning: failed uploading embedded files for comments on task ${
+              t.id ?? ""
+            }`
+          );
+        }
+      }
+
+      // ---------------------------
+      // Preprocess descriptions per-task (NEW)
+      // ---------------------------
+      const taskIndexToUpdatedDescription: Map<
+        string,
+        { html: string; attachments?: any[] }
+      > = new Map();
+
+      const tasksWithDescriptionHtml = filteredTasks
+        .map((t, idx) => ({ t, idx }))
+        .filter(({ t }) => {
+          const desc = (t as any).description;
+          return (
+            desc &&
+            typeof desc === "string" &&
+            findDataUrisInHtml(desc).length > 0
+          );
+        });
+
+      // Process descriptions (one by one). Optionally you can batch all files for efficiency.
+      for (const { t, idx } of tasksWithDescriptionHtml) {
+        try {
+          const originalDesc = (t as any).description ?? "";
+          const { html: updatedHtml, attachments } =
+            await replaceDataUrisInHtmlAndUpload(originalDesc);
+          taskIndexToUpdatedDescription.set(t.id ?? String(idx), {
+            html: updatedHtml,
+            attachments,
+          });
+        } catch (err) {
+          console.error(
+            "Failed uploading embedded files for task (description)",
+            t.id,
+            err
+          );
+          toast.dark(
+            `Warning: failed uploading embedded files for description on task ${
+              t.id ?? ""
+            }`
+          );
+          // keep original description if upload fails (don't block export)
+        }
+      }
 
       // Build set of assigneeIds referenced by those tasks
       const assigneeIds = new Set<string>();
@@ -65,51 +163,106 @@ export default function ExportImportControls({
       const project = projects?.find((p) => p.id === selectedProjectId);
       const projectWorkspaceId = project?.workspaceId;
 
-      // Team rows: include members referenced by tasks OR members belonging to same workspace (if known)
+      // Team rows
       const tmRows = team
         .filter((m) => {
           if (assigneeIds.size > 0 && assigneeIds.has(m.id)) return true;
           if (projectWorkspaceId && m.workspaceId === projectWorkspaceId)
             return true;
-          // if no project selected, include all
           return !selectedProjectId;
         })
         .map((m) => ({
-          id: m.id,
-          clientId: (m as any).clientId ?? "",
-          userId: m.userId ?? "",
-          workspaceId: m.workspaceId ?? "",
-          name: m.name,
-          role: m.role ?? "",
-          email: m.email ?? "",
-          photo: m.photo ?? "",
-          phone: m.phone ?? "",
+          id: truncateForExcel(m.id ?? "", `team.id:${m.id ?? ""}`),
+          clientId: truncateForExcel(
+            (m as any).clientId ?? "",
+            `team.clientId:${m.id ?? ""}`
+          ),
+          userId: truncateForExcel(m.userId ?? "", `team.userId:${m.id ?? ""}`),
+          workspaceId: truncateForExcel(
+            m.workspaceId ?? "",
+            `team.workspaceId:${m.id ?? ""}`
+          ),
+          name: truncateForExcel(m.name ?? "", `team.name:${m.id ?? ""}`),
+          role: truncateForExcel(m.role ?? "", `team.role:${m.id ?? ""}`),
+          email: truncateForExcel(m.email ?? "", `team.email:${m.id ?? ""}`),
+          photo: truncateForExcel(m.photo ?? "", `team.photo:${m.id ?? ""}`),
+          phone: truncateForExcel(m.phone ?? "", `team.phone:${m.id ?? ""}`),
           isTrash:
             typeof m.isTrash !== "undefined" ? Boolean(m.isTrash) : false,
-          createdAt: (m as any).createdAt ? String((m as any).createdAt) : "",
-          updatedAt: (m as any).updatedAt ? String((m as any).updatedAt) : "",
+          createdAt: truncateForExcel(
+            (m as any).createdAt ? String((m as any).createdAt) : "",
+            `team.createdAt:${m.id ?? ""}`
+          ),
+          updatedAt: truncateForExcel(
+            (m as any).updatedAt ? String((m as any).updatedAt) : "",
+            `team.updatedAt:${m.id ?? ""}`
+          ),
         }));
 
-      // Tasks rows: include comments serialized
-      const tkRows = filteredTasks.map((t) => ({
-        id: t.id,
-        clientId: (t as any).clientId ?? "",
-        projectId: (t as any).projectId ?? "",
-        title: t.title,
-        description: t.description ?? "",
-        status: t.status ?? "todo",
-        assigneeId: t.assigneeId ?? "",
-        priority: t.priority ?? "",
-        startDate: t.startDate ?? "",
-        dueDate: t.dueDate ?? "",
-        isTrash:
-          typeof (t as any).isTrash !== "undefined"
-            ? Boolean((t as any).isTrash)
-            : false,
-        comments: JSON.stringify((t as any).comments ?? []),
-        createdAt: (t as any).createdAt ? String((t as any).createdAt) : "",
-        updatedAt: (t as any).updatedAt ? String((t as any).updatedAt) : "",
-      }));
+      // Tasks rows: include comments serialized (and truncated if necessary) and updated descriptions
+      const tkRows = filteredTasks.map((t) => {
+        const taskId = t.id ?? "";
+        const updatedComments =
+          taskIndexToUpdatedComments.get(taskId) ?? (t as any).comments ?? [];
+        const commentsJson = JSON.stringify(updatedComments);
+
+        const descInfo = taskIndexToUpdatedDescription.get(taskId);
+        const updatedDescription =
+          descInfo?.html ?? (t as any).description ?? "";
+
+        return {
+          id: truncateForExcel(t.id ?? "", `task.id:${t.id ?? ""}`),
+          clientId: truncateForExcel(
+            (t as any).clientId ?? "",
+            `task.clientId:${t.id ?? ""}`
+          ),
+          projectId: truncateForExcel(
+            (t as any).projectId ?? "",
+            `task.projectId:${t.id ?? ""}`
+          ),
+          title: truncateForExcel(t.title ?? "", `task.title:${t.id ?? ""}`),
+          description: truncateForExcel(
+            updatedDescription,
+            `task.description:${t.id ?? ""}`
+          ),
+          status: truncateForExcel(
+            t.status ?? "todo",
+            `task.status:${t.id ?? ""}`
+          ),
+          assigneeId: truncateForExcel(
+            t.assigneeId ?? "",
+            `task.assigneeId:${t.id ?? ""}`
+          ),
+          priority: truncateForExcel(
+            t.priority ?? "",
+            `task.priority:${t.id ?? ""}`
+          ),
+          startDate: truncateForExcel(
+            t.startDate ?? "",
+            `task.startDate:${t.id ?? ""}`
+          ),
+          dueDate: truncateForExcel(
+            t.dueDate ?? "",
+            `task.dueDate:${t.id ?? ""}`
+          ),
+          isTrash:
+            typeof (t as any).isTrash !== "undefined"
+              ? Boolean((t as any).isTrash)
+              : false,
+          comments: truncateForExcel(
+            commentsJson,
+            `task.comments:${t.id ?? ""}`
+          ),
+          createdAt: truncateForExcel(
+            (t as any).createdAt ? String((t as any).createdAt) : "",
+            `task.createdAt:${t.id ?? ""}`
+          ),
+          updatedAt: truncateForExcel(
+            (t as any).updatedAt ? String((t as any).updatedAt) : "",
+            `task.updatedAt:${t.id ?? ""}`
+          ),
+        };
+      });
 
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(
@@ -129,12 +282,22 @@ export default function ExportImportControls({
         .slice(0, 10)}.xlsx`;
       XLSX.writeFile(wb, filename);
 
-      toast.dark(
-        `Exported ${tkRows.length} task(s) and ${tmRows.length} member(s) to Excel`
-      );
+      // Toast feedback
+      if (truncations.length > 0) {
+        const sample = truncations.slice(0, 6).join(", ");
+        toast.dark(
+          `Exported ${tkRows.length} task(s) and ${tmRows.length} member(s) to Excel — note: some fields were truncated (${truncations.length} total). See: ${sample}`
+        );
+      } else {
+        toast.dark(
+          `Exported ${tkRows.length} task(s) and ${tmRows.length} member(s) to Excel`
+        );
+      }
     } catch (err) {
       console.error("Export failed", err);
       toast.dark("Export failed");
+    } finally {
+      setIsLoading(false);
     }
   }
 
@@ -145,9 +308,9 @@ export default function ExportImportControls({
   function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     if (!f) return;
-
+    setIsLoading(true);
     const reader = new FileReader();
-    reader.onload = (ev) => {
+    reader.onload = async (ev) => {
       try {
         const data = ev.target?.result;
         const wb = XLSX.read(data as any, { type: "binary" });
@@ -250,11 +413,12 @@ export default function ExportImportControls({
             .filter((m: any) => m.name);
         }
 
-        onImport(out);
+        await onImport(out);
       } catch (err) {
         console.error("Import failed", err);
         toast.dark("Failed to import Excel file");
       } finally {
+        setIsLoading(false);
         if (fileRef.current) fileRef.current.value = "";
       }
     };
@@ -267,6 +431,7 @@ export default function ExportImportControls({
       {/* Export button */}
       <button
         onClick={exportXlsx}
+        disabled={isLoading}
         title="Export project to Excel"
         aria-label="Export to Excel"
         className={`group inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold
@@ -280,7 +445,13 @@ export default function ExportImportControls({
           className="transition-transform duration-300 group-hover:-rotate-6"
           aria-hidden="true"
         />
-        <span>{selectedProjectId ? "Export project" : "Export all"}</span>
+        {isLoading ? (
+          <Loader2 className="w-4 h-4 animate-spin" />
+        ) : (
+          <>
+            <span>Export Project</span>
+          </>
+        )}
       </button>
 
       <label
@@ -295,9 +466,16 @@ export default function ExportImportControls({
           className="w-4 h-4 transition-transform duration-300 
                group-hover:-rotate-6 group-hover:translate-y-0.5"
         />
-        <span>Import</span>
+        {isLoading ? (
+          <Loader2 className="w-4 h-4 animate-spin" />
+        ) : (
+          <>
+            <span>Import Project</span>
+          </>
+        )}
 
         <input
+          disabled={isLoading}
           id="cf-import-xlsx"
           ref={fileRef}
           onChange={onFileChange}

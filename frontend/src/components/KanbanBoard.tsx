@@ -1,4 +1,10 @@
-import React, { useMemo, useRef, useEffect, useState } from "react";
+import React, {
+  useMemo,
+  useRef,
+  useLayoutEffect,
+  useState,
+  useEffect,
+} from "react";
 import type { Task, TeamMember } from "../types";
 import { TaskCard } from "./TaskCard";
 
@@ -16,7 +22,6 @@ export default function KanbanBoard({
   startPointerDrag,
 }: {
   columns: { key: Task["status"]; title: string; items: Task[] }[];
-  // allow optional insertIndex
   onDropTo: (
     s: Task["status"],
     draggedId?: string,
@@ -33,6 +38,75 @@ export default function KanbanBoard({
   startPointerDrag: (id: string, x: number, y: number, target: any) => void;
 }) {
   const [onlyMine, setOnlyMine] = useState(false);
+  const [columnMinHeight, setColumnMinHeight] = useState<number>(0);
+
+  // measurement params
+  const THRESHOLD = 6; // px
+  const DEBOUNCE_MS = 40;
+
+  const measureTimeout = useRef<number | null>(null);
+  const prevMeasured = useRef<number>(0);
+
+  // Measure the inner content height of each column (not the outer minHeight)
+  const measureColumns = () => {
+    // select inner wrappers that contain the cards
+    const nodes = Array.from(
+      document.querySelectorAll<HTMLElement>("[data-drop-key] .kanban-inner")
+    );
+    if (!nodes.length) return 0;
+    const heights = nodes.map((n) => Math.ceil(n.scrollHeight));
+    const max = heights.length ? Math.max(...heights) : 0;
+    return max;
+  };
+
+  const scheduleMeasureAndSet = () => {
+    if (measureTimeout.current) window.clearTimeout(measureTimeout.current);
+    measureTimeout.current = window.setTimeout(() => {
+      const measured = measureColumns();
+      const buffer = 16; // give some breathing room for dropping
+      const desired = measured + buffer;
+      if (Math.abs(prevMeasured.current - desired) > THRESHOLD) {
+        prevMeasured.current = desired;
+        setColumnMinHeight(desired);
+      }
+      measureTimeout.current = null;
+    }, DEBOUNCE_MS) as unknown as number;
+  };
+
+  // initial measure & when columns change
+  useLayoutEffect(() => {
+    scheduleMeasureAndSet();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [columns.length, columns.map((c) => c.items.length).join(","), onlyMine]);
+
+  // ResizeObserver on the inner wrappers so changes inside cards update measurement
+  useEffect(() => {
+    if (typeof ResizeObserver === "undefined") {
+      scheduleMeasureAndSet();
+      return;
+    }
+    const nodes = Array.from(
+      document.querySelectorAll<HTMLElement>("[data-drop-key] .kanban-inner")
+    );
+    const ro = new ResizeObserver(() => {
+      scheduleMeasureAndSet();
+    });
+    nodes.forEach((n) => ro.observe(n));
+
+    // images may load after render and change inner.scrollHeight
+    const imgs = Array.from(document.querySelectorAll<HTMLImageElement>("img"));
+    const onImgLoad = () => scheduleMeasureAndSet();
+    imgs.forEach((img) => img.addEventListener("load", onImgLoad));
+
+    return () => {
+      ro.disconnect();
+      imgs.forEach((img) => img.removeEventListener("load", onImgLoad));
+      if (measureTimeout.current) window.clearTimeout(measureTimeout.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [columns.length, columns.map((c) => c.items.length).join(",")]);
+
+  // ----- rest (unchanged logic) -----
   const priorityAccent = (priority?: Task["priority"]) => {
     if (priority === "urgent") return "bg-red-500/80 dark:bg-red-500/80";
     if (priority === "medium") return "bg-amber-400/85 dark:bg-amber-400/70";
@@ -100,41 +174,24 @@ export default function KanbanBoard({
     [allTasks, currentMemberId, team]
   );
 
-  // helper: compute insertIndex inside a column element for given clientY
-  // helper robust: compute insert index inside column for given clientY
   const computeInsertIndex = (columnEl: HTMLElement, clientY: number) => {
-    // get all cards in DOM order (must be actual card elements with data-task-id)
     const cards = Array.from(
       columnEl.querySelectorAll<HTMLElement>("[data-task-id]")
     );
-
-    // if column is empty -> insert at 0
     if (!cards.length) return 0;
-
-    // check each card midline (insert before first card whose midline is below pointer)
     for (let i = 0; i < cards.length; i++) {
       const r = cards[i].getBoundingClientRect();
       const mid = r.top + r.height / 2;
       if (clientY < mid) return i;
     }
-
-    // pointer is below all card midlines -> consider appending.
-    // But ensure pointer is still inside the column visual area (not outside page)
     const lastRect = cards[cards.length - 1].getBoundingClientRect();
     const colRect = columnEl.getBoundingClientRect();
-
-    // if pointer is below last card but still above column bottom -> append to end
     if (clientY >= lastRect.bottom && clientY <= colRect.bottom) {
       return cards.length;
     }
-
-    // If pointer is further down (maybe column has extra padding or user dropped just outside),
-    // still treat as append.
     if (clientY > colRect.bottom) {
       return cards.length;
     }
-
-    // fallback: append
     return cards.length;
   };
 
@@ -162,14 +219,12 @@ export default function KanbanBoard({
                 : "bg-white text-slate-700 dark:bg-gray-800 dark:text-slate-100 border border-gray-200 dark:border-gray-700"
             }`}
           >
-            {/* icon */}
             <span
               className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs ${
                 onlyMine ? "bg-white/20" : "bg-sky-100 dark:bg-white/5"
               }`}
               aria-hidden
             >
-              {/* small person icon (emoji keeps it simple) */}
               👤
             </span>
 
@@ -193,7 +248,7 @@ export default function KanbanBoard({
             : col.items;
 
           return (
-            <div key={col.key} className="rounded-lg min-h-[300px]">
+            <div key={col.key} className="rounded-lg">
               <div className="flex items-center justify-between mb-3">
                 <h4 className="font-semibold text-lg text-slate-900 dark:text-slate-100">
                   {col.title}
@@ -203,6 +258,7 @@ export default function KanbanBoard({
                 </span>
               </div>
 
+              {/* outer drop container gets minHeight; inner wrapper holds cards */}
               <div
                 data-drop-key={col.key}
                 onDragOver={(e) => e.preventDefault()}
@@ -210,42 +266,44 @@ export default function KanbanBoard({
                   e.preventDefault();
                   const dtId =
                     e.dataTransfer?.getData("text/plain") || undefined;
-
-                  // compute insertIndex using event clientY and DOM order inside the column
                   const colEl = e.currentTarget as HTMLElement;
                   const idx = computeInsertIndex(colEl, e.clientY);
-
-                  // call parent with insertIndex
                   onDropTo(col.key, dtId, idx);
                 }}
-                className="space-y-3 min-h-[800px] p-2 rounded-lg"
+                style={
+                  columnMinHeight ? { minHeight: `${columnMinHeight}px` } : {}
+                }
+                className="p-2 rounded-lg bg-transparent"
               >
-                {visibleItems.map((task: Task) => {
-                  const isBeingDragged =
-                    dragTaskId !== null && task.id === dragTaskId;
-                  return (
-                    <TaskCard
-                      key={task.id}
-                      task={task}
-                      isBeingDragged={isBeingDragged}
-                      dragPos={dragPos}
-                      team={team}
-                      onDragStart={onDragStart}
-                      onDrag={onDrag}
-                      onDragEnd={onDragEnd}
-                      onSelectTask={onSelectTask}
-                      startPointerDrag={startPointerDrag}
-                      priorityAccent={priorityAccent}
-                      priorityPill={priorityPill}
-                    />
-                  );
-                })}
+                {/* inner wrapper: measure this (scrollHeight) to compute minHeight */}
+                <div className="kanban-inner space-y-3">
+                  {visibleItems.map((task: Task) => {
+                    const isBeingDragged =
+                      dragTaskId !== null && task.id === dragTaskId;
+                    return (
+                      <TaskCard
+                        key={task.id}
+                        task={task}
+                        isBeingDragged={isBeingDragged}
+                        dragPos={dragPos}
+                        team={team}
+                        onDragStart={onDragStart}
+                        onDrag={onDrag}
+                        onDragEnd={onDragEnd}
+                        onSelectTask={onSelectTask}
+                        startPointerDrag={startPointerDrag}
+                        priorityAccent={priorityAccent}
+                        priorityPill={priorityPill}
+                      />
+                    );
+                  })}
 
-                {visibleItems.length === 0 && (
-                  <div className="text-sm text-gray-400 py-6 text-center">
-                    No tasks
-                  </div>
-                )}
+                  {visibleItems.length === 0 && (
+                    <div className="text-sm text-gray-400 py-6 text-center">
+                      No tasks
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           );

@@ -36,7 +36,7 @@ export class AskService {
     if (socket) {
       socket.emit("ai_thinking", {
         type: "tool_call",
-        message: `🤖 CommitFlow memproses permintaan tool: ${tool}`,
+        message: `🤖 CommitFlow is processing the tool request: ${tool}`,
         tool,
         args,
       });
@@ -51,7 +51,7 @@ export class AskService {
     if (socket) {
       socket.emit("ai_thinking", {
         type: "tool_result",
-        message: `📊 Hasil tool ${tool} siap.`,
+        message: `📊 Tool result for ${tool} is ready.`,
         tool,
         result,
       });
@@ -62,7 +62,7 @@ export class AskService {
     if (socket) {
       socket.emit("ai_thinking", {
         type: "done",
-        message: `✅ Semua proses selesai.`,
+        message: `✅ All processes completed.`,
       });
     }
   }
@@ -289,7 +289,7 @@ export class AskService {
 
       messages.push({
         role: "system",
-        content: "buatkan summary dari hasil tools call jika ada",
+        content: "generate a summary of the tool call results if available",
       });
       // === At this point, modelMessage does NOT request tools anymore ===
       // Start SSE streaming final answer. Ensure we include tools & tool_choice
@@ -379,7 +379,7 @@ export class AskService {
             choices: [
               {
                 delta: {
-                  content: `Terjadi kesalahan: ${
+                  content: `An error occurred: ${
                     error?.message || String(error)
                   }`,
                 },

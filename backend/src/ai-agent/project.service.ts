@@ -90,38 +90,19 @@ function baseTaskInclude() {
   };
 }
 
-async function buildTaskWhere(
-  userId: string,
-  projectId?: string,
-  status?: string
-) {
-  const team = await prisma.teamMember.findMany({
-    where: {
-      userId,
-    },
-  });
-  const workspaceIds = team.map((item: any) => item.workspaceId);
-  const whereProject: any = {
-    workspaceId: {
-      in: workspaceIds,
-    },
-  };
+function buildTaskWhere(userId: string, projectId?: string, status?: string) {
+  // Only filter by project (no cross-workspace lookup)
+  const where: any = { isTrash: false };
+
   if (projectId) {
-    whereProject.id = projectId;
+    // Directly filter tasks by the given project id
+    where.projectId = projectId;
   }
 
-  const projects = await prisma.project.findMany({
-    where: whereProject,
-  });
+  if (status) {
+    where.status = status;
+  }
 
-  const projectIds = projects.map((item: any) => item.id);
-
-  const where: any = { isTrash: false };
-  if (projectId)
-    where.projectId = {
-      in: projectIds,
-    };
-  if (status) where.status = status;
   return where;
 }
 
