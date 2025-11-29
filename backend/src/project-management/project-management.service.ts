@@ -343,15 +343,6 @@ export class ProjectManagementService {
       clientId?: string | null; // optional client-generated id for idempotency
     }>
   ) {
-    // quick debug log (remove in production when stable)
-    console.log("[createTask] incoming", {
-      clientId: payload.clientId,
-      projectId: payload.projectId,
-      assigneeId: payload.assigneeId,
-      title: payload.title,
-      ts: new Date().toISOString(),
-    });
-
     // validate projectId/assignee exist if provided (and not null)
     if (
       typeof payload.projectId !== "undefined" &&
@@ -401,8 +392,6 @@ export class ProjectManagementService {
       }
     }
 
-    console.log("assigneeId", assigneeId);
-
     // Create task (store startDate/dueDate as strings to match Prisma schema)
     const t = await prisma.task.create({
       data: {
@@ -424,13 +413,6 @@ export class ProjectManagementService {
         clientId: payload.clientId ?? null,
       },
     });
-
-    console.log(
-      "[createTask] created id=",
-      t.id,
-      "clientId=",
-      payload.clientId ?? null
-    );
 
     // return serialized created task (timestamps as ISO)
     return {
@@ -473,7 +455,7 @@ export class ProjectManagementService {
       });
       if (!project) throw new NotFoundException("Project not found");
     }
-    console.log(project);
+
     let assignee: any = null;
     // validate assignee if present and not null
     if (
@@ -580,9 +562,11 @@ export class ProjectManagementService {
     }
 
     if (assigneeId !== data.assigneeId) {
-      emailTitle = `👤 Task Assignee has Changed to ${assignee.name ?? "none"}`;
+      emailTitle = `👤 Task Assignee has Changed to ${
+        assignee?.name ?? "none"
+      }`;
       emailDescription = `👤 A task Assignee has been changed to ${
-        assignee.name ?? "none"
+        assignee?.name ?? "none"
       } on <strong>${projectName}</strong>.`;
     }
 
@@ -595,11 +579,11 @@ export class ProjectManagementService {
     Description:
     ${updated.description ?? "No description"}
 
-    Status: ${updated.status}
-    Assignee: ${assignee.name ?? "none"}
-    Priority: ${updated.priority ?? "none"}
-    Start Date: ${format(updated.startDate)}
-    Due Date: ${format(updated.dueDate)}
+    Status: ${updated?.status}
+    Assignee: ${assignee?.name ?? "none"}
+    Priority: ${updated?.priority ?? "none"}
+    Start Date: ${format(updated?.startDate)}
+    Due Date: ${format(updated?.dueDate)}
 
     Project:
     ${projectName}
@@ -634,22 +618,22 @@ export class ProjectManagementService {
 
             <p style="margin:0 0 14px; font-size:15px;">
               <strong style="color:#2b6cb0;">Status:</strong> ${
-                updated.status
+                updated?.status
               }<br>
               <strong style="color:#2b6cb0;">Assignee:</strong> ${
-                assignee.name ?? "none"
+                assignee?.name ?? "none"
               }<br>
               <strong style="color:#2b6cb0;">Priority:</strong> ${
-                updated.priority ?? "none"
+                updated?.priority ?? "none"
               }
             </p>
 
             <p style="margin:0 0 14px; font-size:15px;">
               <strong style="color:#2b6cb0;">Start Date:</strong> ${format(
-                updated.startDate
+                updated?.startDate
               )}<br>
               <strong style="color:#2b6cb0;">Due Date:</strong> ${format(
-                updated.dueDate
+                updated?.dueDate
               )}
             </p>
 
@@ -678,7 +662,6 @@ export class ProjectManagementService {
       </div>
     `;
 
-    console.log(textMsg);
     // KIRIM EMAIL
     for (const recipient of toEmails) {
       await this.email.sendMail({
@@ -1002,7 +985,7 @@ export class ProjectManagementService {
             },
           });
         }
-        console.log(user);
+
         // create team member
         const tm = await tx.teamMember.create({
           data: {
@@ -1047,7 +1030,6 @@ export class ProjectManagementService {
       photo?: string;
     }>
   ) {
-    console.log(payload);
     // 1) ensure team member exists
     const exists = await prisma.teamMember.findUnique({ where: { id } });
     if (!exists) throw new NotFoundException("Team member not found");
@@ -1101,7 +1083,7 @@ export class ProjectManagementService {
             });
           }
         }
-        console.log(user);
+
         return { teamMember: updatedTeam, user };
       });
 
@@ -1342,17 +1324,11 @@ export class ProjectManagementService {
       include: { assignee: true },
       orderBy: { createdAt: "desc" },
     });
-    console.log(tasks);
+
     const team = await prisma.teamMember.findMany({
       where: { isTrash: false },
       orderBy: { name: "asc" },
     });
-    console.log(team);
-
-    // debug logs to help diagnose empty-sheet issues
-    console.log("[exportXlsx] projects:", projects.length);
-    console.log("[exportXlsx] tasks:", tasks.length);
-    console.log("[exportXlsx] team:", team.length);
 
     const wb = new ExcelJS.Workbook();
 

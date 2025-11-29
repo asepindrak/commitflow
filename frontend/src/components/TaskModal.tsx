@@ -7,6 +7,7 @@ import {
   BubblesIcon,
   Check,
   File,
+  Loader2,
   MessageSquare,
   Paperclip,
   Save,
@@ -54,6 +55,7 @@ export default function TaskModal({
   const [local, setLocal] = useState<Task>(task);
   const [commentText, setCommentText] = useState("");
   const [files, setFiles] = useState<File[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const currentAssignee = team.find((t) => t.id === task.assigneeId);
@@ -132,9 +134,7 @@ export default function TaskModal({
       );
 
       setLocal((s) => ({
-        ...s,
         comments: [
-          ...(s.comments || []),
           {
             id: Math.random().toString(36).slice(2, 9),
             author: currentMemberName ?? "No Name",
@@ -142,7 +142,9 @@ export default function TaskModal({
             createdAt: new Date().toISOString(),
             attachments,
           },
+          ...(s.comments || []),
         ],
+        ...s,
       }));
 
       setCommentText("");
@@ -250,6 +252,136 @@ export default function TaskModal({
     }
   };
 
+  // --- tambahkan bersama function lainnya di komponen (mis. setelah handleAssigneeChange) ---
+  // props: onAddComment: (author, body, attachments?) => Promise<any>
+
+  async function handleSaveClick() {
+    setIsLoading(true);
+    const toSave: Task = { ...local };
+
+    // normalize simple empty strings -> null like sebelumya
+    if (!toSave.assigneeId && toSave.assigneeName) {
+      const member = team.find((m) => m.name === toSave.assigneeName);
+      if (member) toSave.assigneeId = member.id;
+    }
+    if (toSave.assigneeId === "") toSave.assigneeId = null;
+    if (toSave.priority === "") toSave.priority = null;
+    if (toSave.startDate === "") toSave.startDate = null;
+    if (toSave.dueDate === "") toSave.dueDate = null;
+
+    // jika ada comment pending, upload + add comment dulu dan await
+    if (!isEmptyQuill(commentText) || files.length > 0) {
+      setUploading(true);
+      let attachments: Attachment[] | undefined = undefined;
+      try {
+        if (files.length > 0) {
+          const folder = `projects/${local.projectId}/tasks/${local.id}`;
+          const urls = await uploadMultipleFilesToS3(files, folder);
+          attachments = urls.map((u, i) => ({
+            id: Math.random().toString(36).slice(2, 9),
+            name: files[i].name,
+            type: files[i].type,
+            size: files[i].size,
+            url: u,
+          }));
+        }
+
+        // await parent to persist comment and return the saved comment object (if parent returns one)
+        let savedComment: any = null;
+        try {
+          savedComment = await onAddComment(
+            currentMemberName ?? "No Name",
+            commentText.trim(),
+            attachments
+          );
+        } catch (e) {
+          // parent might throw or not return; we'll fallback to optimistic tmp comment
+          console.warn("onAddComment threw or rejected:", e);
+          savedComment = null;
+        }
+
+        // use the returned savedComment (server-assigned id / timestamps), fallback to local newComment
+        const newComment =
+          savedComment ??
+          ({
+            id: Math.random().toString(36).slice(2, 9),
+            // keep taskId if available; parent will normalize if needed
+            taskId: toSave.id ?? local.id,
+            author: currentMemberName ?? "No Name",
+            body: commentText.trim(),
+            attachments:
+              attachments && attachments.length > 0 ? attachments : null,
+            createdAt: new Date().toISOString(),
+            isTrash: false,
+          } as any);
+
+        // prepend comment so it shows up immediately
+        toSave.comments = [newComment, ...(toSave.comments || [])];
+
+        // reset editor & pending files
+        setCommentText("");
+        setFiles([]);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+      } catch (err: any) {
+        console.error("[Save] upload/addComment failed:", err);
+        await Swal.fire({
+          title: "Upload/Add comment failed",
+          text: `Gagal upload atau menambahkan komentar: ${
+            err?.message || err
+          }`,
+          icon: "error",
+          background: dark ? "#111827" : undefined,
+          color: dark ? "#e5e7eb" : undefined,
+        });
+        // stop save to avoid losing comment; keep modal open
+        setUploading(false);
+        setIsLoading(false);
+        return;
+      } finally {
+        setUploading(false);
+      }
+    }
+
+    // now safe to call onSave (parent will include comments)
+    try {
+      await onSave(toSave);
+      // close modal only after successful save
+      onClose();
+    } catch (err: any) {
+      console.error("onSave failed", err);
+      await Swal.fire({
+        title: "Save failed",
+        text: err?.message || String(err),
+        icon: "error",
+        background: dark ? "#111827" : undefined,
+        color: dark ? "#e5e7eb" : undefined,
+      });
+      // do not close modal on failure
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  function isEmptyQuill(html?: string | null) {
+    if (!html) return true;
+
+    // jika ada <img ...> treat as non-empty
+    if (/<img[\s\S]*src=/.test(String(html))) return false;
+
+    // replace common html entities
+    let s = String(html)
+      .replace(/&nbsp;/g, " ")
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">");
+
+    // remove all tags and test remaining text
+    s = s.replace(/<[^>]*>/g, "");
+    s = s.replace(/\s+/g, "");
+
+    return s.length === 0;
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
       {/* Backdrop */}
@@ -298,33 +430,25 @@ export default function TaskModal({
 
               <button
                 type="button"
-                onClick={() => {
-                  const toSave: Task = { ...local };
-                  if (!toSave.assigneeId && toSave.assigneeName) {
-                    const member = team.find(
-                      (m) => m.name === toSave.assigneeName
-                    );
-                    if (member) toSave.assigneeId = member.id;
-                  }
-                  if (toSave.assigneeId === "") toSave.assigneeId = null;
-                  if (toSave.priority === "") toSave.priority = null;
-                  if (toSave.startDate === "") toSave.startDate = null;
-                  if (toSave.dueDate === "") toSave.dueDate = null;
-
-                  onSave(toSave);
-                  onClose();
-                }}
+                disabled={isLoading || uploading}
+                onClick={handleSaveClick}
                 className="group inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold
              bg-gradient-to-r from-sky-500 to-sky-600 text-white
              hover:from-sky-600 hover:to-sky-700
              active:scale-95 transition-all duration-300
              dark:from-sky-600 dark:to-sky-700 dark:hover:from-sky-700 dark:hover:to-sky-800"
               >
-                <Save
-                  size={16}
-                  className="transition-transform duration-300 group-hover:-rotate-6"
-                />
-                <span>Save</span>
+                {isLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <>
+                    <Save
+                      size={16}
+                      className="transition-transform duration-300 group-hover:-rotate-6"
+                    />
+                    <span>Save</span>
+                  </>
+                )}
               </button>
 
               <button
@@ -570,7 +694,7 @@ export default function TaskModal({
               }`}
                       >
                         {uploading ? (
-                          "Uploading…"
+                          <Loader2 className="w-4 h-4 animate-spin" />
                         ) : (
                           <>
                             <MessageSquare

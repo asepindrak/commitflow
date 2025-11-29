@@ -4,6 +4,8 @@ import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 // import { ApiKeyGuard } from './common/guards/api-key.guard';
 import { ValidationPipe } from "@nestjs/common";
 
+import cookieParser from "cookie-parser";
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   // app.useGlobalGuards(new ApiKeyGuard(new Reflector()));
@@ -29,6 +31,8 @@ async function bootstrap() {
     credentials: true,
     allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
   });
+
+  app.use(cookieParser());
 
   const config = new DocumentBuilder()
     .setTitle("CommitFlow API")

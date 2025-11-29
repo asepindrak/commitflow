@@ -9,7 +9,7 @@ import {
 import { PrismaClient } from "@prisma/client";
 import { JwtService } from "@nestjs/jwt";
 import { RegisterDto } from "./dto/register.dto";
-import { comparePassword, hashPassword } from "./utils";
+import { comparePassword, hashPassword, tryDecodeJwt } from "./utils";
 import { LoginDto } from "./dto/login.dto";
 import * as bcrypt from "bcrypt";
 
@@ -30,7 +30,7 @@ export class AuthService {
 
   async generateTokens(userId: string, extra: Record<string, any> = {}) {
     const payload = { sub: userId, userId, ...extra };
-    const accessToken = this.jwtService.sign(payload, { expiresIn: "15m" });
+    const accessToken = this.jwtService.sign(payload, { expiresIn: "1d" });
     const refreshToken = this.jwtService.sign(payload, { expiresIn: "7d" });
     return { accessToken, refreshToken };
   }
@@ -76,11 +76,30 @@ export class AuthService {
     if (!match) return null;
 
     // rotation: issue new tokens and replace stored hash
-    const { accessToken, refreshToken } = await this.generateTokens(userId, {
-      teamMemberId: payload.teamMemberId ?? undefined,
-    });
+    const { accessToken, refreshToken } = await this.generateTokens(userId);
+
+    const accessPayload = tryDecodeJwt(accessToken);
+    const refreshPayload = tryDecodeJwt(refreshToken);
+
+    // save new refresh token hash + expiry
     await this.saveRefreshToken(userId, refreshToken);
-    return { accessToken, refreshToken };
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { session_token: accessToken },
+    });
+
+    const teamMember: any = await this.prisma.teamMember.findFirst({
+      where: { userId },
+    });
+    if (!teamMember) throw new UnauthorizedException("Invalid credentials");
+
+    return {
+      token: accessToken,
+      refreshToken: refreshToken,
+      user,
+      teamMember,
+    };
   }
 
   // ---------------- existing methods (adapted to return refresh token) ----------------
@@ -95,9 +114,9 @@ export class AuthService {
       user = await this.prisma.user.create({
         data: { id: clientUserId || undefined },
       });
-      console.log("Created new anonymous user:", user.id);
+      // console.log("Created new anonymous user:", user.id);
     } else {
-      console.log("Existing user found:", user.id);
+      // console.log("Existing user found:", user.id);
     }
 
     // generate tokens (access + refresh)
@@ -124,7 +143,6 @@ export class AuthService {
     if (existing) throw new ConflictException("Email already registered");
 
     try {
-      console.log(workspace);
       const result = await this.prisma.$transaction(async (tx) => {
         const createWorkspace = await tx.workspace.create({
           data: { name: workspace, createdAt: new Date() },
@@ -160,9 +178,7 @@ export class AuthService {
       });
 
       // issue tokens and save refresh
-      const tokens = await this.generateTokens(result.user.id, {
-        teamMemberId: result.teamMember.id,
-      });
+      const tokens = await this.generateTokens(result.user.id);
       await this.saveRefreshToken(result.user.id, tokens.refreshToken);
 
       // Save access token in session_token for compat
@@ -176,7 +192,6 @@ export class AuthService {
         refreshToken: tokens.refreshToken,
         user: result.user,
         teamMember: result.teamMember,
-        teamMemberId: result.teamMember.id,
         workspace: result.workspace,
         clientTempId,
       };
@@ -215,9 +230,7 @@ export class AuthService {
     });
     if (!teamMember) throw new UnauthorizedException("Invalid credentials");
 
-    const tokens = await this.generateTokens(user.id, {
-      teamMemberId: teamMember.id,
-    });
+    const tokens = await this.generateTokens(user.id);
     await this.saveRefreshToken(user.id, tokens.refreshToken);
 
     await this.prisma.user.update({
@@ -234,7 +247,6 @@ export class AuthService {
       refreshToken: tokens.refreshToken,
       user,
       teamMember,
-      teamMemberId: teamMember.id,
     };
   }
 

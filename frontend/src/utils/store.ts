@@ -6,6 +6,25 @@ import type { AuthResult } from "../api/authApi";
 
 const API_BASE = import.meta.env.VITE_API_URL?.replace(/\/$/, "") ?? "";
 
+/** helpers untuk localStorage ops yang kita gunakan berulang */
+function safeSetItem(k: string, v: string) {
+  try {
+    localStorage.setItem(k, v);
+  } catch {}
+}
+function safeRemoveItem(k: string) {
+  try {
+    localStorage.removeItem(k);
+  } catch {}
+}
+function clearSessionStorage() {
+  safeRemoveItem("session_token");
+  safeRemoveItem("refresh_token");
+  safeRemoveItem("token");
+  safeRemoveItem("userId");
+  safeRemoveItem("user");
+}
+
 /**
  * Message store (persisted) — sama seperti yang kamu punya
  */
@@ -41,19 +60,18 @@ const useStore = create<MessageStore>()(
 
 // Top-level guards to prevent refresh storms and duplicate attempts per page load
 let refreshPromise: Promise<string | null> | null = null;
-let refreshAttempted = false; // ensure we only try refresh once per page load unless explicitly desired
 
 type AuthState = {
   token: string | null;
+  refreshToken?: string | null;
   userId: string | null;
-  teamMemberId?: string | null;
   user?: any | null;
   // actions
   initSession: () => Promise<string | null>;
   setAuth: (payload: {
     token: string;
+    refreshToken?: string | null;
     userId: string;
-    teamMemberId?: string | null;
     user?: any | null;
   }) => void;
   register: (payload: {
@@ -70,59 +88,181 @@ const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
       token: null,
+      refreshToken: null,
       userId: null,
-      teamMemberId: null,
       user: null,
 
       // Initialize session from persisted state / localStorage
       async initSession() {
         const current = get();
+        // If we already have an in-memory token, just return it (no double refresh).
         if (current.token) return current.token;
 
-        // Try localStorage first (backwards compat)
+        // Read localStorage values but DON'T set in-memory yet.
         const tokenFromLS =
           localStorage.getItem("session_token") ||
           localStorage.getItem("token");
+        const refreshFromLS = localStorage.getItem("refresh_token");
         const userIdFromLS = localStorage.getItem("userId");
         const userFromLS = localStorage.getItem("user")
           ? JSON.parse(localStorage.getItem("user")!)
           : null;
 
-        if (tokenFromLS) {
-          set({
-            token: tokenFromLS,
-            userId: userIdFromLS ?? null,
-            user: userFromLS ?? null,
-          });
-          return tokenFromLS;
+        // If a refresh request is already in flight, await it
+        if (refreshPromise) {
+          return await refreshPromise;
         }
 
-        // If we've already tried refresh this page load, don't spam the server again
-        if (refreshAttempted) return null;
-
-        // If a refresh request is already in flight, await it
-        if (refreshPromise) return await refreshPromise;
-
-        refreshAttempted = true;
+        // Start a refresh attempt (defensive + logging)
         refreshPromise = (async () => {
           try {
-            const parsed = await apiRefresh();
+            // defensive check: ensure apiRefresh is defined
+            if (typeof apiRefresh !== "function") {
+              console.error(
+                "[initSession] apiRefresh is not a function! falling back to direct fetch."
+              );
+              throw new Error("apiRefresh_missing");
+            }
+
+            // try normal apiRefresh first
+            let parsed: any = null;
+            try {
+              parsed = await apiRefresh();
+            } catch (e) {
+              console.warn("[initSession] apiRefresh threw error:", e);
+            }
+
+            // If apiRefresh returned nothing (or returned stale token without network),
+            // fallback to doing a direct fetch to the refresh endpoint so we can see it in Network.
+            // Build URL respecting API_BASE if present.
+            const base =
+              (import.meta.env.VITE_API_URL || "").replace(/\/$/, "") || "";
+            const refreshUrl = base ? `${base}/auth/refresh` : "/auth/refresh";
+
+            if ((!parsed || !parsed.token) && !parsed?.__ok_from_apiRefresh) {
+              // add timing log so we can see this path in console
+              try {
+                const resp = await fetch(refreshUrl, {
+                  method: "POST", // or GET depending on your server. try POST first.
+                  credentials: "include",
+                  headers: { "Content-Type": "application/json" },
+                  // no body: server should use cookie; if your server expects body, change accordingly
+                });
+
+                if (resp.ok) {
+                  try {
+                    const body = await resp.json();
+                    parsed = body;
+                    // mark that parsed came from real fetch
+                    parsed.__ok_from_direct_fetch = true;
+                  } catch (e) {
+                    console.warn(
+                      "[initSession] direct fetch ok but failed to parse json:",
+                      e
+                    );
+                  }
+                } else {
+                  console.warn(
+                    "[initSession] direct fetch returned non-ok status:",
+                    resp.status
+                  );
+                }
+              } catch (e) {
+                console.warn(
+                  "[initSession] direct fetch to refresh endpoint failed:",
+                  e
+                );
+              }
+            } else {
+              console.debug(
+                "[initSession] apiRefresh returned parsed:",
+                parsed && { hasToken: !!parsed.token }
+              );
+            }
+
+            // If parsed contains token — use it
             if (parsed?.token) {
               set({
                 token: parsed.token,
-                userId: localStorage.getItem("userId") ?? null,
-                user: userFromLS ?? null,
+                refreshToken: parsed.refreshToken ?? null,
+                userId: parsed.userId ?? null,
+                user: parsed.user ?? null,
               });
+
               try {
                 localStorage.setItem("session_token", parsed.token);
+                if (parsed.refreshToken)
+                  localStorage.setItem("refresh_token", parsed.refreshToken);
+                if (parsed.userId)
+                  localStorage.setItem("userId", parsed.userId);
+                if (parsed.user)
+                  localStorage.setItem("user", JSON.stringify(parsed.user));
               } catch {}
+
               return parsed.token;
             }
-            return null;
-          } catch (e) {
+
+            // No token from server. Fallback to tokenFromLS if available (soft fallback)
+            if (tokenFromLS) {
+              console.debug(
+                "[initSession] no token from refresh; falling back to tokenFromLS"
+              );
+              set({
+                token: tokenFromLS,
+                refreshToken: refreshFromLS ?? null,
+                userId: userIdFromLS ?? null,
+                user: userFromLS ?? null,
+              });
+              return tokenFromLS;
+            }
+
+            // nothing anywhere -> clear
+            console.debug(
+              "[initSession] no token anywhere -> clearing session"
+            );
             try {
               localStorage.removeItem("session_token");
+              localStorage.removeItem("refresh_token");
+              localStorage.removeItem("token");
+              localStorage.removeItem("userId");
+              localStorage.removeItem("user");
             } catch {}
+
+            set({
+              token: null,
+              refreshToken: null,
+              userId: null,
+              user: null,
+            });
+            return null;
+          } catch (err) {
+            console.error(
+              "[initSession] unexpected error during refresh:",
+              err
+            );
+            // fallback to tokenFromLS if available
+            if (tokenFromLS) {
+              set({
+                token: tokenFromLS,
+                refreshToken: refreshFromLS ?? null,
+                userId: userIdFromLS ?? null,
+                user: userFromLS ?? null,
+              });
+              return tokenFromLS;
+            }
+            try {
+              localStorage.removeItem("session_token");
+              localStorage.removeItem("refresh_token");
+              localStorage.removeItem("token");
+              localStorage.removeItem("userId");
+              localStorage.removeItem("user");
+            } catch {}
+            set({
+              token: null,
+              refreshToken: null,
+              userId: null,
+              user: null,
+            });
             return null;
           } finally {
             refreshPromise = null;
@@ -133,35 +273,37 @@ const useAuthStore = create<AuthState>()(
       },
 
       setAuth(payload) {
-        const { token, userId, teamMemberId, user } = payload;
+        const { token, refreshToken, userId, user } = payload;
         try {
-          if (token) localStorage.setItem("session_token", token);
-        } catch {
-          console.log("error session_token");
-        }
+          if (token) safeSetItem("session_token", token);
+          if (refreshToken) safeSetItem("refresh_token", refreshToken);
+        } catch {}
         try {
-          if (userId) localStorage.setItem("userId", userId);
-          if (user) localStorage.setItem("user", JSON.stringify(user));
-        } catch {
-          console.log("error session_token");
-        }
-        set({ token, userId, user, teamMemberId: teamMemberId ?? null });
+          if (userId) safeSetItem("userId", userId);
+          if (user) safeSetItem("user", JSON.stringify(user));
+        } catch {}
+        set({
+          token: token ?? null,
+          refreshToken: refreshToken ?? null,
+          userId: userId ?? null,
+          user: user ?? null,
+        });
       },
 
       async register(payload: any) {
         const result: AuthResult = await apiRegister(payload);
         set({
           token: result.token,
+          refreshToken: (result as any).refreshToken ?? null,
           userId: result.userId,
           user: result.user,
-          teamMemberId: result.teamMemberId ?? null,
         });
         try {
-          localStorage.setItem("session_token", result.token);
-          localStorage.setItem("userId", result.userId);
-          localStorage.setItem("user", JSON.stringify(result.user));
-          if (result.teamMemberId)
-            localStorage.setItem("teamMemberId", result.teamMemberId);
+          safeSetItem("session_token", result.token);
+          if ((result as any).refreshToken)
+            safeSetItem("refresh_token", (result as any).refreshToken);
+          safeSetItem("userId", result.userId);
+          safeSetItem("user", JSON.stringify(result.user));
         } catch {}
         return result;
       },
@@ -170,16 +312,16 @@ const useAuthStore = create<AuthState>()(
         const result: AuthResult = await apiLogin(payload);
         set({
           token: result.token,
+          refreshToken: (result as any).refreshToken ?? null,
           userId: result.userId,
           user: result.user,
-          teamMemberId: result.teamMemberId ?? null,
         });
         try {
-          localStorage.setItem("session_token", result.token);
-          localStorage.setItem("userId", result.userId);
-          localStorage.setItem("user", JSON.stringify(result.user));
-          if (result.teamMemberId)
-            localStorage.setItem("teamMemberId", result.teamMemberId);
+          safeSetItem("session_token", result.token);
+          if ((result as any).refreshToken)
+            safeSetItem("refresh_token", (result as any).refreshToken);
+          safeSetItem("userId", result.userId);
+          safeSetItem("user", JSON.stringify(result.user));
         } catch {}
         return result;
       },
@@ -193,19 +335,17 @@ const useAuthStore = create<AuthState>()(
           }
         })();
 
-        try {
-          localStorage.removeItem("session_token");
-          localStorage.removeItem("token");
-          localStorage.removeItem("userId");
-          localStorage.removeItem("teamMemberId");
-          localStorage.removeItem("user");
-        } catch {}
+        clearSessionStorage();
 
         // clear guards so a new session on the same page load can attempt refresh again
-        refreshAttempted = false;
         refreshPromise = null;
 
-        set({ token: null, userId: null, teamMemberId: null, user: null });
+        set({
+          token: null,
+          refreshToken: null,
+          userId: null,
+          user: null,
+        });
       },
     }),
     { name: "auth-storage" }

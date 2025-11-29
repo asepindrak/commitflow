@@ -118,7 +118,7 @@ export default function AuthCard({ onAuthSuccess, initialEmail }: Props) {
         toast.error(err?.message || "Login gagal");
         return;
       }
-      console.log(result);
+
       onAuthSuccess?.(result);
     } catch (err: any) {
       console.error(err);
