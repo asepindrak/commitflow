@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.8
+
+### Patch Changes
+
+- 01e548d: fix refresh token & comment
+
 ## 1.3.6
 
 ### Patch Changes
