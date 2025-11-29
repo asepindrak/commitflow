@@ -224,6 +224,15 @@ S3_ACCESS_KEY=
 S3_SECRET_KEY=
 # S3 COMPATIBLE STORAGE
 S3_ENDPOINT_URL=
+
+# Mail Server
+SMTP_HOST=host.docker.internal
+SMTP_PORT=587
+SMTP_USER=task@commitflow.space
+SMTP_PASS=
+SMTP_SECURE=false    # true for SMTPS(465), false for STARTTLS (587)
+FROM_NAME=CommitFlow
+FROM_ADDRESS=task@commitflow.space
 ```
 
 > **Note:** Use `db` as the PostgreSQL host inside Docker (not `localhost`).
