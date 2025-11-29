@@ -129,10 +129,11 @@ export default function CreateProjectModal({
 
           <label className="block text-sm mb-4">
             <span className="text-xs text-gray-500 dark:text-gray-400">
-              Description (optional)
+              Description
             </span>
             <textarea
               value={description}
+              required
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Short description"
               className="mt-1 block w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-gray-900 border border-gray-100 dark:border-gray-700 text-sm outline-none focus:ring-1 focus:ring-sky-300 min-h-[96px]"

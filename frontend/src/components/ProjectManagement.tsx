@@ -1,3 +1,4 @@
+/* eslint-disable no-constant-binary-expression */
 /* eslint-disable no-empty */
 import React, { useEffect, useRef, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -68,7 +69,8 @@ export default function ProjectManagement({
   const [tasks, setTasks] = useState<Task[]>([]);
   const [inviteLink, setInviteLink] = useState<string>("");
 
-  const { setWorkspaceId, setProjectId } = useStoreWorkspace();
+  const { workspaceId, setWorkspaceId, projectId, setProjectId } =
+    useStoreWorkspace();
 
   const [activeProjectId, setActiveProjectId] = useState<string>(
     initialProjectId ? initialProjectId : projects[0]?.id ?? ""
@@ -1774,17 +1776,22 @@ export default function ProjectManagement({
     tasks?: Task[];
     team?: string[] | any[];
   }) {
-    // helper
     const genTmpId = () => `tmp_${Math.random().toString(36).slice(2, 9)}`;
 
-    // Normalize incoming team
+    // snapshot of current global team state (use the team variable from your component scope)
+    const existingTeamById = new Map<string, TeamMember>(
+      (team || []).map((m) => [nid(m.id), m])
+    );
+    const existingTeamIds = new Set(Array.from(existingTeamById.keys()));
+
+    // Normalize incoming team rows
     const incomingTeam: TeamMember[] = (payload.team || []).map((r: any) => {
       if (typeof r === "string") {
         return {
           id: "",
           clientId: undefined,
           userId: "",
-          workspaceId: activeWorkspaceId || "",
+          workspaceId: workspaceId || "",
           name: r,
           role: null,
           email: null,
@@ -1799,11 +1806,7 @@ export default function ProjectManagement({
         id: r.id ?? r.ID ?? r.Id ?? "",
         clientId: r.clientId ?? r.clientid ?? undefined,
         userId: r.userId ?? r.userid ?? r.user ?? "",
-        workspaceId:
-          (activeWorkspaceId || r.workspaceId) ??
-          r.workspaceid ??
-          r.workspace ??
-          "",
+        workspaceId: workspaceId ?? "",
         name: r.name ?? r.Name ?? r.username ?? "",
         role: r.role ?? r.Role ?? null,
         email: r.email ?? r.Email ?? null,
@@ -1815,137 +1818,181 @@ export default function ProjectManagement({
       } as TeamMember;
     });
 
-    // Merge helper (prefer incoming fields, preserve prev ids if possible)
+    // Merge incoming with existing team (prefer existing entries when ids match)
     const mergeTeam = (prev: TeamMember[], incoming: TeamMember[]) => {
-      const byId = new Map(prev.filter((p) => !!p.id).map((p) => [p.id, p]));
-      const byNameLower = new Map(prev.map((p) => [p.name.toLowerCase(), p]));
+      const byId = new Map(
+        prev.filter((p) => !!p.id).map((p) => [nid(p.id), p])
+      );
+      const byNameLower = new Map(
+        prev.map((p) => [p?.name ? p?.name.toLowerCase() : "", p])
+      );
       for (const n of incoming) {
+        // normalize incoming id (keep original string as-is but use nid() as key)
         if (!n.id) n.id = genTmpId();
-        n.workspaceId = activeWorkspaceId; // force to active workspace
+        n.workspaceId = workspaceId;
+        const nidIncoming = nid(n.id);
         const nameLower = (n.name ?? "").toLowerCase();
-        if (n.id && byId.has(n.id)) {
-          const ex = byId.get(n.id)!;
-          byId.set(n.id, { ...ex, ...n });
+        if (nidIncoming && byId.has(nidIncoming)) {
+          const ex = byId.get(nidIncoming)!;
+          byId.set(nidIncoming, { ...ex, ...n });
         } else if (n.name && byNameLower.has(nameLower)) {
           const ex = byNameLower.get(nameLower)!;
           const idToUse = ex.id || n.id || genTmpId();
           const merged = { ...ex, ...n, id: idToUse };
-          byId.set(idToUse, merged);
+          byId.set(nid(idToUse), merged);
         } else {
-          if (n.id) byId.set(n.id, n);
+          if (n.id) byId.set(nidIncoming, n);
           else if (n.name) byNameLower.set(nameLower, n);
         }
       }
       const result: TeamMember[] = [];
       for (const v of byId.values()) result.push(v);
       for (const v of byNameLower.values()) {
-        if (!result.some((r) => r.name.toLowerCase() === v.name.toLowerCase()))
+        if (
+          !result.some((r) =>
+            r?.name ? r?.name.toLowerCase() : "" === v.name.toLowerCase()
+          )
+        )
           result.push(v);
       }
       return result;
     };
 
-    // Merge incoming team with existing `team` state
     const mergedTeam = mergeTeam(team, incomingTeam);
+
     if ((incomingTeam || []).length > 0) {
       // optimistic show
       setTeam(mergedTeam);
     }
 
-    // START parallel member creation (create all tmp members in parallel)
-    // Collect members that need creation (id starts with tmp_ or blank)
-    const membersToCreate = mergedTeam.filter(
-      (m) => !m.id || nid(m.id).startsWith("tmp_")
-    );
-    // Build payloads
-    const memberCreatePromises = membersToCreate.map((m) => {
-      const clientId = nid(m.id).startsWith("tmp_") ? m.id : genTmpId();
-      const payload = { ...m, clientId, workspaceId: activeWorkspaceId };
-      // Return promise that resolves to { status, result, tmpId }
-      console.log("team payload", payload);
-      return api
-        .createTeamMember(payload)
-        .then((created: any) => ({
-          status: "fulfilled" as const,
-          created,
-          tmpId: clientId,
-        }))
-        .catch((err: any) => ({
-          status: "rejected" as const,
-          err,
-          tmpId: clientId,
-          payload,
-        }));
+    // Build list of members to create:
+    // Create only if:
+    //  - id missing
+    //  - id is tmp
+    //  - OR id provided but not present in existingTeamIds (global state)
+    const membersToCreate = mergedTeam.filter((m) => {
+      const mId = nid(m.id);
+      if (!m.id) return true;
+      if (mId.startsWith("tmp_")) return true;
+      if (!existingTeamIds.has(mId)) return true; // file id not known locally -> create
+      return false; // id exists in global team -> don't create
     });
 
-    // Wait parallel (non-blocking for tasks) but we need results to map assignees
-    const memberResults = await Promise.allSettled(memberCreatePromises);
-    // tmp -> server id map
+    // Prepare mapping containers
     const tmpToServer = new Map<string, string>();
-    // Apply successes: update team state replacing tmp entries with created ones
+    const originalIdToServer = new Map<string, string>();
     const createdMembers: any[] = [];
-    for (const r of memberResults) {
-      if (r.status === "fulfilled") {
-        const res = r.value;
-        if (res.status === "fulfilled") {
-          tmpToServer.set(res.tmpId, res.created.id);
-          createdMembers.push(res.created);
-        } else {
-          // rejected during underlying createTeamMember call (promise resolved to object)
-          const maybe = res as any;
-          if (maybe.tmpId && maybe.payload) {
-            // enqueue create_team for offline
+
+    if (membersToCreate.length > 0) {
+      const memberPromises = membersToCreate.map((m) => {
+        const tmpId = nid(m.id).startsWith("tmp_") ? m.id : genTmpId();
+        const payload = { ...m, clientId: tmpId, workspaceId: workspaceId };
+        console.debug("createTeamMember payload:", payload);
+        return api
+          .createTeamMember(payload)
+          .then((created: any) => ({ ok: true, created, tmpId, payload }))
+          .catch((err: any) => ({ ok: false, err, tmpId, payload }));
+      });
+
+      const memberResults = await Promise.allSettled(memberPromises);
+
+      for (const r of memberResults) {
+        if (r.status === "fulfilled") {
+          const val: any = r.value;
+          if (val.ok) {
+            const created = val.created;
+            const tmpId = val.tmpId;
+            const payload = val.payload ?? {};
+            if (tmpId && created.id) tmpToServer.set(tmpId, created.id);
+            if (payload.id && created.id)
+              originalIdToServer.set(String(payload.id), created.id);
+            const returnedClientId =
+              created.clientId ?? created.client_id ?? null;
+            if (returnedClientId && created.id) {
+              tmpToServer.set(returnedClientId, created.id);
+              originalIdToServer.set(returnedClientId, created.id);
+            }
+            createdMembers.push(created);
+          } else {
+            // enqueue if needed
             try {
               enqueueOp({
                 op: "create_team",
-                payload: maybe.payload,
+                payload: (val as any).payload,
                 createdAt: new Date().toISOString(),
               });
             } catch (e) {
               console.warn("enqueue create_team failed", e);
             }
           }
+        } else {
+          console.warn("member creation promise failed unexpectedly", r);
         }
-      } else {
-        // promise itself failed unexpectedly; ignore but log
-        console.warn("member creation promise failed unexpectedly", r);
+      }
+
+      // Merge server-created members into UI state (replace tmp entries)
+      if (createdMembers.length > 0) {
+        setTeam((prev) => {
+          const map = new Map<string, any>();
+          for (const p of prev) map.set(nid(p.id), { ...p });
+          for (const created of createdMembers) {
+            const clientId = created.clientId ?? created.client_id ?? null;
+            let foundKey: string | undefined;
+            if (clientId) {
+              foundKey = Array.from(map.keys()).find(
+                (k) => k === clientId || map.get(k)?.clientId === clientId
+              );
+            }
+            if (!foundKey) {
+              foundKey = Array.from(map.keys()).find((k) => {
+                const v = map.get(k);
+                if (!v) return false;
+                if (v.name && created.name && v.name === created.name)
+                  return true;
+                if (v.email && created.email && v.email === created.email)
+                  return true;
+                return false;
+              });
+            }
+            if (foundKey) map.delete(foundKey);
+            map.set(nid(created.id), created);
+          }
+          return Array.from(map.values());
+        });
       }
     }
 
-    // If we have actual createdMembers, merge them into team state preferring server objects
-    if (createdMembers.length > 0) {
-      setTeam((prev) => {
-        // replace tmp ids with server objects
-        const map = new Map(prev.map((p) => [p.id, p]));
-        for (const created of createdMembers) {
-          // find any tmp entry matching clientId (we used clientId equal to tmpId)
-          // Some servers return clientId in response; if so prefer lookup
-          const foundKey = Array.from(map.keys()).find(
-            (k) =>
-              k === created.id ||
-              map.get(k)?.id === created.id ||
-              map.get(k)?.clientId === created.clientId
-          );
-          if (foundKey) {
-            map.delete(foundKey);
-          }
-          map.set(created.id, created);
-        }
-        return Array.from(map.values());
-      });
-    }
-
-    // Prepare name->id map from newest team (use tmp->server mapping for resolution)
+    // Rebuild liveTeamSnapshot & nameToId for resolving tasks' assignees
     const liveTeamSnapshot = (mergedTeam || []).map((m) => ({ ...m }));
     for (const [tmp, real] of tmpToServer.entries()) {
       const idx = liveTeamSnapshot.findIndex((x) => nid(x.id) === nid(tmp));
       if (idx !== -1) liveTeamSnapshot[idx].id = real;
     }
+    for (const cm of createdMembers) {
+      const idx = liveTeamSnapshot.findIndex(
+        (x) =>
+          (x.clientId && x.clientId === cm.clientId) ||
+          (x.email && cm.email && x.email === cm.email) ||
+          (x.name && cm.name && x.name === cm.name)
+      );
+      if (idx !== -1) liveTeamSnapshot[idx] = { ...cm };
+      else liveTeamSnapshot.push({ ...cm });
+    }
+
+    // Also include original existing team (global state) into snapshot to ensure matching works
+    for (const existing of team || []) {
+      if (!liveTeamSnapshot.some((s) => nid(s.id) === nid(existing.id))) {
+        liveTeamSnapshot.push({ ...existing });
+      }
+    }
+
     const nameToId = new Map(
-      liveTeamSnapshot.map((m) => [m.name.toLowerCase(), m.id])
+      liveTeamSnapshot
+        .filter((m) => m && m.name)
+        .map((m) => [String(m.name).toLowerCase(), m.id || ""])
     );
 
-    // Normalize incoming tasks and parse comments
+    // Helper to parse comments
     const parseComments = (raw: any) => {
       if (!raw) return [];
       if (Array.isArray(raw)) return raw;
@@ -1966,7 +2013,7 @@ export default function ProjectManagement({
       return {
         id,
         clientId: undefined,
-        projectId: (activeProjectId || r.projectId) ?? r.project ?? null,
+        projectId: projectId ?? null,
         title: r.title ?? r.Title ?? "",
         description: r.description ?? r.Description ?? null,
         status: r.status ?? r.Status ?? "todo",
@@ -1981,7 +2028,6 @@ export default function ProjectManagement({
       } as Task;
     });
 
-    // Dedupe incoming tasks by signature and against existing tasks
     const makeSig = (t: {
       title?: string;
       projectId?: any;
@@ -1993,11 +2039,10 @@ export default function ProjectManagement({
       )}|${nid(t.dueDate)}`;
 
     const existingSignatures = new Set(tasks.map((t) => makeSig(t)));
-
     const uniqueIncoming = incomingTasks.filter((t) => {
       const s = makeSig(t);
       if (!s || existingSignatures.has(s)) return false;
-      existingSignatures.add(s); // avoid duplicates in incoming set itself
+      existingSignatures.add(s);
       return true;
     });
 
@@ -2006,57 +2051,71 @@ export default function ProjectManagement({
       return;
     }
 
-    // Ensure all incoming tasks have tmp_ ids and map assignee to any real ids if available
+    // Prepare tasks: resolve assigneeId with safe priority:
+    // 1) if assigneeId matches existingTeamIds -> use as-is (no create)
+    // 2) if assigneeId maps from tmpToServer -> use mapped server id
+    // 3) if assigneeId maps from originalIdToServer -> use mapped server id
+    // 4) fallback: match by assigneeName -> nameToId
+    // 5) else null
     const preparedTasks = uniqueIncoming.map((t) => {
       const tmpId = nid(t.id).startsWith("tmp_") ? t.id : genTmpId();
-      // resolve assigneeId by tmpToServer or name map
       let assigneeId = t.assigneeId ?? null;
-      if (assigneeId && tmpToServer.has(assigneeId))
+
+      if (assigneeId && existingTeamIds.has(nid(assigneeId))) {
+        // assigneeId already exists in global team -> keep it
+        // eslint-disable-next-line no-self-assign
+        assigneeId = assigneeId;
+      } else if (assigneeId && tmpToServer.has(assigneeId)) {
         assigneeId = tmpToServer.get(assigneeId)!;
-      if ((!assigneeId || assigneeId === "") && t.assigneeName) {
+      } else if (assigneeId && originalIdToServer.has(assigneeId)) {
+        assigneeId = originalIdToServer.get(assigneeId)!;
+      } else if ((!assigneeId || assigneeId === "") && t.assigneeName) {
         const found = nameToId.get(String(t.assigneeName).toLowerCase());
         if (found) assigneeId = found;
+      } else {
+        // final fallback: null (don't send invalid ids to backend)
+        assigneeId = null;
       }
+
       return {
         ...t,
         id: tmpId,
-        projectId: activeProjectId,
+        projectId: projectId,
         assigneeId,
       } as Task;
     });
 
-    // Optimistic: insert prepared tasks to UI (avoid duplicates by signature)
+    // optimistic insert tasks
     setTasks((prev) => {
       const prevSig = new Set(prev.map((p) => makeSig(p)));
       const toAdd = preparedTasks.filter((t) => {
         const s = makeSig(t);
         return !prevSig.has(s);
       });
-      // Put new imported tasks at top
       return [...toAdd, ...prev];
     });
 
-    // Create tasks in parallel (each with clientId = tmpId). Collect results.
+    // create tasks on server
     const taskCreatePromises = preparedTasks.map((t) => {
       const clientId = t.id;
       const payloadForServer: any = {
         ...t,
         clientId,
         id: undefined,
-        // do not send comments array; will create comments separately
         comments: undefined,
-        projectId: activeProjectId,
+        projectId: projectId,
       };
+      console.debug("createTask payload:", payloadForServer);
       return api
         .createTask(payloadForServer)
         .then((created: any) => ({
-          status: "fulfilled" as const,
+          ok: true as const,
           created,
           tmpId: clientId,
           comments: t.comments || [],
         }))
         .catch((err: any) => ({
-          status: "rejected" as const,
+          ok: false as const,
           err,
           tmpId: clientId,
           payload: payloadForServer,
@@ -2064,65 +2123,52 @@ export default function ProjectManagement({
         }));
     });
 
-    const taskResults = await Promise.allSettled(taskCreatePromises);
+    const taskResultsSettled = await Promise.allSettled(taskCreatePromises);
 
-    // Collect successful creations and failures; record tmp->server mapping
     const createdTasks: any[] = [];
     const failedTasksForEnqueue: any[] = [];
-    for (const r of taskResults) {
+    for (const r of taskResultsSettled) {
       if (r.status === "fulfilled") {
         const res = r.value;
-        if (res.status === "fulfilled") {
+        if (res.ok) {
           tmpToServer.set(res.tmpId, res.created.id);
           createdTasks.push(res);
         } else {
-          // underlying promise returned rejected object
-          const maybe = res as any;
-          if (maybe.status === "rejected") {
-            failedTasksForEnqueue.push(maybe);
-          }
+          failedTasksForEnqueue.push(res);
         }
       } else {
         console.warn("task creation promise failed unexpectedly", r);
       }
     }
 
-    // Replace tmp tasks in state with created server tasks, and dedupe by signature/server id
+    // replace tmp tasks with server ones
     if (createdTasks.length > 0) {
       setTasks((prev) => {
-        // build signature->task mapping but prefer server-created tasks
         const sigToTask = new Map<string, Task>();
         const idToTask = new Map<string, Task>();
-        // first put previous tasks (we will overwrite tmp ones)
         for (const p of prev) {
           const pId = nid(p.id);
           const pSig = makeSig(p);
           if (!idToTask.has(pId)) idToTask.set(pId, p);
           if (!sigToTask.has(pSig)) sigToTask.set(pSig, p);
         }
-        // replace tmp entries with created ones and remove signature duplicates
         for (const ct of createdTasks) {
           const created = ct.created;
           const tmpId = ct.tmpId;
           const sig = `${(created.title || "").trim().toLowerCase()}|${nid(
             created.projectId
           )}|${nid(created.startDate)}|${nid(created.dueDate)}`;
-          // delete any existing entries that share signature but are not the created one
           if (sigToTask.has(sig)) {
             const collision = sigToTask.get(sig)!;
             if (nid(collision.id) !== nid(created.id)) {
               idToTask.delete(nid(collision.id));
             }
           }
-          // delete tmp slot
           idToTask.delete(nid(tmpId));
-          // set created
           idToTask.set(nid(created.id), created);
           sigToTask.set(sig, created);
         }
-        // return array with created tasks first, then others (preserve previous order for others)
         const result: Task[] = [];
-        // push created tasks (in same order as createdTasks)
         for (const ct of createdTasks) result.push(ct.created);
         for (const p of idToTask.values()) {
           if (!createdTasks.some((ct) => nid(ct.created.id) === nid(p.id)))
@@ -2132,7 +2178,7 @@ export default function ProjectManagement({
       });
     }
 
-    // For created tasks, create comments in parallel per task
+    // comments creation (same flow as before)
     const commentCreatePromises: Promise<any>[] = [];
     for (const ct of createdTasks) {
       const createdTask = ct.created;
@@ -2140,19 +2186,18 @@ export default function ProjectManagement({
       for (const c of commentsForTask) {
         const payload = {
           author: c.author ?? c.Author ?? "Imported",
-          // eslint-disable-next-line no-constant-binary-expression
           body: c.body ?? c.Body ?? String(c) ?? "",
           attachments: c.attachments ?? c.Attachments ?? [],
         };
         const p = api
           .createComment(createdTask.id, payload)
           .then((createdComment: any) => ({
-            status: "fulfilled" as const,
+            ok: true as const,
             createdComment,
             taskId: createdTask.id,
           }))
           .catch((err: any) => ({
-            status: "rejected" as const,
+            ok: false as const,
             err,
             taskId: createdTask.id,
             payload,
@@ -2163,17 +2208,15 @@ export default function ProjectManagement({
 
     const commentResults = await Promise.allSettled(commentCreatePromises);
 
-    // Apply created comments to tasks state; enqueue failed ones
     const commentsGroupedByTask = new Map<string, any[]>();
     for (const r of commentResults) {
       if (r.status === "fulfilled") {
         const v = r.value;
-        if (v.status === "fulfilled") {
+        if (v.ok) {
           const arr = commentsGroupedByTask.get(v.taskId) ?? [];
           arr.push(v.createdComment);
           commentsGroupedByTask.set(v.taskId, arr);
-        } else if (v.status === "rejected") {
-          // enqueue
+        } else {
           try {
             enqueueOp({
               op: "create_comment",
@@ -2189,7 +2232,6 @@ export default function ProjectManagement({
       }
     }
 
-    // Merge created comments into tasks state
     if (commentsGroupedByTask.size > 0) {
       setTasks((prev) =>
         prev.map((t) => {
@@ -2208,7 +2250,6 @@ export default function ProjectManagement({
       );
     }
 
-    // Enqueue failed task creates along with their comments (for tasks that failed creation)
     for (const f of failedTasksForEnqueue) {
       try {
         enqueueOp({
@@ -2222,7 +2263,6 @@ export default function ProjectManagement({
             payload: {
               taskId: f.tmpId,
               author: c.author ?? "Imported",
-              // eslint-disable-next-line no-constant-binary-expression
               body: c.body ?? String(c) ?? "",
               attachments: c.attachments ?? [],
             },
@@ -2234,14 +2274,21 @@ export default function ProjectManagement({
       }
     }
 
+    // debugging aids
+    console.debug("existingTeamIds:", Array.from(existingTeamIds));
+    console.debug("tmpToServer:", Array.from(tmpToServer.entries()));
+    console.debug(
+      "originalIdToServer:",
+      Array.from(originalIdToServer.entries())
+    );
+    console.debug("nameToId:", Array.from(nameToId.entries()));
+
     toast.dark(
       "Imported tasks & members applied (parallellized; syncing in background)"
     );
   }
 
-  const projectTasks = tasks.filter(
-    (t) => nid(t.projectId) === nid(activeProjectId)
-  );
+  const projectTasks = tasks.filter((t) => nid(t.projectId) === nid(projectId));
   const columns = [
     {
       key: "todo" as Task["status"],

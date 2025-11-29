@@ -40,7 +40,7 @@ export function AssigneeSelect({
   const theme = makeSelectTheme(dark);
 
   const options = team.map((t: TeamMember) => {
-    const hue = hashStr(t.name) % 360; // 0..359
+    const hue = hashStr(t.name ? t.name : "A") % 360; // 0..359
     // choose visible text color and dot background depending on mode:
     const dot = dark ? hsla(hue, 70, 55, 0.95) : hsl(hue, 75, 45);
     const text = dark ? hsl(hue, 70, 75) : hsl(hue, 75, 25);

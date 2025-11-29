@@ -163,6 +163,11 @@ export default function ExportImportControls({
       const project = projects?.find((p) => p.id === selectedProjectId);
       const projectWorkspaceId = project?.workspaceId;
 
+      // Build a map for quick lookup of member email by id
+      const memberEmailById: Map<string, string> = new Map(
+        (team || []).map((m) => [String(m.id), String(m.email ?? "")])
+      );
+
       // Team rows
       const tmRows = team
         .filter((m) => {
@@ -210,6 +215,12 @@ export default function ExportImportControls({
         const updatedDescription =
           descInfo?.html ?? (t as any).description ?? "";
 
+        // find assignee email if available
+        const assigneeIdStr = t.assigneeId ? String(t.assigneeId) : "";
+        const assigneeEmail = assigneeIdStr
+          ? memberEmailById.get(assigneeIdStr) ?? ""
+          : "";
+
         return {
           id: truncateForExcel(t.id ?? "", `task.id:${t.id ?? ""}`),
           clientId: truncateForExcel(
@@ -232,6 +243,11 @@ export default function ExportImportControls({
           assigneeId: truncateForExcel(
             t.assigneeId ?? "",
             `task.assigneeId:${t.id ?? ""}`
+          ),
+          // NEW: add assigneeEmail column
+          assigneeEmail: truncateForExcel(
+            assigneeEmail,
+            `task.assigneeEmail:${t.id ?? ""}`
           ),
           priority: truncateForExcel(
             t.priority ?? "",
