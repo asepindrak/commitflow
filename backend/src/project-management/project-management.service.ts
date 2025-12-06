@@ -518,8 +518,8 @@ export class ProjectManagementService {
         isTrash: false,
         OR: [
           { isAdmin: true },
-          { id: data.assigneeId },
-          { id: data.createdById },
+          { id: data.assigneeId ?? "" },
+          { id: data.createdById ?? "" },
         ],
       },
       select: { email: true },
