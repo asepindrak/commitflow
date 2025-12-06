@@ -78,7 +78,8 @@ model TeamMember {
   isAdmin     Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime?
-  Task        Task[]
+  Task        Task[] @relation("TaskMembers")
+  TaskCreatedBy        Task[] @relation("TaskCreatedBy")
 
   // FK ke Workspace
   workspace     Workspace?  @relation("WorkspaceMembers", fields: [workspaceId], references: [id])
@@ -111,22 +112,24 @@ model Project {
 }
 
 model Task {
-  id          String      @id @default(uuid())
-  title       String
-  description String?
-  status      String      @default("todo")
-  projectId   String?
-  project     Project?    @relation("ProjectTasks", fields: [projectId], references: [id])
-  assigneeId  String?
-  startDate   String?
-  dueDate     String?
-  priority    String?
-  assignee    TeamMember? @relation(fields: [assigneeId], references: [id])
-  isTrash     Boolean     @default(false)
-  comments    Comment[]   @relation("TaskComments")
-  clientId    String?     @unique
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime?
+  id            String      @id @default(uuid())
+  title         String
+  description   String?
+  status        String      @default("todo")
+  projectId     String?
+  project       Project?    @relation("ProjectTasks", fields: [projectId], references: [id])
+  assigneeId    String?
+  startDate     String?
+  dueDate       String?
+  priority      String?
+  assignee      TeamMember? @relation("TaskMembers", fields: [assigneeId], references: [id])
+  isTrash       Boolean     @default(false)
+  comments      Comment[]   @relation("TaskComments")
+  clientId      String?     @unique
+  createdAt     DateTime    @default(now())
+  createdById   String?
+  createdBy     TeamMember? @relation("TaskCreatedBy", fields: [createdById], references: [id])
+  updatedAt     DateTime?
 }
 
 model Comment {
