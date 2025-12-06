@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.9
+
+### Patch Changes
+
+- 8b4369d: fix send email to member
+
 ## 1.3.8
 
 ### Patch Changes
