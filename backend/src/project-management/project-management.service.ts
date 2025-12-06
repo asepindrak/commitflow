@@ -513,13 +513,27 @@ export class ProjectManagementService {
 
     //send email to team members
     const teams = await prisma.teamMember.findMany({
-      where: { workspaceId: project.workspaceId, isTrash: false },
+      where: {
+        workspaceId: project.workspaceId,
+        isTrash: false,
+        OR: [
+          { isAdmin: true },
+          { id: data.assigneeId },
+          { id: data.createdById },
+        ],
+      },
       select: { email: true },
     });
 
     const projectName = project?.name ?? "No Project";
 
-    const toEmails = teams.map((t) => t.email?.trim()).filter(Boolean);
+    const toEmails = Array.from(
+      new Set(
+        teams
+          .map((t) => t.email?.trim().toLowerCase()) // normalisasi
+          .filter(Boolean) // buang null/undefined/empty
+      )
+    );
 
     if (toEmails.length === 0) throw new Error("No recipient emails found");
     // Format tanggal
@@ -757,11 +771,22 @@ export class ProjectManagementService {
 
     //send email to team members
     const teams = await prisma.teamMember.findMany({
-      where: { workspaceId: p.workspaceId ?? "", isTrash: false },
+      where: {
+        workspaceId: p.workspaceId ?? "",
+        isTrash: false,
+        OR: [
+          { isAdmin: true },
+          { id: task.assigneeId ?? "" },
+          { id: task.createdById ?? "" },
+        ],
+      },
       select: { email: true },
     });
 
-    const toEmails = teams.map((t) => t.email?.trim()).filter(Boolean);
+    // Extract + normalize + deduplicate emails
+    const toEmails = Array.from(
+      new Set(teams.map((t) => t.email?.trim().toLowerCase()).filter(Boolean))
+    );
 
     if (toEmails.length === 0) throw new Error("No recipient emails found");
 
