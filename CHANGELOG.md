@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.10
+
+### Patch Changes
+
+- 698d309: chore: up version
+
 ## 1.3.9
 
 ### Patch Changes
