@@ -14,6 +14,7 @@ import {
   Send,
   Trash,
   X,
+  Download,
 } from "lucide-react";
 import Swal from "sweetalert2";
 import type { Task, Attachment, TeamMember } from "../types";
@@ -22,6 +23,7 @@ import { PrioritySelect } from "./PrioritySelect";
 import { AssigneeSelect } from "./AssigneeSelect";
 import { handleWhatsapp, handleWhatsappTask } from "../utils/sendWhatsapp";
 import WhatsappIcon from "./WhatsappIcon";
+import MediaModal from "./MediaModal";
 import { useAuthStore } from "../utils/store";
 import { FaComment } from "react-icons/fa";
 
@@ -57,6 +59,11 @@ export default function TaskModal({
   const [files, setFiles] = useState<File[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [mediaViewerOpen, setMediaViewerOpen] = useState(false);
+  const [mediaViewerUrl, setMediaViewerUrl] = useState<string>("");
+  const [mediaViewerType, setMediaViewerType] = useState<"image" | "video">(
+    "image"
+  );
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const currentAssignee = team.find((t) => t.id === task.assigneeId);
   const assigneePhone = currentAssignee?.phone || "";
@@ -383,6 +390,17 @@ export default function TaskModal({
     return s.length === 0;
   }
 
+  const openMediaViewer = (url: string, type: "image" | "video") => {
+    setMediaViewerUrl(url);
+    setMediaViewerType(type);
+    setMediaViewerOpen(true);
+  };
+
+  const closeMediaViewer = () => {
+    setMediaViewerOpen(false);
+    setMediaViewerUrl("");
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
       {/* Backdrop */}
@@ -603,16 +621,33 @@ export default function TaskModal({
                                         <img
                                           src={a.url}
                                           alt={a.name}
-                                          className="max-h-60 rounded-lg object-cover"
+                                          onClick={() =>
+                                            openMediaViewer(a.url, "image")
+                                          }
+                                          className="max-h-60 rounded-lg object-cover cursor-pointer hover:opacity-80 transition-opacity"
+                                          title="Click to view full size"
                                         />
                                       )}
 
                                       {isVideo && (
-                                        <video
-                                          src={a.url}
-                                          controls
-                                          className="max-h-60 rounded-lg"
-                                        />
+                                        <div className="relative">
+                                          <video
+                                            src={a.url}
+                                            className="max-h-60 rounded-lg cursor-pointer"
+                                            onClick={() =>
+                                              openMediaViewer(a.url, "video")
+                                            }
+                                            title="Click to view in modal"
+                                          />
+                                          <div
+                                            className="absolute inset-0 flex items-center justify-center pointer-events-none"
+                                            aria-hidden="true"
+                                          >
+                                            <div className="w-16 h-16 rounded-full bg-black/50 flex items-center justify-center">
+                                              <div className="w-0 h-0 border-t-8 border-t-transparent border-l-12 border-l-white border-b-8 border-b-transparent ml-1"></div>
+                                            </div>
+                                          </div>
+                                        </div>
                                       )}
                                     </>
                                   )}
@@ -624,23 +659,6 @@ export default function TaskModal({
                                       <span className="text-xs text-gray-400">
                                         ({Math.round((a.size || 0) / 1024)} KB)
                                       </span>
-                                    </div>
-
-                                    <div>
-                                      {a.url ? (
-                                        <a
-                                          href={a.url}
-                                          target="_blank"
-                                          rel="noreferrer"
-                                          className="text-sm underline"
-                                        >
-                                          Open
-                                        </a>
-                                      ) : (
-                                        <span className="text-xs text-gray-400">
-                                          (no url)
-                                        </span>
-                                      )}
                                     </div>
                                   </div>
                                 </div>
@@ -748,6 +766,14 @@ export default function TaskModal({
           </div>
         </div>
       </div>
+
+      {/* Media Viewer Modal */}
+      <MediaModal
+        isOpen={mediaViewerOpen}
+        url={mediaViewerUrl}
+        type={mediaViewerType}
+        onClose={closeMediaViewer}
+      />
     </div>
   );
 }
