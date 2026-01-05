@@ -103,9 +103,23 @@ export async function deleteProjectApi(id: string) {
 /**
  * Tasks
  */
-export async function getTasks(projectId?: string) {
-  const q = projectId ? `?projectId=${encodeURIComponent(projectId)}` : "";
+export async function getTasks(projectId?: string, startDate?: string, endDate?: string) {
+  const q = projectId ? `?projectId=${encodeURIComponent(projectId)}&startDate=${startDate}&endDate=${endDate}` : "";
   const res = await apiFetch(`${BASE}/api/tasks${q}`, { method: "GET" });
+  const parsed = await parseJson(res);
+  if (!res.ok) throw makeError(res, parsed);
+  return parsed;
+}
+
+export async function getMyTasks(memberId?: string, workspaceId?: string, startDate?: string, endDate?: string) {
+  const res = await apiFetch(`${BASE}/api/tasks/me/${memberId}?workspaceId=${workspaceId}&startDate=${startDate}&endDate=${endDate}`, { method: "GET" });
+  const parsed = await parseJson(res);
+  if (!res.ok) throw makeError(res, parsed);
+  return parsed;
+}
+
+export async function getReportTasks(workspaceId?: string, memberId?: string, startDate?: string, endDate?: string) {
+  const res = await apiFetch(`${BASE}/api/tasks/workspace/${workspaceId}?memberId=${memberId}&startDate=${startDate}&endDate=${endDate}`, { method: "GET" });
   const parsed = await parseJson(res);
   if (!res.ok) throw makeError(res, parsed);
   return parsed;

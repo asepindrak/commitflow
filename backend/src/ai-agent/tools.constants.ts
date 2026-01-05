@@ -86,7 +86,7 @@ export const tools = [
   {
     name: "getProjects",
     description:
-      "Retrieve the list of active projects along with task statistics (todo, inprogress, done). The response should include per-project insights: task breakdown by status, completion rate (%), overdue task count, blocked tasks count, recent activity, risk level (low/medium/high) and recommended next steps (e.g., 'reassign overdue tasks', 'prioritize critical bugfixes'). Use this function when the user asks about project lists, project details, or which project contains certain tasks.",
+      "Retrieve the list of active projects along with task statistics (todo, inprogress, qa, deploy, done). The response should include per-project insights: task breakdown by status, completion rate (%), overdue task count, blocked tasks count, recent activity, risk level (low/medium/high) and recommended next steps (e.g., 'reassign overdue tasks', 'prioritize critical bugfixes'). Use this function when the user asks about project lists, project details, or which project contains certain tasks.",
     type: "function",
     function: {
       name: "getProjects",
@@ -110,6 +110,8 @@ export const tools = [
           counts: {
             todo: "number",
             inprogress: "number",
+            qa: "number",
+            deploy: "number",
             done: "number",
             blocked: "number",
             overdue: "number",
@@ -131,7 +133,7 @@ export const tools = [
   {
     name: "getMembers",
     description:
-      "Retrieve the list of team members along with their task statistics and workload insights. Response should include tasks assigned, tasks by status, overdue counts, recent activity, and a short workload recommendation (e.g., 'overloaded — reassign', 'underutilized — assign new tasks'). Use this when the user asks about assignees, workload distribution, or matching an assigneeId.",
+      "Retrieve the list of team members along with their task statistics and workload insights. Response should include tasks assigned, tasks by status, overdue counts, recent activity, and a short workload recommendation (e.g., 'overloaded — reassign', 'underutilized — assign new tasks'). Use this when the user asks about assignees, workload distribution.",
     type: "function",
     function: {
       name: "getMembers",
@@ -155,6 +157,8 @@ export const tools = [
           assignedTaskCount: "number",
           todoCount: "number",
           inprogressCount: "number",
+          qaCount: "number",
+          deployCount: "number",
           doneCount: "number",
           overdueCount: "number",
           lastActivity: "ISO8601 string",
@@ -194,21 +198,31 @@ export const tools = [
           id: "string",
           title: "string",
           description: "string",
-          status: "string (todo|inprogress|done|blocked)",
-          priority: "string (urgent|medium|low)",
-          assigneeId: "string | null",
-          assigneeName: "string | null",
+          status: "todo | inprogress | qa | deploy | done | blocked",
+          priority: "urgent | medium | low",
+          taskAssignees: [
+            {
+              id: "string",
+              name: "string",
+              role: "string | null",
+              email: "string | null",
+              photo: "string | null"
+            }
+          ],
+
           createdAt: "ISO8601 string",
           updatedAt: "ISO8601 string",
           dueDate: "ISO8601 string | null",
           ageDays: "number",
+
           linkedPRs: ["string"],
           linkedIssues: ["string"],
           dependencies: ["taskId"],
+
           blocker: "boolean",
           commentsCount: "number",
-          suggestedAction: "string",
-        },
+          suggestedAction: "string"
+        }
       ],
       summary: {
         totalTasks: "number",
@@ -273,6 +287,64 @@ export const tools = [
   },
 
   {
+    name: "getQaTasks",
+    description:
+      "Retrieve tasks currently in the 'qa' status. These tasks are awaiting quality assurance validation. Include testing readiness, linked PRs/builds, detected issues, blockers, and how long the task has been in QA. The response should help decide whether the task can be approved for deploy, needs fixes, or is blocked. Use this when the user wants to review QA workload, bottlenecks, or release readiness. Can be filtered by projectId.",
+    type: "function",
+    function: {
+      name: "getQaTasks",
+      parameters: {
+        type: "object",
+        properties: {
+          projectId: {
+            type: "string",
+            description: "The target projectId.",
+          },
+        },
+        required: ["projectId"],
+      },
+    },
+    outputFormat: {
+      tasks: "same schema as getAllTasks.tasks",
+      summary: {
+        qaCount: "number",
+        readyForDeployCount: "number",
+        blockedQaCount: "number",
+        stalledQaCount: "number (qa > X days)",
+      },
+    },
+  },
+
+  {
+    name: "getDeployTasks",
+    description:
+      "Retrieve tasks currently in the 'deploy' status. These tasks have passed QA and are ready or undergoing deployment to target environments (staging/production). Include deployment readiness, environment targets, risk level, blockers, and how long the task has been waiting for deployment. The response should support go/no-go release decisions. Can be filtered by projectId.",
+    type: "function",
+    function: {
+      name: "getDeployTasks",
+      parameters: {
+        type: "object",
+        properties: {
+          projectId: {
+            type: "string",
+            description: "The target projectId.",
+          },
+        },
+        required: ["projectId"],
+      },
+    },
+    outputFormat: {
+      tasks: "same schema as getAllTasks.tasks",
+      summary: {
+        deployCount: "number",
+        readyToDeployCount: "number",
+        highRiskDeployCount: "number",
+        stalledDeployCount: "number (deploy > X days)",
+      },
+    },
+  },
+
+  {
     name: "getDoneTasks",
     description:
       "Retrieve tasks with the 'done' status. Include completion date, time-to-complete (days), who completed it, and link to PR or merge if applicable. Useful for trend analysis and velocity estimation. Can be filtered by projectId.",
@@ -327,7 +399,7 @@ export const tools = [
       },
     },
     outputFormat: {
-      tasks: "same schema as getAllTasks.tasks (assigneeId null)",
+      tasks: "same schema as getAllTasks.tasks",
       summary: {
         totalUnassigned: "number",
         highPriorityUnassigned: "number",

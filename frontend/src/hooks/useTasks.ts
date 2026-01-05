@@ -4,13 +4,19 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import * as api from "../api/projectApi";
 import { enqueueOp } from "../utils/offlineQueue";
 import { toast } from "react-toastify";
+import { getMyTasks, getReportTasks } from "../api/projectApi";
 
-export function useTasksQuery(projectId: string, workspaceId: string) {
+export function useTasksQuery(
+  projectId: string,
+  workspaceId: string,
+  startDate?: string,
+  endDate?: string
+) {
   return useQuery({
-    queryKey: ["tasks", projectId ?? "all"],
+    queryKey: ["tasks", projectId ?? "all", startDate ?? null, endDate ?? null],
     queryFn: async () => {
       if (projectId) {
-        const tasks = await api.getTasks(projectId);
+        const tasks = await api.getTasks(projectId, startDate, endDate);
 
         return Array.isArray(tasks) ? tasks : [];
       } else if (workspaceId) {
@@ -163,18 +169,18 @@ export function useUpdateTask() {
             qc.setQueryData(qk, (old: any) =>
               Array.isArray(old)
                 ? old.map((t: any) =>
-                    String(t.id) === String(id)
-                      ? {
-                          ...t,
-                          ...patch,
-                          // preserve comments if patch doesn't include comments field
-                          comments:
-                            typeof patch.comments === "undefined"
-                              ? t.comments
-                              : patch.comments,
-                        }
-                      : t
-                  )
+                  String(t.id) === String(id)
+                    ? {
+                      ...t,
+                      ...patch,
+                      // preserve comments if patch doesn't include comments field
+                      comments:
+                        typeof patch.comments === "undefined"
+                          ? t.comments
+                          : patch.comments,
+                    }
+                    : t
+                )
                 : old
             );
           } catch (e) {
@@ -222,10 +228,10 @@ export function useUpdateTask() {
               return old.map((t: any) =>
                 String(t.id) === String(vars.id)
                   ? // Preserve comments if server didn't return them
-                    {
-                      ...serverTask,
-                      comments: serverTask.comments ?? t.comments,
-                    }
+                  {
+                    ...serverTask,
+                    comments: serverTask.comments ?? t.comments,
+                  }
                   : t
               );
             });
@@ -244,7 +250,7 @@ export function useUpdateTask() {
               comments: serverTask.comments ?? old.comments,
             };
           });
-        } catch (_) {}
+        } catch (_) { }
       },
 
       onSettled: () => {
@@ -283,5 +289,23 @@ export function useDeleteTask() {
       if (ctx?.prev) qc.setQueryData(["tasks"], ctx.prev);
     },
     onSettled: () => qc.invalidateQueries(["tasks"]),
+  });
+}
+
+export function useMyTasks(memberId?: string, workspaceId?: string, startDate?: string, endDate?: string) {
+  return useQuery({
+    queryKey: ["myTasks", memberId, workspaceId, startDate, endDate],
+    queryFn: () => getMyTasks(memberId, workspaceId, startDate, endDate),
+    enabled: !!memberId && !!workspaceId,
+    staleTime: 1000 * 30,
+  });
+}
+
+export function useReportTasks(workspaceId?: string, memberId?: string, startDate?: string, endDate?: string) {
+  return useQuery({
+    queryKey: ["reportTasks", workspaceId, memberId, startDate, endDate],
+    queryFn: () => getReportTasks(workspaceId, memberId, startDate, endDate),
+    enabled: !!workspaceId,
+    staleTime: 1000 * 30,
   });
 }

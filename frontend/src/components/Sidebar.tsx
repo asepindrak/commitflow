@@ -7,6 +7,8 @@ import {
   ChevronRight,
   ChevronDown,
   Menu,
+  ListTodo,
+  Table,
 } from "lucide-react";
 import type { Project, TeamMember, Workspace } from "../types";
 import { motion, AnimatePresence } from "framer-motion";
@@ -92,6 +94,7 @@ export default function Sidebar({
   isPlaySound,
   openEditProfileTeam,
   isAdmin,
+  onOpenViewMode
 }: {
   workspaces: Workspace[];
   activeWorkspaceId: string;
@@ -108,6 +111,7 @@ export default function Sidebar({
   isPlaySound: boolean;
   openEditProfileTeam: (member: any) => void;
   isAdmin: boolean;
+  onOpenViewMode: (view: any) => void;
 }) {
   const [isDark, setIsDark] = useState<boolean>(() => {
     try {
@@ -131,7 +135,7 @@ export default function Sidebar({
       });
       return () => obs.disconnect();
     } catch {
-      return () => {};
+      return () => { };
     }
   }, []);
 
@@ -317,9 +321,8 @@ export default function Sidebar({
             <div className="flex items-center justify-between gap-2">
               <button
                 onClick={() => setWsOpen((s) => !s)}
-                className={`flex items-center gap-3 p-2 rounded-md transition-colors flex-1 min-w-0 ${
-                  collapsed ? "justify-center" : ""
-                } hover:bg-gray-100 dark:hover:bg-gray-800`}
+                className={`flex items-center gap-3 p-2 rounded-md transition-colors flex-1 min-w-0 ${collapsed ? "justify-center" : ""
+                  } hover:bg-gray-100 dark:hover:bg-gray-800`}
                 aria-haspopup="menu"
                 aria-expanded={wsOpen}
               >
@@ -327,14 +330,12 @@ export default function Sidebar({
                   className="w-8 h-8 rounded-full flex items-center justify-center font-semibold text-sm shadow shrink-0 overflow-hidden"
                   style={{
                     background: currentWorkspace?.name
-                      ? `hsla(${nameToHue(currentWorkspace.name)}, ${
-                          isDark ? "65%" : "80%"
-                        }, ${isDark ? "20%" : "90%"}, ${isDark ? "0.28" : "1"})`
+                      ? `hsla(${nameToHue(currentWorkspace.name)}, ${isDark ? "65%" : "80%"
+                      }, ${isDark ? "20%" : "90%"}, ${isDark ? "0.28" : "1"})`
                       : undefined,
                     color: currentWorkspace?.name
-                      ? `hsl(${nameToHue(currentWorkspace.name)}, ${
-                          isDark ? "70%" : "60%"
-                        }, ${isDark ? "85%" : "25%"})`
+                      ? `hsl(${nameToHue(currentWorkspace.name)}, ${isDark ? "70%" : "60%"
+                      }, ${isDark ? "85%" : "25%"})`
                       : undefined,
                   }}
                 >
@@ -374,23 +375,19 @@ export default function Sidebar({
                             setActiveWorkspaceId(w.id);
                             setWsOpen(false);
                           }}
-                          className={`w-full flex items-center gap-3 px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-800 ${
-                            w.id === activeWorkspaceId
-                              ? "bg-sky-50 dark:bg-sky-700/20"
-                              : ""
-                          }`}
+                          className={`w-full flex items-center gap-3 px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-800 ${w.id === activeWorkspaceId
+                            ? "bg-sky-50 dark:bg-sky-700/20"
+                            : ""
+                            }`}
                         >
                           <div
                             className="w-8 h-8 rounded-full flex items-center justify-center font-semibold text-sm shadow shrink-0 overflow-hidden"
                             style={{
-                              background: `hsla(${nameToHue(w.name)}, ${
-                                isDark ? "65%" : "80%"
-                              }, ${isDark ? "20%" : "90%"}, ${
-                                isDark ? "0.28" : "1"
-                              })`,
-                              color: `hsl(${nameToHue(w.name)}, ${
-                                isDark ? "70%" : "60%"
-                              }, ${isDark ? "85%" : "25%"})`,
+                              background: `hsla(${nameToHue(w.name)}, ${isDark ? "65%" : "80%"
+                                }, ${isDark ? "20%" : "90%"}, ${isDark ? "0.28" : "1"
+                                })`,
+                              color: `hsl(${nameToHue(w.name)}, ${isDark ? "70%" : "60%"
+                                }, ${isDark ? "85%" : "25%"})`,
                             }}
                           >
                             {w.name.slice(0, 2).toUpperCase()}
@@ -438,6 +435,44 @@ export default function Sidebar({
               )}
             </AnimatePresence>
           </div>
+          {/* Report Menu */}
+          <div className="mb-3 px-1">
+            <button
+              onClick={() => onOpenViewMode("REPORT")}
+              className={`
+              w-full flex items-center gap-3 px-3 py-2 rounded-md
+              transition-colors
+              hover:bg-sky-50 dark:hover:bg-sky-900/20
+              text-sky-600 dark:text-sky-300
+              ${collapsed ? "justify-center" : ""}
+            `}
+            >
+              <Table size={18} />
+              {!collapsed && (
+                <span className="font-semibold text-sm">Report</span>
+              )}
+            </button>
+          </div>
+
+          {/* My Tasks Menu */}
+          <div className="mb-3 px-1">
+            <button
+              onClick={() => onOpenViewMode("MY_TASKS")}
+              className={`
+              w-full flex items-center gap-3 px-3 py-2 rounded-md
+              transition-colors
+              hover:bg-sky-50 dark:hover:bg-sky-900/20
+              text-sky-600 dark:text-sky-300
+              ${collapsed ? "justify-center" : ""}
+            `}
+            >
+              <ListTodo size={18} />
+              {!collapsed && (
+                <span className="font-semibold text-sm">My Tasks</span>
+              )}
+            </button>
+          </div>
+
           {/* projects header */}
           <div className="flex items-center justify-between px-1 mb-2 mt-4">
             {!collapsed && (
@@ -446,9 +481,8 @@ export default function Sidebar({
               </h4>
             )}
             <div
-              className={`flex items-center gap-2 ${
-                !collapsed ? "" : "justify-center w-full"
-              }`}
+              className={`flex items-center gap-2 ${!collapsed ? "" : "justify-center w-full"
+                }`}
             >
               {isAdmin && (
                 <button
@@ -483,21 +517,18 @@ export default function Sidebar({
                   key={p.id}
                   className={`
           group flex items-center px-2 py-2 transition-all rounded-md
-          ${!collapsed ? "border-l-3 gap-2" : "justify-center"} ${
-                    !collapsed ? palette.border : ""
-                  }
-          ${
-            active
-              ? `${palette.activeBg} ${palette.activeText} ring-1 ${palette.ring} shadow-sm`
-              : "hover:bg-gray-50 dark:hover:bg-gray-800"
-          }
+          ${!collapsed ? "border-l-3 gap-2" : "justify-center"} ${!collapsed ? palette.border : ""
+                    }
+          ${active
+                      ? `${palette.activeBg} ${palette.activeText} ring-1 ${palette.ring} shadow-sm`
+                      : "hover:bg-gray-50 dark:hover:bg-gray-800"
+                    }
         `}
                 >
                   <button
                     onClick={() => setActiveProjectId(p.id)}
-                    className={`flex items-center gap-3 ${
-                      !collapsed ? "flex-1" : ""
-                    }  text-left truncate outline-none
+                    className={`flex items-center gap-3 ${!collapsed ? "flex-1" : ""
+                      }  text-left truncate outline-none
             focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-sky-300 dark:focus-visible:ring-sky-600 rounded-sm
             }`}
                   >
@@ -570,9 +601,8 @@ export default function Sidebar({
               </h4>
             )}
             <div
-              className={`flex items-center gap-2 ${
-                !collapsed ? "" : "justify-center w-full"
-              }`}
+              className={`flex items-center gap-2 ${!collapsed ? "" : "justify-center w-full"
+                }`}
             >
               {isAdmin && (
                 <button
@@ -614,9 +644,8 @@ export default function Sidebar({
                   onClick={onActivate}
                   onKeyDown={(e) => handleKeyActivate(e, onActivate)}
                   title={collapsed ? member.name ?? "No Name" : undefined}
-                  className={`flex items-center ${
-                    collapsed ? "justify-center" : ""
-                  } gap-3 px-2 py-2 rounded-md hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-300 dark:focus-visible:ring-sky-600`}
+                  className={`flex items-center ${collapsed ? "justify-center" : ""
+                    } gap-3 px-2 py-2 rounded-md hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-300 dark:focus-visible:ring-sky-600`}
                   aria-label={`View details for ${member.name ?? "member"}`}
                 >
                   <div
@@ -644,8 +673,8 @@ export default function Sidebar({
                             member?.status === "online"
                               ? "rgb(34 197 94)"
                               : member?.status === "away"
-                              ? "rgb(250 204 21)"
-                              : "rgb(148 163 184)",
+                                ? "rgb(250 204 21)"
+                                : "rgb(148 163 184)",
                         }}
                         aria-hidden="true"
                         title={member?.status}

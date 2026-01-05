@@ -37,7 +37,7 @@ async function bootstrap() {
   const config = new DocumentBuilder()
     .setTitle("CommitFlow API")
     .setDescription("Dokumentasi API Otomatis dengan Swagger")
-    .setVersion("1.0")
+    .setVersion("1.2")
     .addBearerAuth() // jika pakai JWT atau header auth
     .build();
 

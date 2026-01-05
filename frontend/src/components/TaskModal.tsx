@@ -26,6 +26,7 @@ import WhatsappIcon from "./WhatsappIcon";
 import MediaModal from "./MediaModal";
 import { useAuthStore } from "../utils/store";
 import { FaComment } from "react-icons/fa";
+import { getTaskAssignees } from "../utils/getTaskAssignees";
 
 export default function TaskModal({
   projects,
@@ -65,8 +66,17 @@ export default function TaskModal({
     "image"
   );
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const currentAssignee = team.find((t) => t.id === task.assigneeId);
-  const assigneePhone = currentAssignee?.phone || "";
+  const assigneeMembers = useMemo(() => {
+    return getTaskAssignees(task, team);
+  }, [task, team]);
+
+
+
+  const assigneePhones = assigneeMembers
+    .map(m => m.phone)
+    .filter((p): p is string => Boolean(p));
+
+
   const user = useAuthStore((s) => s.user);
   const currentMemberName = user?.name ?? null;
 
@@ -77,32 +87,18 @@ export default function TaskModal({
   const currentProjectName = currentProject?.name ?? null;
 
   useEffect(() => {
-    const derived: Task = { ...task };
+    const derived: any = { ...task };
 
-    if ((derived as any).startDate instanceof Date) {
-      (derived as any).startDate = (derived as any).startDate
-        .toISOString()
-        .slice(0, 10);
+    if (derived.startDate instanceof Date) {
+      derived.startDate = derived.startDate.toISOString().slice(0, 10);
     }
-    if ((derived as any).dueDate instanceof Date) {
-      (derived as any).dueDate = (derived as any).dueDate
-        .toISOString()
-        .slice(0, 10);
-    }
-
-    if (!derived.assigneeName && derived.assigneeId && Array.isArray(team)) {
-      const m = team.find((x) => x.id === derived.assigneeId);
-      if (m) derived.assigneeName = m.name;
-    }
-
-    if (!derived.assigneeId && derived.assigneeName && Array.isArray(team)) {
-      const m = team.find((x) => x.name === derived.assigneeName);
-      if (m) derived.assigneeId = m.id;
+    if (derived.dueDate instanceof Date) {
+      derived.dueDate = derived.dueDate.toISOString().slice(0, 10);
     }
 
     setLocal(derived);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [task, team]);
+  }, [task]);
+
 
   function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const list = e.currentTarget.files;
@@ -171,53 +167,6 @@ export default function TaskModal({
     }
   }
 
-  function handleAssigneeChange(v: any) {
-    if (!v) {
-      setLocal((s) => ({ ...s, assigneeId: null, assigneeName: null }));
-      return;
-    }
-
-    if (typeof v === "string") {
-      let member = team.find((m) => m.id === v);
-      if (!member) member = team.find((m) => m.name === v);
-      setLocal((s) => ({
-        ...s,
-        assigneeName: member?.name ?? v ?? null,
-        assigneeId: member?.id ?? null,
-      }));
-      return;
-    }
-
-    if (typeof v === "object") {
-      const id = (v.id as string) ?? (v.value as string) ?? null;
-      const name = (v.name as string) ?? (v.label as string) ?? null;
-      if (id) {
-        const member = team.find((m) => m.id === id);
-        setLocal((s) => ({
-          ...s,
-          assigneeId: id,
-          assigneeName: name ?? member?.name ?? null,
-        }));
-        return;
-      }
-      if (name) {
-        const member = team.find((m) => m.name === name);
-        setLocal((s) => ({
-          ...s,
-          assigneeName: name,
-          assigneeId: member ? member.id : null,
-        }));
-        return;
-      }
-
-      setLocal((s) => ({
-        ...s,
-        assigneeName: v ?? null,
-        assigneeId: null,
-      }));
-    }
-  }
-
   const handleDeleteClick = async () => {
     if (!local?.id) return;
     const res = await Swal.fire({
@@ -265,14 +214,8 @@ export default function TaskModal({
 
   async function handleSaveClick() {
     setIsLoading(true);
-    const toSave: Task = { ...local };
+    const toSave: any = { ...local };
 
-    // normalize simple empty strings -> null like sebelumya
-    if (!toSave.assigneeId && toSave.assigneeName) {
-      const member = team.find((m) => m.name === toSave.assigneeName);
-      if (member) toSave.assigneeId = member.id;
-    }
-    if (toSave.assigneeId === "") toSave.assigneeId = null;
     if (toSave.priority === "") toSave.priority = null;
     if (toSave.startDate === "") toSave.startDate = null;
     if (toSave.dueDate === "") toSave.dueDate = null;
@@ -334,9 +277,8 @@ export default function TaskModal({
         console.error("[Save] upload/addComment failed:", err);
         await Swal.fire({
           title: "Upload/Add comment failed",
-          text: `Gagal upload atau menambahkan komentar: ${
-            err?.message || err
-          }`,
+          text: `Gagal upload atau menambahkan komentar: ${err?.message || err
+            }`,
           icon: "error",
           background: dark ? "#111827" : undefined,
           color: dark ? "#e5e7eb" : undefined,
@@ -431,18 +373,17 @@ export default function TaskModal({
               <button
                 type="button"
                 onClick={() =>
-                  handleWhatsappTask(
-                    assigneePhone ?? "",
-                    task,
-                    currentProjectName
-                  )
+                  assigneePhones.forEach(phone => {
+                    if (!currentProjectName) return;
+                    handleWhatsappTask(phone, task, currentProjectName);
+                  })
                 }
                 title="Whatsapp assignee"
                 aria-label="Send Whatsapp to assignee"
                 className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium shadow-sm
-               bg-green-500/95 hover:bg-green-600/95 text-white
-               dark:bg-green-300/20 dark:text-white dark:hover:bg-green-400/30
-               transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-green-300"
+              bg-green-500/95 hover:bg-green-600/95 text-white
+              dark:bg-green-300/20 dark:text-white dark:hover:bg-green-400/30
+              transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-green-300"
               >
                 <WhatsappIcon />
               </button>
@@ -491,10 +432,20 @@ export default function TaskModal({
                 <label className="w-28 text-sm font-medium">Assignee</label>
                 <div className="flex-1">
                   <AssigneeSelect
-                    value={local.assigneeId ?? local.assigneeName ?? ""}
-                    onChange={handleAssigneeChange}
-                    dark={dark}
+                    multiple
+                    value={(local.taskAssignees ?? [])
+                      .map(a => a.id)
+                      .filter(Boolean)}
                     team={team}
+                    dark={dark}
+                    onChange={(v) => {
+                      const memberIds = Array.isArray(v) ? v : [];
+
+                      setLocal((s: any) => ({
+                        ...s,
+                        taskAssignees: memberIds.map(id => ({ id })),
+                      }));
+                    }}
                   />
                 </div>
               </div>
@@ -714,9 +665,8 @@ export default function TaskModal({
               bg-gradient-to-r from-sky-500 to-sky-600 text-white
               hover:from-sky-600 hover:to-sky-700
               active:scale-95 transition-all duration-300
-              ${
-                uploading ? "opacity-60 cursor-not-allowed" : "cursor-pointer"
-              }`}
+              ${uploading ? "opacity-60 cursor-not-allowed" : "cursor-pointer"
+                          }`}
                       >
                         {uploading ? (
                           <Loader2 className="w-4 h-4 animate-spin" />
@@ -774,6 +724,6 @@ export default function TaskModal({
         type={mediaViewerType}
         onClose={closeMediaViewer}
       />
-    </div>
+    </div >
   );
 }

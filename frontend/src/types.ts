@@ -18,25 +18,41 @@ export type Comment = {
   isTrash?: boolean;
 };
 
+export type TaskAssignee = {
+  id: string;
+  name: string;
+  photo?: string;
+  phone?: string;
+  role?: string;
+};
+
 export type Task = {
   id: string;
   title: string;
   description?: string;
+
   projectId?: string | null;
-  status?: "todo" | "inprogress" | "done" | string;
+
+  status?: "todo" | "inprogress" | "qa" | "deploy" | "done" | "blocked";
+
   startDate?: string | null;
   dueDate?: string | null;
-  priority?: string | null;
+
+  priority?: "urgent" | "medium" | "low" | string;
+
+  // ✅ MULTI ASSIGNEE (WAJIB)
+  taskAssignees?: TaskAssignee[];
+
   comments?: any[];
-  assigneeId?: string | null; // <--- new
-  // optional: cached assignee name if you like
-  assigneeName?: string | null;
+
   clientId?: string;
+
   createdAt?: string;
   updatedAt?: string;
+
   isTrash?: boolean;
-  // ...
 };
+
 
 export type TeamMember = {
   id: string;

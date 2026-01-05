@@ -10,6 +10,7 @@ import {
   replaceDataUrisInHtmlAndUpload,
 } from "../utils/dataURItoFile";
 import { useStoreWorkspace } from "../utils/store";
+import { safeString, tryParseJSON } from "../utils/safeString";
 
 /**
  * ExportImportControls (per-project)
@@ -44,15 +45,6 @@ export default function ExportImportControls({
 
   const { workspaceId, projectId } = useStoreWorkspace();
 
-  const safeString = (v: any) =>
-    v === null || typeof v === "undefined" ? "" : String(v);
-  const tryParseJSON = (s: string) => {
-    try {
-      return JSON.parse(s);
-    } catch {
-      return null;
-    }
-  };
 
   async function exportXlsx() {
     try {
@@ -160,11 +152,16 @@ export default function ExportImportControls({
       }
 
       // Build set of assigneeIds referenced by those tasks
+      // Build set of assigneeIds referenced by tasks (MULTI)
       const assigneeIds = new Set<string>();
+
       for (const t of filteredTasks) {
-        if ((t as any).assigneeId)
-          assigneeIds.add(String((t as any).assigneeId));
+        const assignees = (t as any).taskAssignees ?? [];
+        for (const a of assignees) {
+          if (a?.id) assigneeIds.add(String(a.id));
+        }
       }
+
 
       // Try to find project's workspaceId for broader team inclusion (optional)
       const project = projects?.find((p) => p.id === projectId);
@@ -214,78 +211,50 @@ export default function ExportImportControls({
       // Tasks rows: include comments serialized (and truncated if necessary) and updated descriptions
       const tkRows = filteredTasks.map((t) => {
         const taskId = t.id ?? "";
+
         const updatedComments =
           taskIndexToUpdatedComments.get(taskId) ?? (t as any).comments ?? [];
+
         const commentsJson = JSON.stringify(updatedComments);
 
         const descInfo = taskIndexToUpdatedDescription.get(taskId);
         const updatedDescription =
           descInfo?.html ?? (t as any).description ?? "";
 
-        // find assignee email if available
-        const assigneeIdStr = t.assigneeId ? String(t.assigneeId) : "";
-        const assigneeEmail = assigneeIdStr
-          ? memberEmailById.get(assigneeIdStr) ?? ""
-          : "";
+        const assignees = (t as any).taskAssignees ?? [];
 
         return {
           id: truncateForExcel(t.id ?? "", `task.id:${t.id ?? ""}`),
-          clientId: truncateForExcel(
-            (t as any).clientId ?? "",
-            `task.clientId:${t.id ?? ""}`
-          ),
-          projectId: truncateForExcel(
-            (t as any).projectId ?? "",
-            `task.projectId:${t.id ?? ""}`
-          ),
+          clientId: truncateForExcel((t as any).clientId ?? "", `task.clientId:${t.id ?? ""}`),
+          projectId: truncateForExcel((t as any).projectId ?? "", `task.projectId:${t.id ?? ""}`),
+
           title: truncateForExcel(t.title ?? "", `task.title:${t.id ?? ""}`),
-          description: truncateForExcel(
-            updatedDescription,
-            `task.description:${t.id ?? ""}`
+          description: truncateForExcel(updatedDescription, `task.description:${t.id ?? ""}`),
+
+          status: truncateForExcel(t.status ?? "todo", `task.status:${t.id ?? ""}`),
+
+          // ✅ MULTI ASSIGNEE
+          assigneeIds: truncateForExcel(
+            assignees.map((a: any) => a.id).join(","),
+            `task.assigneeIds:${t.id ?? ""}`
           ),
-          status: truncateForExcel(
-            t.status ?? "todo",
-            `task.status:${t.id ?? ""}`
+          assigneeNames: truncateForExcel(
+            assignees.map((a: any) => a.name).join(", "),
+            `task.assigneeNames:${t.id ?? ""}`
           ),
-          assigneeId: truncateForExcel(
-            t.assigneeId ?? "",
-            `task.assigneeId:${t.id ?? ""}`
-          ),
-          // NEW: add assigneeEmail column
-          assigneeEmail: truncateForExcel(
-            assigneeEmail,
-            `task.assigneeEmail:${t.id ?? ""}`
-          ),
-          priority: truncateForExcel(
-            t.priority ?? "",
-            `task.priority:${t.id ?? ""}`
-          ),
-          startDate: truncateForExcel(
-            t.startDate ?? "",
-            `task.startDate:${t.id ?? ""}`
-          ),
-          dueDate: truncateForExcel(
-            t.dueDate ?? "",
-            `task.dueDate:${t.id ?? ""}`
-          ),
-          isTrash:
-            typeof (t as any).isTrash !== "undefined"
-              ? Boolean((t as any).isTrash)
-              : false,
-          comments: truncateForExcel(
-            commentsJson,
-            `task.comments:${t.id ?? ""}`
-          ),
-          createdAt: truncateForExcel(
-            (t as any).createdAt ? String((t as any).createdAt) : "",
-            `task.createdAt:${t.id ?? ""}`
-          ),
-          updatedAt: truncateForExcel(
-            (t as any).updatedAt ? String((t as any).updatedAt) : "",
-            `task.updatedAt:${t.id ?? ""}`
-          ),
+
+          priority: truncateForExcel(t.priority ?? "", `task.priority:${t.id ?? ""}`),
+          startDate: truncateForExcel(t.startDate ?? "", `task.startDate:${t.id ?? ""}`),
+          dueDate: truncateForExcel(t.dueDate ?? "", `task.dueDate:${t.id ?? ""}`),
+
+          isTrash: Boolean((t as any).isTrash),
+          comments: truncateForExcel(commentsJson, `task.comments:${t.id ?? ""}`),
+
+          createdAt: truncateForExcel(String((t as any).createdAt ?? ""), `task.createdAt:${t.id ?? ""}`),
+          updatedAt: truncateForExcel(String((t as any).updatedAt ?? ""), `task.updatedAt:${t.id ?? ""}`),
         };
       });
+
 
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(
@@ -365,45 +334,50 @@ export default function ExportImportControls({
                 if (Array.isArray(parsed)) commentsArr = parsed;
                 else commentsArr = [];
               }
+              const rawAssigneeIds =
+                safeString(r.assigneeIds ?? "").trim();
+
+              const assigneeIds = rawAssigneeIds
+                ? rawAssigneeIds.split(",").map(s => s.trim()).filter(Boolean)
+                : [];
+
+              const rawAssigneeNames =
+                safeString(r.assigneeNames ?? "").trim();
+
+              const assigneeNames = rawAssigneeNames
+                ? rawAssigneeNames.split(",").map(s => s.trim()).filter(Boolean)
+                : [];
+
               return {
-                id: safeString(r.id ?? r.ID ?? r.Id ?? "").trim(),
-                clientId:
-                  safeString(r.clientId ?? r.clientid ?? "").trim() ||
-                  undefined,
-                projectId:
-                  safeString(
-                    r.projectId ?? r.projectid ?? r.project ?? ""
-                  ).trim() || undefined,
-                title: safeString(r.title ?? r.Title ?? "").trim(),
-                description:
-                  safeString(r.description ?? r.Description ?? "").trim() ||
-                  undefined,
-                status:
-                  safeString(r.status ?? r.Status ?? "todo").trim() || "todo",
-                assigneeId:
-                  safeString(
-                    r.assigneeId ?? r.assigneeid ?? r.assignee ?? ""
-                  ).trim() || undefined,
-                priority:
-                  safeString(r.priority ?? r.Priority ?? "").trim() ||
-                  undefined,
-                startDate:
-                  safeString(r.startDate ?? r.StartDate ?? "").trim() ||
-                  undefined,
-                dueDate:
-                  safeString(r.dueDate ?? r.DueDate ?? "").trim() || undefined,
+                id: safeString(r.id ?? "").trim(),
+                clientId: safeString(r.clientId ?? "").trim() || undefined,
+                projectId: safeString(r.projectId ?? "").trim() || undefined,
+
+                title: safeString(r.title ?? "").trim(),
+                description: safeString(r.description ?? "").trim() || undefined,
+
+                status: safeString(r.status ?? "todo").trim(),
+
+                taskAssignees: [
+                  ...assigneeIds.map(id => ({ id, name: "" })),
+                  ...assigneeNames.map(name => ({ id: "", name }))
+                ],
+
+                priority: safeString(r.priority ?? "").trim() || undefined,
+                startDate: safeString(r.startDate ?? "").trim() || undefined,
+                dueDate: safeString(r.dueDate ?? "").trim() || undefined,
+
                 isTrash:
-                  String(r.isTrash ?? r.IsTrash ?? r.istrash ?? "")
+                  String(r.isTrash ?? "")
                     .toLowerCase()
                     .trim() === "true",
+
                 comments: commentsArr,
-                createdAt:
-                  safeString(r.createdAt ?? r.CreatedAt ?? "").trim() ||
-                  undefined,
-                updatedAt:
-                  safeString(r.updatedAt ?? r.UpdatedAt ?? "").trim() ||
-                  undefined,
+
+                createdAt: safeString(r.createdAt ?? "").trim() || undefined,
+                updatedAt: safeString(r.updatedAt ?? "").trim() || undefined,
               } as Task;
+
             })
             .filter((t: any) => t.id && t.title);
         }

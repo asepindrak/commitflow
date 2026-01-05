@@ -7,6 +7,7 @@ import React, {
 } from "react";
 import type { Task, TeamMember } from "../types";
 import { TaskCard } from "./TaskCard";
+import { getTaskAssignees } from "../utils/getTaskAssignees";
 
 export default function KanbanBoard({
   columns,
@@ -151,19 +152,17 @@ export default function KanbanBoard({
   const currentMemberName = currentMember?.name ?? null;
 
   const isAssignedToCurrent = (task: Task) => {
-    const aid = (task as any).assigneeId ?? null;
-    const aname = (task as any).assigneeName ?? null;
+    if (!currentMemberId) return false;
 
-    if (aid && currentMemberId && String(aid) === String(currentMemberId))
-      return true;
-    if (
-      currentMemberName &&
-      aname &&
-      String(aname).toLowerCase() === String(currentMemberName).toLowerCase()
-    )
-      return true;
-    return false;
+    const assignees = getTaskAssignees(task, team);
+    return assignees.some(
+      (m) => String(m.id) === String(currentMemberId)
+    );
   };
+
+
+
+
 
   const assignedCount = useMemo(
     () =>
@@ -213,16 +212,14 @@ export default function KanbanBoard({
             onClick={() => setOnlyMine((v) => !v)}
             aria-pressed={onlyMine}
             title="Show only tasks assigned to you"
-            className={`inline-flex items-center gap-2 px-3 py-1 rounded-md text-sm font-medium transition-colors focus:outline-none ${
-              onlyMine
-                ? "bg-sky-600 text-white border border-sky-600 shadow-sm"
-                : "bg-white text-slate-700 dark:bg-gray-800 dark:text-slate-100 border border-gray-200 dark:border-gray-700"
-            }`}
+            className={`inline-flex items-center gap-2 px-3 py-1 rounded-md text-sm font-medium transition-colors focus:outline-none ${onlyMine
+              ? "bg-sky-600 text-white border border-sky-600 shadow-sm"
+              : "bg-white text-slate-700 dark:bg-gray-800 dark:text-slate-100 border border-gray-200 dark:border-gray-700"
+              }`}
           >
             <span
-              className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs ${
-                onlyMine ? "bg-white/20" : "bg-sky-100 dark:bg-white/5"
-              }`}
+              className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs ${onlyMine ? "bg-white/20" : "bg-sky-100 dark:bg-white/5"
+                }`}
               aria-hidden
             >
               👤
@@ -231,9 +228,8 @@ export default function KanbanBoard({
             <span className="whitespace-nowrap">Assigned to me</span>
 
             <span
-              className={`inline-flex items-center justify-center ml-1 px-2 py-0.5 rounded-full text-xs font-semibold ${
-                onlyMine ? "bg-white/20" : "bg-gray-100 dark:bg-white/5"
-              }`}
+              className={`inline-flex items-center justify-center ml-1 px-2 py-0.5 rounded-full text-xs font-semibold ${onlyMine ? "bg-white/20" : "bg-gray-100 dark:bg-white/5"
+                }`}
             >
               {assignedCount}
             </span>
@@ -241,73 +237,78 @@ export default function KanbanBoard({
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
-        {columns.map((col) => {
-          const visibleItems = onlyMine
-            ? col.items.filter((task) => isAssignedToCurrent(task))
-            : col.items;
+      <div className="overflow-x-auto">
+        <div className="flex gap-4 min-w-max pb-2">
+          {columns.map((col) => {
+            const visibleItems = onlyMine
+              ? col.items.filter((task) => isAssignedToCurrent(task))
+              : col.items;
 
-          return (
-            <div key={col.key} className="rounded-lg">
-              <div className="flex items-center justify-between mb-3">
-                <h4 className="font-semibold text-lg text-slate-900 dark:text-slate-100">
-                  {col.title}
-                </h4>
-                <span className="text-sm text-gray-500 dark:text-gray-400">
-                  total: {col.items.length}
-                </span>
-              </div>
-
-              {/* outer drop container gets minHeight; inner wrapper holds cards */}
+            return (
               <div
-                data-drop-key={col.key}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  const dtId =
-                    e.dataTransfer?.getData("text/plain") || undefined;
-                  const colEl = e.currentTarget as HTMLElement;
-                  const idx = computeInsertIndex(colEl, e.clientY);
-                  onDropTo(col.key, dtId, idx);
-                }}
-                style={
-                  columnMinHeight ? { minHeight: `${columnMinHeight}px` } : {}
-                }
-                className="p-2 rounded-lg bg-transparent"
+                key={col.key}
+                className="rounded-lg flex-shrink-0 w-[320px] flex flex-col"
               >
-                {/* inner wrapper: measure this (scrollHeight) to compute minHeight */}
-                <div className="kanban-inner space-y-3">
-                  {visibleItems.map((task: Task) => {
-                    const isBeingDragged =
-                      dragTaskId !== null && task.id === dragTaskId;
-                    return (
-                      <TaskCard
-                        key={task.id}
-                        task={task}
-                        isBeingDragged={isBeingDragged}
-                        dragPos={dragPos}
-                        team={team}
-                        onDragStart={onDragStart}
-                        onDrag={onDrag}
-                        onDragEnd={onDragEnd}
-                        onSelectTask={onSelectTask}
-                        startPointerDrag={startPointerDrag}
-                        priorityAccent={priorityAccent}
-                        priorityPill={priorityPill}
-                      />
-                    );
-                  })}
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-semibold text-lg text-slate-900 dark:text-slate-100">
+                    {col.title}
+                  </h4>
+                  <span className="text-sm text-gray-500 dark:text-gray-400">
+                    total: {col.items.length}
+                  </span>
+                </div>
 
-                  {visibleItems.length === 0 && (
-                    <div className="text-sm text-gray-400 py-6 text-center">
-                      No tasks
-                    </div>
-                  )}
+                {/* outer drop container gets minHeight; inner wrapper holds cards */}
+                <div
+                  data-drop-key={col.key}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const dtId =
+                      e.dataTransfer?.getData("text/plain") || undefined;
+                    const colEl = e.currentTarget as HTMLElement;
+                    const idx = computeInsertIndex(colEl, e.clientY);
+                    onDropTo(col.key, dtId, idx);
+                  }}
+                  style={{
+                    minHeight: Math.max(columnMinHeight || 0, 600),
+                  }}
+                  className="p-2 rounded-lg bg-transparent flex-1"
+                >
+                  {/* inner wrapper: measure this (scrollHeight) to compute minHeight */}
+                  <div className="kanban-inner space-y-3">
+                    {visibleItems.map((task: Task) => {
+                      const isBeingDragged =
+                        dragTaskId !== null && task.id === dragTaskId;
+                      return (
+                        <TaskCard
+                          key={task.id}
+                          task={task}
+                          isBeingDragged={isBeingDragged}
+                          dragPos={dragPos}
+                          team={team}
+                          onDragStart={onDragStart}
+                          onDrag={onDrag}
+                          onDragEnd={onDragEnd}
+                          onSelectTask={onSelectTask}
+                          startPointerDrag={startPointerDrag}
+                          priorityAccent={priorityAccent}
+                          priorityPill={priorityPill}
+                        />
+                      );
+                    })}
+
+                    {visibleItems.length === 0 && (
+                      <div className="text-sm text-gray-400 py-6 text-center">
+                        No tasks
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
     </div>
   );

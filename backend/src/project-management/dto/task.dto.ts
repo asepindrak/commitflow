@@ -1,4 +1,15 @@
-import { IsOptional, IsString, IsDateString } from "class-validator";
+import {
+  IsOptional,
+  IsString,
+  IsArray,
+  ValidateNested,
+} from "class-validator";
+import { Type } from "class-transformer";
+
+class TaskAssigneeDto {
+  @IsString()
+  memberId: string;
+}
 
 export class CreateTaskDto {
   @IsString()
@@ -9,20 +20,23 @@ export class CreateTaskDto {
   description?: string;
 
   @IsOptional()
-  projectId?: string; // nullable FK to Project (UUID)
+  @IsString()
+  projectId?: string | null;
 
   @IsOptional()
   @IsString()
   status?: string;
 
   @IsOptional()
-  assigneeId?: string | null; // nullable FK to TeamMember (UUID)
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => TaskAssigneeDto)
+  taskAssignees?: TaskAssigneeDto[];
 
   @IsOptional()
   @IsString()
   priority?: string | null;
 
-  // store date fields as strings (ISO or YYYY-MM-DD)
   @IsOptional()
   @IsString()
   startDate?: string | null;
@@ -46,6 +60,7 @@ export class UpdateTaskDto {
   description?: string;
 
   @IsOptional()
+  @IsString()
   projectId?: string | null;
 
   @IsOptional()
@@ -53,7 +68,10 @@ export class UpdateTaskDto {
   status?: string;
 
   @IsOptional()
-  assigneeId?: string | null;
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => TaskAssigneeDto)
+  taskAssignees?: TaskAssigneeDto[];
 
   @IsOptional()
   @IsString()
@@ -82,10 +100,14 @@ export class PatchTaskDto {
   description?: string;
 
   @IsOptional()
+  @IsString()
   projectId?: string | null;
 
   @IsOptional()
-  assigneeId?: string | null;
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => TaskAssigneeDto)
+  taskAssignees?: TaskAssigneeDto[];
 
   @IsOptional()
   @IsString()
@@ -99,3 +121,4 @@ export class PatchTaskDto {
   @IsString()
   dueDate?: string | null;
 }
+

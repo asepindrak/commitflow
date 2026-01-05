@@ -2,6 +2,7 @@
 import React, { useMemo, useState } from "react";
 import parse from "html-react-parser";
 import type { Task, TeamMember } from "../types";
+import { getTaskAssignees } from "../utils/getTaskAssignees";
 
 /**
  * TimelineView
@@ -76,24 +77,14 @@ export default function TimelineView({
 
   // helper to determine if task is assigned to current member
   const isAssignedToMe = (t: Task) => {
-    if (!currentMemberId) return false;
-    // direct id match
-    if (
-      (t as any).assigneeId &&
-      String((t as any).assigneeId) === String(currentMemberId)
-    )
-      return true;
-    // fallback: if assigneeName present, resolve my member name and compare
-    if (t.assigneeName && Array.isArray(team)) {
-      const myMember = team.find((m) => m.id === currentMemberId);
-      if (myMember && myMember.name && myMember.name === t.assigneeName)
-        return true;
-      // also, if assigneeName equals current user's name (even if team not found)
-      if (myMember && myMember.name && myMember.name === t.assigneeName)
-        return true;
-    }
-    return false;
+    if (!currentMemberId || !Array.isArray(team)) return false;
+
+    const assignees = getTaskAssignees(t, team);
+    return assignees.some(
+      (m) => String(m.id) === String(currentMemberId)
+    );
   };
+
 
   // tasks after applying "Assigned to me" filter
   const tasks = useMemo(() => {
@@ -158,17 +149,15 @@ export default function TimelineView({
             onClick={() => setOnlyMine((v) => !v)}
             aria-pressed={onlyMine}
             title="Show only tasks assigned to you"
-            className={`inline-flex items-center gap-2 px-3 py-1 rounded-md text-sm font-medium transition-colors focus:outline-none ${
-              onlyMine
-                ? "bg-sky-600 text-white border border-sky-600 shadow-sm"
-                : "bg-white text-slate-700 dark:bg-gray-800 dark:text-slate-100 border border-gray-200 dark:border-gray-700"
-            }`}
+            className={`inline-flex items-center gap-2 px-3 py-1 rounded-md text-sm font-medium transition-colors focus:outline-none ${onlyMine
+              ? "bg-sky-600 text-white border border-sky-600 shadow-sm"
+              : "bg-white text-slate-700 dark:bg-gray-800 dark:text-slate-100 border border-gray-200 dark:border-gray-700"
+              }`}
           >
             {/* icon */}
             <span
-              className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs ${
-                onlyMine ? "bg-white/20" : "bg-sky-100 dark:bg-white/5"
-              }`}
+              className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs ${onlyMine ? "bg-white/20" : "bg-sky-100 dark:bg-white/5"
+                }`}
               aria-hidden
             >
               {/* small person icon (emoji keeps it simple) */}
@@ -178,9 +167,8 @@ export default function TimelineView({
             <span className="whitespace-nowrap">Assigned to me</span>
 
             <span
-              className={`inline-flex items-center justify-center ml-1 px-2 py-0.5 rounded-full text-xs font-semibold ${
-                onlyMine ? "bg-white/20" : "bg-gray-100 dark:bg-white/5"
-              }`}
+              className={`inline-flex items-center justify-center ml-1 px-2 py-0.5 rounded-full text-xs font-semibold ${onlyMine ? "bg-white/20" : "bg-gray-100 dark:bg-white/5"
+                }`}
             >
               {assignedCount}
             </span>
@@ -210,17 +198,16 @@ export default function TimelineView({
                 <div
                   key={`month-${i}`}
                   style={{ width: DAY_WIDTH }}
-                  className={`text-xs h-8 flex items-center justify-center ${
-                    isFirstOfMonth
-                      ? "font-semibold text-gray-700 dark:text-gray-200"
-                      : "text-gray-400 dark:text-gray-400"
-                  }`}
+                  className={`text-xs h-8 flex items-center justify-center ${isFirstOfMonth
+                    ? "font-semibold text-gray-700 dark:text-gray-200"
+                    : "text-gray-400 dark:text-gray-400"
+                    }`}
                 >
                   {isFirstOfMonth
                     ? d.toLocaleString(undefined, {
-                        month: "short",
-                        year: "numeric",
-                      })
+                      month: "short",
+                      year: "numeric",
+                    })
                     : ""}
                 </div>
               );
@@ -240,17 +227,15 @@ export default function TimelineView({
                 <div
                   key={`day-${i}`}
                   style={{ width: DAY_WIDTH }}
-                  className={`text-[11px] h-8 flex flex-col items-center justify-center ${
-                    isWeekend ? "bg-gray-50 dark:bg-gray-800/60" : ""
-                  }`}
+                  className={`text-[11px] h-8 flex flex-col items-center justify-center ${isWeekend ? "bg-gray-50 dark:bg-gray-800/60" : ""
+                    }`}
                 >
                   <div className="text-xs text-gray-400">{weekday}</div>
                   <div
-                    className={`text-sm ${
-                      isWeekend
-                        ? "text-gray-500 dark:text-gray-300"
-                        : "text-gray-600 dark:text-gray-200"
-                    }`}
+                    className={`text-sm ${isWeekend
+                      ? "text-gray-500 dark:text-gray-300"
+                      : "text-gray-600 dark:text-gray-200"
+                      }`}
                   >
                     {day}
                   </div>
@@ -281,8 +266,17 @@ export default function TimelineView({
               const widthPx = spanDays * DAY_WIDTH;
 
               const priority = priorityColor(task.priority);
-              const assignee = task.assigneeName ?? "Unassigned";
-              const hue = hueFromName(assignee);
+              const assignees = getTaskAssignees(task, team ?? []);
+              const assigneeLabel =
+                assignees.length > 0
+                  ? assignees.map((a) => a.name).join(", ")
+                  : "Unassigned";
+
+              // warna pakai assignee pertama (stabil & simple)
+              const hue = assignees.length > 0
+                ? hueFromName(assignees[0].name)
+                : 200;
+
               const avatarBg = `hsla(${hue} 65% 40% / 0.12)`;
               const avatarText = `hsl(${hue} 65% 35%)`;
 
@@ -298,8 +292,9 @@ export default function TimelineView({
                       {task.title}
                     </div>
                     <div className="text-xs text-gray-400 truncate">
-                      {task.assigneeName ?? "Unassigned"}
+                      {assigneeLabel}
                     </div>
+
                   </div>
 
                   {/* background row (grid) */}
@@ -313,11 +308,10 @@ export default function TimelineView({
                         <div
                           key={i}
                           style={{ width: DAY_WIDTH }}
-                          className={`h-full ${
-                            i % 7 === 0
-                              ? "border-r border-gray-100 dark:border-gray-800/60"
-                              : "border-r border-transparent"
-                          }`}
+                          className={`h-full ${i % 7 === 0
+                            ? "border-r border-gray-100 dark:border-gray-800/60"
+                            : "border-r border-transparent"
+                            }`}
                         />
                       ))}
                     </div>
@@ -332,15 +326,15 @@ export default function TimelineView({
                           task.priority === "urgent"
                             ? "linear-gradient(90deg,#fb7185,#ef4444)"
                             : task.priority === "medium"
-                            ? "linear-gradient(90deg,#fbbf24,#f59e0b)"
-                            : "linear-gradient(90deg,#34d399,#10b981)",
+                              ? "linear-gradient(90deg,#fbbf24,#f59e0b)"
+                              : "linear-gradient(90deg,#34d399,#10b981)",
                         color: "white",
                         padding: "6px 10px",
                         cursor: "pointer",
                       }}
-                      title={`${task.title} — ${
-                        task.assigneeName ?? "Unassigned"
-                      } — ${task.startDate ?? ""} → ${task.dueDate ?? ""}`}
+                      title={`${task.title} — ${assigneeLabel} — ${task.startDate ?? ""
+                        } → ${task.dueDate ?? ""}`}
+
                       onClick={() => onSelectTask(task)}
                     >
                       <div className="flex items-center gap-3">

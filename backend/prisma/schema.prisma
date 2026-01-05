@@ -48,88 +48,103 @@ model chatMessage {
 }
 
 model User {
-  id                    String        @id @default(cuid())
-  email                 String?       @unique
+  id                    String       @id @default(cuid())
+  email                 String?      @unique
   phone                 String?
   name                  String?
   photo                 String?
-  role                  Role?         @default(USER)
-  password              String?       // kalau pake password
-  session_token         String?       @unique
-  refreshTokenHash      String?  // simpan hash dari refresh token
-  refreshTokenExpiresAt DateTime? 
-  createdAt             DateTime      @default(now())
-  updatedAt             DateTime      @updatedAt
-  members               TeamMember[]  @relation("UserMembers")
-
+  role                  Role?        @default(USER)
+  password              String? // kalau pake password
+  session_token         String?      @unique
+  refreshTokenHash      String? // simpan hash dari refresh token
+  refreshTokenExpiresAt DateTime?
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+  members               TeamMember[] @relation("UserMembers")
 }
 
 model TeamMember {
-  id          String   @id @default(uuid())  // pilih uuid supaya beda style dari user.id
-  clientId    String?  @unique
-  userId      String
-  workspaceId String
-  name        String
-  role        String?
-  email       String?
-  photo       String?
-  phone       String?
-  isTrash     Boolean  @default(false)
-  isAdmin     Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime?
-  Task        Task[] @relation("TaskMembers")
-  TaskCreatedBy        Task[] @relation("TaskCreatedBy")
+  id            String    @id @default(uuid()) // pilih uuid supaya beda style dari user.id
+  clientId      String?   @unique
+  userId        String
+  workspaceId   String
+  name          String
+  role          String?
+  email         String?
+  photo         String?
+  phone         String?
+  isTrash       Boolean   @default(false)
+  isAdmin       Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime?
+  Task          Task[]    @relation("TaskMembers")
+  TaskCreatedBy Task[]    @relation("TaskCreatedBy")
 
   // FK ke Workspace
-  workspace     Workspace?  @relation("WorkspaceMembers", fields: [workspaceId], references: [id])
-  user          User?  @relation("UserMembers", fields: [userId], references: [id])
+  workspace     Workspace?     @relation("WorkspaceMembers", fields: [workspaceId], references: [id])
+  user          User?          @relation("UserMembers", fields: [userId], references: [id])
+  taskAssignees TaskAssignee[]
 }
 
 model Workspace {
-  id          String        @id @default(uuid())
-  clientId    String?       @unique
+  id          String       @id @default(uuid())
+  clientId    String?      @unique
   name        String
   description String?
-  isTrash     Boolean       @default(false)
-  createdAt   DateTime      @default(now())
+  isTrash     Boolean      @default(false)
+  createdAt   DateTime     @default(now())
   updatedAt   DateTime?
-  projects    Project[]     @relation("WorkspaceProjects")
-  members     TeamMember[]        @relation("WorkspaceMembers")
+  projects    Project[]    @relation("WorkspaceProjects")
+  members     TeamMember[] @relation("WorkspaceMembers")
 }
 
 model Project {
-  id              String      @id @default(uuid())
-  workspaceId     String?
-  clientId        String?     @unique
-  name            String
-  description     String?
-  isTrash         Boolean     @default(false)
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime?
-  workspace       Workspace?  @relation("WorkspaceProjects", fields: [workspaceId], references: [id])
-  tasks           Task[]      @relation("ProjectTasks")
+  id          String     @id @default(uuid())
+  workspaceId String?
+  clientId    String?    @unique
+  name        String
+  description String?
+  isTrash     Boolean    @default(false)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime?
+  workspace   Workspace? @relation("WorkspaceProjects", fields: [workspaceId], references: [id])
+  tasks       Task[]     @relation("ProjectTasks")
 }
 
 model Task {
-  id            String      @id @default(uuid())
+  id            String         @id @default(uuid())
   title         String
   description   String?
-  status        String      @default("todo")
+  status        String         @default("todo")
   projectId     String?
-  project       Project?    @relation("ProjectTasks", fields: [projectId], references: [id])
+  project       Project?       @relation("ProjectTasks", fields: [projectId], references: [id])
   assigneeId    String?
   startDate     String?
   dueDate       String?
+  finishDate    DateTime?
   priority      String?
-  assignee      TeamMember? @relation("TaskMembers", fields: [assigneeId], references: [id])
-  isTrash       Boolean     @default(false)
-  comments      Comment[]   @relation("TaskComments")
-  clientId      String?     @unique
-  createdAt     DateTime    @default(now())
+  assignee      TeamMember?    @relation("TaskMembers", fields: [assigneeId], references: [id])
+  isTrash       Boolean        @default(false)
+  comments      Comment[]      @relation("TaskComments")
+  clientId      String?        @unique
+  createdAt     DateTime       @default(now())
   createdById   String?
-  createdBy     TeamMember? @relation("TaskCreatedBy", fields: [createdById], references: [id])
+  createdBy     TeamMember?    @relation("TaskCreatedBy", fields: [createdById], references: [id])
   updatedAt     DateTime?
+  taskAssignees TaskAssignee[]
+}
+
+model TaskAssignee {
+  id       String @id @default(uuid())
+  taskId   String
+  memberId String
+
+  assignedAt DateTime @default(now())
+
+  task   Task       @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  member TeamMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, memberId])
 }
 
 model Comment {
@@ -145,13 +160,13 @@ model Comment {
 }
 
 model Invite {
-  id            String    @id @default(uuid())
-  workspaceId   String
-  email         String
-  invitedBy     String
-  isInvited     Boolean   @default(false)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime?
+  id          String    @id @default(uuid())
+  workspaceId String
+  email       String
+  invitedBy   String
+  isInvited   Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime?
 }
 
 enum Role {
