@@ -2,29 +2,10 @@ import Select from "react-select";
 import { makeSelectStyles, makeSelectTheme } from "../utils/selectStyles";
 import type { TeamMember } from "../types";
 
-function hashStr(s: string) {
-  let h = 5381;
-  for (let i = 0; i < s.length; i++) {
-    h = (h * 33) ^ s.charCodeAt(i);
-  }
-  return Math.abs(h);
-}
-
-function hsl(h: number, s = 80, l = 50) {
-  return `hsl(${h} ${s}% ${l}%)`;
-}
-function hsla(h: number, s = 80, l = 50, a = 1) {
-  return `hsla(${h} ${s}% ${l}% / ${a})`;
-}
-
 type Option = {
   value: string;
   label: string;
-  meta: {
-    hue: number;
-    dot: string;
-    text: string;
-  };
+  member: TeamMember;
 };
 
 export function AssigneeSelect({
@@ -43,47 +24,51 @@ export function AssigneeSelect({
   const styles = makeSelectStyles(dark);
   const theme = makeSelectTheme(dark);
 
-  const options: Option[] = team.map((t) => {
-    const hue = hashStr(t.name || "A") % 360;
-    const dot = dark ? hsla(hue, 70, 55, 0.95) : hsl(hue, 75, 45);
-    const text = dark ? hsl(hue, 70, 75) : hsl(hue, 75, 25);
+  const options: Option[] = team.map((t) => ({
+    value: String(t.id),
+    label: t.name ?? "Unnamed",
+    member: t,
+  }));
 
-    return {
-      value: String(t.id),
-      label: t.name,
-      meta: { hue, dot, text },
-    };
-  });
+  /* ================= UI PARTS ================= */
+
+  const Avatar = ({ member, size = 20 }: { member: TeamMember; size?: number }) => {
+    const initial = member.name?.[0]?.toUpperCase() ?? "?";
+
+    return member.photo ? (
+      <img
+        src={member.photo}
+        alt={member.name}
+        className="rounded-full object-cover"
+        style={{ width: size, height: size }}
+      />
+    ) : (
+      <div
+        className="
+          rounded-full bg-gray-300 dark:bg-gray-600
+          text-[10px] font-semibold text-gray-700 dark:text-gray-200
+          flex items-center justify-center
+        "
+        style={{ width: size, height: size }}
+      >
+        {initial}
+      </div>
+    );
+  };
 
   const formatOptionLabel = (opt: Option) => (
-    <div className="flex items-center gap-2 text-sm leading-none">
-      <span
-        className="inline-block rounded-full"
-        style={{
-          width: 10,
-          height: 10,
-          background: opt.meta.dot,
-          boxShadow: dark
-            ? `0 0 0 6px ${hsla(opt.meta.hue, 80, 50, 0.06)}`
-            : undefined,
-        }}
-      />
-      <span>{opt.label}</span>
+    <div className="flex items-center gap-2 text-sm">
+      <Avatar member={opt.member} size={18} />
+      <span className="truncate">{opt.label}</span>
     </div>
   );
 
   const SingleValue = (props: any) => {
     const opt: Option = props.data;
     return (
-      <div
-        className="flex items-center gap-2 text-sm"
-        style={{ color: opt.meta.text }}
-      >
-        <span
-          className="inline-block rounded-full"
-          style={{ width: 10, height: 10, background: opt.meta.dot }}
-        />
-        <span>{opt.label}</span>
+      <div className="flex items-center gap-2 text-sm">
+        <Avatar member={opt.member} size={18} />
+        <span className="truncate">{opt.label}</span>
       </div>
     );
   };
@@ -92,11 +77,8 @@ export function AssigneeSelect({
     const opt: Option = props.data;
     return (
       <div className="flex items-center gap-1 text-xs">
-        <span
-          className="inline-block rounded-full p-3"
-          style={{ width: 8, height: 8, background: opt.meta.dot }}
-        />
-        <span>{opt.label}</span>
+        <Avatar member={opt.member} size={14} />
+        <span className="truncate">{opt.label}</span>
       </div>
     );
   };
@@ -124,10 +106,7 @@ export function AssigneeSelect({
       value={selectedValue}
       onChange={(opt: any) => {
         if (multiple) {
-          const vals = Array.isArray(opt)
-            ? opt.map((o) => o.value)
-            : [];
-          onChange(vals);
+          onChange(Array.isArray(opt) ? opt.map((o) => o.value) : []);
         } else {
           onChange(opt ? opt.value : undefined);
         }

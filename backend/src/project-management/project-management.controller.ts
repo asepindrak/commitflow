@@ -37,7 +37,7 @@ import { CreateWorkspaceDto } from "./dto/workspace.dto";
 @Controller("api")
 @UseGuards(JwtGuard)
 export class ProjectManagementController {
-  constructor(private svc: ProjectManagementService) {}
+  constructor(private svc: ProjectManagementService) { }
 
   @Get("project-management/workspaces")
   getWorkspaces(@Req() req: any) {
@@ -109,8 +109,20 @@ export class ProjectManagementController {
 
   // Tasks
   @Get("tasks")
-  getTasks(@Query("projectId") projectId?: string) {
-    return this.svc.getTasks(projectId);
+  getTasks(@Query("projectId") projectId?: string, @Query("startDate") startDate?: string, @Query("endDate") endDate?: string) {
+    return this.svc.getTasks(projectId, startDate, endDate);
+  }
+
+  // getMyTasks
+  @Get("tasks/me/:memberId")
+  getMyTasks(@Param("memberId") memberId: string, @Query("workspaceId") workspaceId?: string, @Query("startDate") startDate?: string, @Query("endDate") endDate?: string) {
+    return this.svc.getMyTasks(memberId, workspaceId, startDate, endDate);
+  }
+
+  // getMyTasks
+  @Get("tasks/workspace/:workspaceId")
+  getTasksWorkspace(@Param("workspaceId") workspaceId: string, @Query("memberId") memberId?: string, @Query("startDate") startDate?: string, @Query("endDate") endDate?: string) {
+    return this.svc.getTasksWorkspace(workspaceId, memberId, startDate, endDate);
   }
 
   @Post("tasks")

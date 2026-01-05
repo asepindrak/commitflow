@@ -13,6 +13,7 @@ import { Prisma } from "@prisma/client";
 import { hashPassword } from "src/auth/utils";
 import { EmailService } from "src/email/email.service";
 import logger from "vico-logger";
+import { endOfDay, parseDateSafe, safeDate, startOfDay } from "src/helpers/safeDate";
 
 const prisma = new PrismaClient();
 
@@ -312,13 +313,37 @@ export class ProjectManagementService {
   }
 
   // Tasks
-  async getTasks(projectId?: string) {
+  async getTasks(
+    projectId?: string,
+    startDate?: string,
+    endDate?: string
+  ) {
+    await this.migrateSingleAssigneeToMulti();
 
-    await this.migrateSingleAssigneeToMulti()
+    const now = new Date();
 
-    const where = projectId
-      ? { projectId, isTrash: false }
-      : { isTrash: false };
+    // 🔥 DEFAULT RANGE: last 60 days
+    const defaultStart = new Date();
+    defaultStart.setDate(now.getDate() - 60);
+
+    const start =
+      startDate ? startOfDay(new Date(startDate)) : startOfDay(defaultStart);
+
+    const end =
+      endDate ? endOfDay(new Date(endDate)) : endOfDay(now);
+
+    const where: any = {
+      isTrash: false,
+      createdAt: {
+        gte: start,
+        lte: end,
+      },
+    };
+
+    if (projectId) {
+      where.projectId = projectId;
+    }
+
     const tasks = await prisma.task.findMany({
       where,
       orderBy: { createdAt: "desc" },
@@ -344,13 +369,204 @@ export class ProjectManagementService {
         createdAt: c.createdAt?.toISOString(),
         updatedAt: c.updatedAt?.toISOString(),
       })),
-      taskAssignees: t.taskAssignees.map(a => ({
+      taskAssignees: t.taskAssignees.map((a) => ({
         id: a.member.id,
         name: a.member.name,
         photo: a.member.photo,
         phone: a.member.phone,
-        role: a.member.role
-      }))
+        role: a.member.role,
+      })),
+    }));
+  }
+
+
+  // Tasks
+  async getMyTasks(
+    memberId?: string,
+    workspaceId?: string,
+    startDate?: string,
+    endDate?: string
+  ) {
+    const now = new Date()
+
+    // default: 60 hari terakhir
+    const defaultStart = new Date()
+    defaultStart.setDate(now.getDate() - 60)
+
+    const start = safeDate(startDate)
+    const end = safeDate(endDate)
+
+    const createdAtFilter =
+      start || end
+        ? {
+          ...(start && { gte: start }),
+          ...(end && { lte: end }),
+        }
+        : {
+          gte: defaultStart,
+        }
+
+    const where = {
+      isTrash: false,
+      createdAt: createdAtFilter,
+
+      ...(workspaceId && {
+        project: {
+          workspaceId,
+        },
+      }),
+
+      ...(memberId && {
+        taskAssignees: {
+          some: { memberId },
+        },
+      }),
+    }
+
+    const tasks = await prisma.task.findMany({
+      where,
+      orderBy: [
+        {
+          project: {
+            name: "asc", // urutkan berdasarkan nama project
+          },
+        },
+        {
+          createdAt: "desc", // lalu task terbaru
+        },
+      ],
+      include: {
+        comments: {
+          where: { isTrash: false },
+          orderBy: { createdAt: "desc" },
+        },
+        taskAssignees: {
+          include: { member: true },
+        },
+        project: {
+          select: { id: true, name: true },
+        },
+      },
+    })
+
+    return tasks.map((t) => ({
+      ...t,
+      createdAt: t.createdAt?.toISOString(),
+      updatedAt: t.updatedAt?.toISOString(),
+      comments: (t.comments || []).map((c) => ({
+        ...c,
+        createdAt: c.createdAt?.toISOString(),
+        updatedAt: c.updatedAt?.toISOString(),
+      })),
+      project: t.project
+        ? {
+          id: t.project.id,
+          name: t.project.name,
+        }
+        : null,
+      taskAssignees: t.taskAssignees.map((a) => ({
+        id: a.member.id,
+        name: a.member.name,
+        photo: a.member.photo,
+        phone: a.member.phone,
+        role: a.member.role,
+      })),
+    }))
+  }
+
+
+
+  // Tasks Workspace
+  async getTasksWorkspace(
+    workspaceId?: string,
+    memberId?: string,
+    startDate?: string,
+    endDate?: string
+  ) {
+
+    const now = new Date();
+
+    // default 60 days
+    const defaultStart = new Date();
+    defaultStart.setDate(now.getDate() - 60);
+
+    const parsedStart = parseDateSafe(startDate);
+    const parsedEnd = parseDateSafe(endDate);
+
+    const start = parsedStart
+      ? startOfDay(parsedStart)
+      : startOfDay(defaultStart);
+
+    const end = parsedEnd
+      ? endOfDay(parsedEnd)
+      : endOfDay(now);
+
+    const safeMemberId =
+      memberId && memberId !== "undefined" && memberId !== "null"
+        ? memberId
+        : undefined;
+
+
+    const where: any = {
+      isTrash: false,
+      createdAt: {
+        gte: start,
+        lte: end,
+      },
+      project: {
+        workspaceId,
+      },
+      ...(safeMemberId && {
+        taskAssignees: {
+          some: { memberId: safeMemberId },
+        },
+      }),
+    };
+
+
+    const tasks = await prisma.task.findMany({
+      where,
+      orderBy: [
+        {
+          project: {
+            name: "asc", // urutkan berdasarkan nama project
+          },
+        },
+        {
+          createdAt: "desc", // lalu task terbaru
+        },
+      ],
+      include: {
+        comments: {
+          where: { isTrash: false },
+          orderBy: { createdAt: "desc" },
+        },
+        taskAssignees: {
+          include: {
+            member: true,
+          },
+        },
+        project: true,
+      },
+    });
+
+
+    return tasks.map((t) => ({
+      ...t,
+      createdAt: t.createdAt?.toISOString(),
+      updatedAt: t.updatedAt?.toISOString(),
+      comments: (t.comments || []).map((c) => ({
+        ...c,
+        createdAt: c.createdAt?.toISOString(),
+        updatedAt: c.updatedAt?.toISOString(),
+      })),
+      taskAssignees: t.taskAssignees.map((a) => ({
+        id: a.member.id,
+        name: a.member.name,
+        photo: a.member.photo,
+        phone: a.member.phone,
+        role: a.member.role,
+      })),
     }));
   }
 
@@ -360,9 +576,6 @@ export class ProjectManagementService {
     const existingCount = await prisma.taskAssignee.count()
 
     if (existingCount > 0) {
-      console.log(
-        "[MIGRATION] TaskAssignee already has data. Migration skipped."
-      )
       return { skipped: true, reason: "already_migrated" }
     }
 
@@ -568,6 +781,20 @@ export class ProjectManagementService {
       }
     }
 
+    let finishDateUpdate: Date | null | undefined = undefined;
+    const nextStatus = payload.status ?? existing.status;
+
+    if (nextStatus === "done" && existing.status !== "done") {
+      // baru saja selesai
+      finishDateUpdate = new Date();
+    }
+
+    if (nextStatus !== "done" && existing.status === "done") {
+      // batal selesai
+      finishDateUpdate = null;
+    }
+
+
     // -----------------------------
     // UPDATE TASK CORE FIELDS
     // -----------------------------
@@ -576,21 +803,32 @@ export class ProjectManagementService {
       data: {
         title: payload.title ?? existing.title,
         description: payload.description ?? existing.description,
+
         projectId:
           payload.projectId !== undefined
             ? payload.projectId
             : existing.projectId,
-        status: payload.status ?? existing.status,
+
+        status: nextStatus,
+
+        finishDate: finishDateUpdate,
+
         priority: payload.priority ?? existing.priority,
+
         startDate:
           payload.startDate !== undefined
             ? payload.startDate
             : existing.startDate,
+
         dueDate:
-          payload.dueDate !== undefined ? payload.dueDate : existing.dueDate,
+          payload.dueDate !== undefined
+            ? payload.dueDate
+            : existing.dueDate,
+
         updatedAt: new Date(),
       },
-    })
+    });
+
 
     // -----------------------------
     // SYNC TASK ASSIGNEES (REPLACE)

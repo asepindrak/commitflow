@@ -1,6 +1,6 @@
 /* eslint-disable no-constant-binary-expression */
 /* eslint-disable no-empty */
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import Sidebar from "./Sidebar";
 import TaskModal from "./TaskModal";
@@ -12,6 +12,11 @@ import {
   VolumeX,
   Volume2,
   RefreshCw,
+  Calendar,
+  TimerReset,
+  LucideRefreshCcwDot,
+  RotateCcw,
+  CalendarX,
 } from "lucide-react";
 import TaskView from "./TaskView";
 import ExportImportControls from "./ExportImportControls";
@@ -38,6 +43,8 @@ import InviteLinkModal from "./InviteLinkModal";
 import { normalizeTaskAssignees } from "../utils/normalizeTaskAssignees";
 import { hydrateTask } from "../utils/hydrateTask";
 import { safeString } from "../utils/safeString";
+import MyTasksList from "./MyTasksList";
+import TasksReportTable from "./TasksReportTable";
 
 // Create local QueryClient so this component works even if app not wrapped globally
 const queryClient = new QueryClient();
@@ -45,6 +52,8 @@ const queryClient = new QueryClient();
 // small helper to normalize ids for safe comparisons
 const nid = (x: any) =>
   typeof x === "undefined" || x === null ? "" : String(x);
+
+type ViewMode = "PROJECT" | "MY_TASKS" | "REPORT";
 
 export default function ProjectManagement({
   isPlaySound,
@@ -71,6 +80,23 @@ export default function ProjectManagement({
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [inviteLink, setInviteLink] = useState<string>("");
+  const [viewMode, setViewMode] = useState<ViewMode>("PROJECT");
+  // 🗓️ GLOBAL DATE RANGE (for TaskBoard)
+  const [showDateFilter, setShowDateFilter] = useState(false);
+  const [tasksStartDate, setTasksStartDate] = useState<string | undefined>(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 60);
+    return d.toISOString().slice(0, 10);
+  });
+
+  const [tasksEndDate, setTasksEndDate] = useState<string | undefined>(() => {
+    return new Date().toISOString().slice(0, 10);
+  });
+
+  const prevDateRangeRef = useRef<string>("");
+
+  const dateRangeKey = `${tasksStartDate ?? ""}|${tasksEndDate ?? ""}`;
+
 
   const { workspaceId, setWorkspaceId, projectId, setProjectId } =
     useStoreWorkspace();
@@ -95,6 +121,11 @@ export default function ProjectManagement({
   const userId = useAuthStore((s) => s.userId);
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
+
+  const memberId = useMemo(() => {
+    if (!userId || !team?.length) return undefined;
+    return team.find((m: any) => m.userId === userId)?.id;
+  }, [team, userId]);
 
   const userWorkspace = team.filter(
     (item: any) =>
@@ -146,6 +177,15 @@ export default function ProjectManagement({
   }, []);
 
   useEffect(() => {
+    if (viewMode === "MY_TASKS" || viewMode === "REPORT") {
+      if (isLoaded) {
+        playSound("/sounds/close.mp3", isPlaySound);
+      }
+      setActiveProjectId("")
+    }
+  }, [viewMode]);
+
+  useEffect(() => {
     if (isLoaded) {
       playSound("/sounds/close.mp3", isPlaySound);
     }
@@ -154,6 +194,9 @@ export default function ProjectManagement({
   }, [activeWorkspaceId]);
 
   useEffect(() => {
+    if (activeProjectId === "") {
+      return
+    }
     if (activeWorkspaceId === lastActiveWorkspaceId && isLoaded) {
       playSound("/sounds/close.mp3", isPlaySound);
     } else {
@@ -161,6 +204,7 @@ export default function ProjectManagement({
     }
     saveState("projectId", activeProjectId);
     setProjectId(activeProjectId);
+    setViewMode("PROJECT")
   }, [activeProjectId]);
 
   const onOffSound = () => {
@@ -760,8 +804,11 @@ export default function ProjectManagement({
 
   const tasksQuery = useTasksQuery(
     activeProjectId ?? "",
-    activeWorkspaceId ?? ""
+    activeWorkspaceId ?? "",
+    tasksStartDate,
+    tasksEndDate
   );
+
   const createTaskMutation = useCreateTask();
   const updateTaskMutation = useUpdateTask();
   const deleteTaskMutation = useDeleteTask();
@@ -1309,45 +1356,61 @@ export default function ProjectManagement({
   }, [dark]);
 
   useEffect(() => {
-    if (!tasksQuery.data || !Array.isArray(tasksQuery.data)) return;
+    if (!Array.isArray(tasksQuery.data)) return;
 
-    // Snapshot localTasks to compute merge (we'll still call setTasks with final array)
+    const serverTasks = tasksQuery.data as Task[];
+
+    const dateChanged = prevDateRangeRef.current !== dateRangeKey;
+    prevDateRangeRef.current = dateRangeKey;
+
+    // 🔥 HARD RESET ON DATE CHANGE
+    if (dateChanged) {
+      setTasks(serverTasks);
+
+      // invalidate selectedTask if not in new range
+      setSelectedTask((cur) => {
+        if (!cur) return cur;
+        return serverTasks.some((t) => nid(t.id) === nid(cur.id))
+          ? cur
+          : null;
+      });
+
+      return;
+    }
+
+    // 🧠 NORMAL MERGE (REALTIME / OPTIMISTIC SAFE)
     setTasks((localTasks) => {
-      const serverTasks = tasksQuery.data as Task[];
-
       const tmp = localTasks.filter((t) => nid(t.id).startsWith("tmp_"));
-      const others = localTasks.filter(
-        (t) => !nid(t.id).startsWith("tmp_") && t.projectId !== activeProjectId
-      );
 
       const localById = new Map(localTasks.map((t) => [nid(t.id), t]));
-      const serverById = new Map(serverTasks.map((t) => [nid(t.id), t]));
 
       const mergedServerTasks: Task[] = serverTasks.map((st) => {
-        const id = nid(st.id);
-        const lt = localById.get(id);
+        const lt = localById.get(nid(st.id));
 
-        const serverComments: any[] = Array.isArray((st as any).comments)
+        // merge comments safely
+        const serverComments = Array.isArray((st as any).comments)
           ? (st as any).comments
           : [];
-        const localComments: any[] =
+        const localComments =
           lt && Array.isArray((lt as any).comments) ? (lt as any).comments : [];
 
-        const maxCreatedAt = (arr: any[]) => {
-          if (!arr || arr.length === 0) return null;
-          try {
-            return arr
-              .map((c) => c?.createdAt ?? c?.created_at ?? null)
-              .filter(Boolean)
-              .sort()
-              .slice(-1)[0];
-          } catch {
-            return null;
-          }
-        };
+        const maxCreatedAt = (arr: any[]) =>
+          arr
+            ?.map((c) => c?.createdAt)
+            .filter(Boolean)
+            .sort()
+            .slice(-1)[0] ?? null;
 
         const latestServer = maxCreatedAt(serverComments);
         const latestLocal = maxCreatedAt(localComments);
+
+        let chosenComments = serverComments;
+        if (
+          localComments.length > 0 &&
+          (!latestServer || (latestLocal && latestLocal > latestServer))
+        ) {
+          chosenComments = localComments;
+        }
 
         const tmpLocalOnly = localComments.filter(
           (c: any) =>
@@ -1355,59 +1418,29 @@ export default function ProjectManagement({
             !serverComments.some((sc: any) => nid(sc.id) === nid(c.id))
         );
 
-        let chosenComments: any[] = serverComments;
-
-        if (
-          localComments.length > 0 &&
-          (!latestServer || (latestLocal && latestLocal > latestServer))
-        ) {
-          chosenComments = localComments;
-        } else if (serverComments.length > 0) {
-          chosenComments = serverComments;
-        } else if (localComments.length > 0) {
-          chosenComments = localComments;
-        } else {
-          chosenComments = [];
-        }
-
-        if (tmpLocalOnly.length > 0) {
-          const existingIds = new Set(
-            chosenComments.map((c: any) => nid(c.id))
-          );
-          const toAppend = tmpLocalOnly.filter(
-            (c: any) => !existingIds.has(nid(c.id))
-          );
-          if (toAppend.length > 0)
-            chosenComments = [...chosenComments, ...toAppend];
+        if (tmpLocalOnly.length) {
+          const ids = new Set(chosenComments.map((c: any) => nid(c.id)));
+          chosenComments = [
+            ...chosenComments,
+            ...tmpLocalOnly.filter((c: any) => !ids.has(nid(c.id))),
+          ];
         }
 
         return { ...st, comments: chosenComments };
       });
 
-      const merged = [
-        ...others,
-        ...mergedServerTasks,
-        ...tmp.filter((t) => t.projectId === activeProjectId),
-      ];
+      const merged = [...mergedServerTasks, ...tmp];
 
-      // build map for quick lookup
-      const mergedMap = new Map<string, Task>();
-      for (const t of merged) mergedMap.set(nid(t.id), t);
+      // sync selectedTask ref
+      const mergedMap = new Map(merged.map((t) => [nid(t.id), t]));
+      setSelectedTask((cur) =>
+        cur ? mergedMap.get(nid(cur.id)) ?? null : null
+      );
 
-      // update selectedTask to the merged object if currently selected
-      setSelectedTask((cur) => {
-        if (!cur) return cur;
-        const found = mergedMap.get(nid(cur.id));
-        // if found, return merged object (fresh ref) so modal sees up-to-date comments
-        return found ?? cur;
-      });
-
-      // finally return canonical merged array (deduped by id)
-      const map = new Map<string, Task>();
-      for (const t of merged) map.set(nid(t.id), t);
-      return Array.from(map.values());
+      return merged;
     });
-  }, [tasksQuery.data, activeProjectId]);
+  }, [tasksQuery.data, activeProjectId, dateRangeKey]);
+
 
   async function handleAddTask(title: string) {
     if (!activeProjectId) {
@@ -2469,241 +2502,328 @@ export default function ProjectManagement({
           isPlaySound={isPlaySound}
           openEditProfileTeam={openEditProfileTeam}
           isAdmin={isAdmin}
+          onOpenViewMode={(view: ViewMode) => setViewMode(view)}
         />
 
         <main className="flex-1 h-full overflow-auto">
           <div className="cf-main-container p-8 min-h-full">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-3xl font-extrabold bg-gradient-to-r from-blue-600 via-sky-500 to-cyan-400 bg-clip-text text-transparent">
-                {projects.find((x) => x.id === activeProjectId)?.name || "—"}
-              </h2>
-
-              <div className="flex items-center gap-5">
-                <button
-                  onClick={handleSync}
-                  disabled={syncing}
-                  className={`
-    group relative inline-flex items-center gap-2 px-5 py-2.5
-    rounded-2xl text-sm font-semibold backdrop-blur-md
-    transition-all duration-300 
-    ${syncing
-                      ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                      : "bg-white/10 dark:bg-white/5 hover:bg-white/20 dark:hover:bg-white/10 border border-white/20 dark:border-white/10"
-                    }
-    shadow-[0_4px_12px_rgba(0,0,0,0.1)]
-    hover:shadow-[0_6px_16px_rgba(0,0,0,0.15)]
-    active:scale-95
-  `}
-                >
-                  {/* spinning icon */}
-                  <RefreshCw
-                    size={18}
-                    className={`transition-transform ${syncing
-                      ? "animate-spin text-emerald-400"
-                      : "group-hover:rotate-180 text-gray-700 dark:text-white/80"
-                      }`}
-                  />
-
-                  {/* label */}
-                  <span
-                    className={
-                      syncing
-                        ? "text-emerald-400"
-                        : "text-gray-900 dark:text-white"
-                    }
-                  >
-                    {syncing ? "Syncing…" : "Sync"}
-                  </span>
-
-                  {/* glow indicator */}
-                  {!syncing && (
-                    <span className="absolute inset-0 rounded-2xl bg-emerald-500/20 opacity-0 group-hover:opacity-20 transition-opacity"></span>
-                  )}
-
-                  {/* small dot indicator when syncing */}
-                  {syncing && (
-                    <span className="absolute -top-1.5 -right-1.5 h-3 w-3 rounded-full bg-emerald-400 animate-ping"></span>
-                  )}
-                </button>
-
-                <button
-                  onClick={() => handleAddTask("New Task")}
-                  disabled={creatingTask}
-                  className="group inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold
-             bg-gradient-to-r from-sky-500 to-sky-600 text-white
-             hover:from-sky-600 hover:to-sky-700
-             active:scale-95 transition-all duration-300
-             dark:from-sky-600 dark:to-sky-700 dark:hover:from-sky-700 dark:hover:to-sky-800"
-                >
-                  <PlusCircle
-                    size={18}
-                    className="transition-transform duration-300 group-hover:rotate-90"
-                  />
-                  <span>{creatingTask ? "Adding..." : "New Task"}</span>
-                </button>
-                {isAdmin && (
-                  <ExportImportControls
-                    projects={projects}
-                    tasks={tasks}
-                    team={team}
-                    onImport={(payload: any) => handleImport(payload)}
-                  />
-                )}
-
-                <button
-                  onClick={() => setDark(!dark)}
-                  className="p-2 rounded-full border border-gray-300 dark:border-gray-700 bg-slate-100 dark:bg-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all duration-200"
-                >
-                  {dark ? (
-                    <Moon className="w-4 h-4 text-sky-400" />
-                  ) : (
-                    <Sun className="w-4 h-4 text-amber-500" />
-                  )}
-                </button>
-                <button
-                  onClick={onOffSound}
-                  className="py-1 px-2 rounded-sm ml-2 hover:bg-[#334155] transition"
-                >
-                  {!isPlaySound ? (
-                    <VolumeX className="w-5 h-5 text-gray-300" />
-                  ) : (
-                    <Volume2 className="w-5 h-5 text-cyan-400" />
-                  )}
-                </button>
-                <div className="relative profile-menu-area">
-                  <button
-                    onClick={() => setShowProfileMenu((v) => !v)}
-                    className="relative w-10 h-10 rounded-full overflow-hidden border border-white/20 shadow hover:opacity-90 transition"
-                  >
-                    {userPhoto ? (
-                      <img
-                        src={userPhoto}
-                        alt="User"
-                        className="w-full h-full object-cover"
+              {!showDateFilter &&
+                <h2 className="text-3xl font-extrabold bg-gradient-to-r from-blue-600 via-sky-500 to-cyan-400 bg-clip-text text-transparent">
+                  {viewMode === "PROJECT" ? projects.find((x) => x.id === activeProjectId)?.name || "—" : viewMode === "MY_TASKS" ? "My Tasks" : "Report"}
+                </h2>
+              }
+              {viewMode === "PROJECT" &&
+                <div className="flex items-center gap-5">
+                  {!showDateFilter &&
+                    <button
+                      onClick={() => setShowDateFilter(!showDateFilter)}
+                      className="group inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold
+                      bg-white border border-gray-200 text-gray-700 cursor-pointer
+                      hover:bg-gray-50 active:scale-95 transition-all duration-300
+                      dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-700"
+                    >
+                      <Calendar
+                        size={18}
+                        className={`transition-transform ${syncing
+                          ? "animate-spin text-emerald-400"
+                          : "group-hover:rotate-15 text-gray-700 dark:text-white/80"
+                          }`}
                       />
-                    ) : (
-                      <div className="w-full h-full bg-gradient-to-r from-purple-500 to-indigo-500 flex items-center justify-center">
-                        <span className="font-semibold text-white text-sm">
-                          {userInitial.toUpperCase()}
-                        </span>
+                      Date
+                    </button>
+                  }
+                  {showDateFilter &&
+                    <>
+                      <div className="
+                        flex items-center gap-2 px-3 py-2 rounded-lg border
+                        bg-white/60 dark:bg-gray-800/60
+                        border-gray-300 dark:border-gray-700
+                        text-sm
+                      ">
+                        <input
+                          type="date"
+                          value={tasksStartDate ?? ""}
+                          onChange={(e) =>
+                            setTasksStartDate(e.target.value || undefined)
+                          }
+                          className="bg-transparent outline-none text-sm"
+                        />
+                        <span className="text-gray-400">→</span>
+                        <input
+                          type="date"
+                          value={tasksEndDate ?? ""}
+                          onChange={(e) =>
+                            setTasksEndDate(e.target.value || undefined)
+                          }
+                          className="bg-transparent outline-none text-sm"
+                        />
                       </div>
+
+                      {(tasksStartDate || tasksEndDate) && (
+                        <button
+                          onClick={() => {
+                            const now = new Date();
+                            const past = new Date();
+                            past.setDate(now.getDate() - 60);
+                            setTasksStartDate(past.toISOString().slice(0, 10));
+                            setTasksEndDate(now.toISOString().slice(0, 10));
+                            setShowDateFilter(!showDateFilter)
+                          }}
+                          className="group inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold
+                      bg-white border border-gray-200 text-gray-700 cursor-pointer
+                      hover:bg-gray-50 active:scale-95 transition-all duration-300
+                      dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-700"
+                        >
+                          <CalendarX
+                            size={18}
+                            className={`transition-transform ${syncing
+                              ? "animate-spin text-emerald-400"
+                              : "group-hover:rotate-15 text-gray-700 dark:text-white/80"
+                              }`}
+                          />
+                          Reset
+                        </button>
+                      )}
+                    </>
+                  }
+                  <button
+                    onClick={handleSync}
+                    disabled={syncing}
+                    className={`
+                    group relative inline-flex items-center gap-2 px-5 py-2.5
+                    rounded-2xl text-sm font-semibold backdrop-blur-md
+                    transition-all duration-300 
+                    ${syncing
+                        ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                        : "bg-white/10 dark:bg-white/5 hover:bg-white/20 dark:hover:bg-white/10 border border-white/20 dark:border-white/10"
+                      }
+                    shadow-[0_4px_12px_rgba(0,0,0,0.1)]
+                    hover:shadow-[0_6px_16px_rgba(0,0,0,0.15)]
+                    active:scale-95
+                  `}
+                  >
+                    {/* spinning icon */}
+                    <RefreshCw
+                      size={18}
+                      className={`transition-transform ${syncing
+                        ? "animate-spin text-emerald-400"
+                        : "group-hover:rotate-180 text-gray-700 dark:text-white/80"
+                        }`}
+                    />
+
+                    {/* label */}
+                    <span
+                      className={
+                        syncing
+                          ? "text-emerald-400"
+                          : "text-gray-900 dark:text-white"
+                      }
+                    >
+                      {syncing ? "Syncing…" : "Sync"}
+                    </span>
+
+                    {/* glow indicator */}
+                    {!syncing && (
+                      <span className="absolute inset-0 rounded-2xl bg-emerald-500/20 opacity-0 group-hover:opacity-20 transition-opacity"></span>
+                    )}
+
+                    {/* small dot indicator when syncing */}
+                    {syncing && (
+                      <span className="absolute -top-1.5 -right-1.5 h-3 w-3 rounded-full bg-emerald-400 animate-ping"></span>
                     )}
                   </button>
 
-                  {showProfileMenu && (
-                    <div className="absolute right-0 mt-2 w-40 rounded-lg bg-slate-100 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow-lg py-1 z-50">
-                      <button
-                        onClick={() => {
-                          openEditProfile();
-                        }}
-                        className="w-full text-left px-4 py-2 text-sm hover:bg-blue-400 hover:text-white text-slate-900 dark:text-slate-100 dark:hover:bg-gray-800 transition"
-                      >
-                        Edit Profile
-                      </button>
-                      <button
-                        onClick={handleLogout}
-                        className="w-full text-left px-4 py-2 text-sm hover:bg-blue-400 hover:text-white text-slate-900 dark:text-slate-100 dark:hover:bg-gray-800 transition"
-                      >
-                        Logout
-                      </button>
-                    </div>
+                  <button
+                    onClick={() => handleAddTask("New Task")}
+                    disabled={creatingTask}
+                    className="group inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold
+                    bg-gradient-to-r from-sky-500 to-sky-600 text-white
+                    hover:from-sky-600 hover:to-sky-700
+                    active:scale-95 transition-all duration-300
+                    dark:from-sky-600 dark:to-sky-700 dark:hover:from-sky-700 dark:hover:to-sky-800"
+                  >
+                    <PlusCircle
+                      size={18}
+                      className="transition-transform duration-300 group-hover:rotate-90"
+                    />
+                    <span>{creatingTask ? "Adding..." : "New Task"}</span>
+                  </button>
+                  {isAdmin && (
+                    <ExportImportControls
+                      projects={projects}
+                      tasks={tasks}
+                      team={team}
+                      onImport={(payload: any) => handleImport(payload)}
+                    />
                   )}
+
+                  <button
+                    onClick={() => setDark(!dark)}
+                    className="p-2 rounded-full border border-gray-300 dark:border-gray-700 bg-slate-100 dark:bg-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all duration-200"
+                  >
+                    {dark ? (
+                      <Moon className="w-4 h-4 text-sky-400" />
+                    ) : (
+                      <Sun className="w-4 h-4 text-amber-500" />
+                    )}
+                  </button>
+                  <button
+                    onClick={onOffSound}
+                    className="py-1 px-2 rounded-sm ml-2 hover:bg-[#334155] transition"
+                  >
+                    {!isPlaySound ? (
+                      <VolumeX className="w-5 h-5 text-gray-300" />
+                    ) : (
+                      <Volume2 className="w-5 h-5 text-cyan-400" />
+                    )}
+                  </button>
+                  <div className="relative profile-menu-area">
+                    <button
+                      onClick={() => setShowProfileMenu((v) => !v)}
+                      className="relative w-10 h-10 rounded-full overflow-hidden border border-white/20 shadow hover:opacity-90 transition"
+                    >
+                      {userPhoto ? (
+                        <img
+                          src={userPhoto}
+                          alt="User"
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-gradient-to-r from-purple-500 to-indigo-500 flex items-center justify-center">
+                          <span className="font-semibold text-white text-sm">
+                            {userInitial.toUpperCase()}
+                          </span>
+                        </div>
+                      )}
+                    </button>
+
+                    {showProfileMenu && (
+                      <div className="absolute right-0 mt-2 w-40 rounded-lg bg-slate-100 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow-lg py-1 z-50">
+                        <button
+                          onClick={() => {
+                            openEditProfile();
+                          }}
+                          className="w-full text-left px-4 py-2 text-sm hover:bg-blue-400 hover:text-white text-slate-900 dark:text-slate-100 dark:hover:bg-gray-800 transition"
+                        >
+                          Edit Profile
+                        </button>
+                        <button
+                          onClick={handleLogout}
+                          className="w-full text-left px-4 py-2 text-sm hover:bg-blue-400 hover:text-white text-slate-900 dark:text-slate-100 dark:hover:bg-gray-800 transition"
+                        >
+                          Logout
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
+              }
             </div>
+            {viewMode === "MY_TASKS" && memberId && (
+              <>
+                <MyTasksList memberId={memberId} workspaceId={activeWorkspaceId} onSelectTask={(projectId: string) => setActiveProjectId(projectId)} />
+              </>
+            )}
+            {viewMode === "REPORT" && activeWorkspaceId && (
+              <>
+                <TasksReportTable workspaceId={activeWorkspaceId} onSelectTask={(projectId: string) => setActiveProjectId(projectId)} team={team} />
+              </>
+            )}
+            {viewMode === "PROJECT" && (
+              <TaskView
+                currentMemberId={authTeamMemberId}
+                columns={columns}
+                onDropTo={(
+                  status?: string,
+                  draggedId?: string,
+                  insertIndex?: number
+                ) => {
+                  if (!draggedId) return;
 
-            <TaskView
-              currentMemberId={authTeamMemberId}
-              columns={columns}
-              onDropTo={(
-                status?: string,
-                draggedId?: string,
-                insertIndex?: number
-              ) => {
-                if (!draggedId) return;
+                  // optimistic reorder on client (flat tasks array, each task has .status)
+                  setTasks((s) => {
+                    const clone = [...s];
+                    const fromIdx = clone.findIndex(
+                      (t) => nid(t.id) === nid(draggedId)
+                    );
+                    if (fromIdx === -1) return s;
 
-                // optimistic reorder on client (flat tasks array, each task has .status)
-                setTasks((s) => {
-                  const clone = [...s];
-                  const fromIdx = clone.findIndex(
-                    (t) => nid(t.id) === nid(draggedId)
-                  );
-                  if (fromIdx === -1) return s;
+                    const [moved] = clone.splice(fromIdx, 1);
 
-                  const [moved] = clone.splice(fromIdx, 1);
+                    // collect current tasks in the destination column (in DOM/state order)
+                    const dest = clone.filter((t) => t.status === status);
 
-                  // collect current tasks in the destination column (in DOM/state order)
-                  const dest = clone.filter((t) => t.status === status);
+                    // compute insertion index among dest; default append
+                    const idx =
+                      typeof insertIndex === "number" && insertIndex >= 0
+                        ? insertIndex
+                        : dest.length;
 
-                  // compute insertion index among dest; default append
-                  const idx =
-                    typeof insertIndex === "number" && insertIndex >= 0
-                      ? insertIndex
-                      : dest.length;
-
-                  // build new list: insert moved task (with updated status) at proper position among dest
-                  const result: typeof s = [];
-                  let inserted = false;
-                  let seenInDest = 0;
-                  for (const t of clone) {
-                    if (t.status === status) {
-                      if (seenInDest === idx && !inserted) {
-                        result.push({ ...moved, status });
-                        inserted = true;
+                    // build new list: insert moved task (with updated status) at proper position among dest
+                    const result: typeof s = [];
+                    let inserted = false;
+                    let seenInDest = 0;
+                    for (const t of clone) {
+                      if (t.status === status) {
+                        if (seenInDest === idx && !inserted) {
+                          result.push({ ...moved, status });
+                          inserted = true;
+                        }
+                        result.push(t);
+                        seenInDest++;
+                      } else {
+                        result.push(t);
                       }
-                      result.push(t);
-                      seenInDest++;
-                    } else {
-                      result.push(t);
                     }
-                  }
-                  if (!inserted) {
-                    // column empty or insert at end
-                    result.push({ ...moved, status: status as "todo" | "inprogress" | "qa" | "deploy" | "done" | "blocked" | undefined });
-                  }
-                  return result;
-                });
+                    if (!inserted) {
+                      // column empty or insert at end
+                      result.push({ ...moved, status: status as "todo" | "inprogress" | "qa" | "deploy" | "done" | "blocked" | undefined });
+                    }
+                    return result;
+                  });
 
-                // call server to persist status (and optionally order/position if backend supports it)
-                updateTaskMutation.mutate(
-                  {
-                    id: draggedId,
-                    patch: {
-                      status /* optionally include order/index if supported */,
+                  // call server to persist status (and optionally order/position if backend supports it)
+                  updateTaskMutation.mutate(
+                    {
+                      id: draggedId,
+                      patch: {
+                        status /* optionally include order/index if supported */,
+                      },
                     },
-                  },
-                  {
-                    onError: (err) => {
-                      console.error("update task failed", err);
-                      // fallback: enqueue op for eventual sync
-                      try {
-                        enqueueOp({
-                          op: "update_task",
-                          payload: { id: draggedId, patch: { status } },
-                          createdAt: new Date().toISOString(),
-                        });
-                      } catch (e) {
-                        console.log("enqueue failed", e);
-                      }
-                    },
-                    onSettled: () => {
-                      qcRef.current.invalidateQueries([
-                        "tasks",
-                        activeProjectId,
-                      ]);
-                    },
-                  }
-                );
-              }}
-              onDragStart={handleDragStart}
-              onDrag={handleDrag}
-              onDragEnd={handleDragEnd}
-              dragPos={dragPos}
-              dragTaskId={dragTaskId}
-              startPointerDrag={startPointerDrag}
-              onSelectTask={(t) => setSelectedTask(t)}
-              team={team}
-            />
+                    {
+                      onError: (err) => {
+                        console.error("update task failed", err);
+                        // fallback: enqueue op for eventual sync
+                        try {
+                          enqueueOp({
+                            op: "update_task",
+                            payload: { id: draggedId, patch: { status } },
+                            createdAt: new Date().toISOString(),
+                          });
+                        } catch (e) {
+                          console.log("enqueue failed", e);
+                        }
+                      },
+                      onSettled: () => {
+                        qcRef.current.invalidateQueries([
+                          "tasks",
+                          activeProjectId,
+                        ]);
+                      },
+                    }
+                  );
+                }}
+                onDragStart={handleDragStart}
+                onDrag={handleDrag}
+                onDragEnd={handleDragEnd}
+                dragPos={dragPos}
+                dragTaskId={dragTaskId}
+                startPointerDrag={startPointerDrag}
+                onSelectTask={(t) => setSelectedTask(t)}
+                team={team}
+              />
+            )}
 
             {selectedTask && (
               <TaskModal

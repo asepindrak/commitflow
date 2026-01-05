@@ -121,6 +121,7 @@ model Task {
   assigneeId    String?
   startDate     String?
   dueDate       String?
+  finishDate    DateTime?
   priority      String?
   assignee      TeamMember?    @relation("TaskMembers", fields: [assigneeId], references: [id])
   isTrash       Boolean        @default(false)
