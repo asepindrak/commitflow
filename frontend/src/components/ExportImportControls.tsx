@@ -2,22 +2,23 @@
 import React, { useRef, useState } from "react";
 import * as XLSX from "xlsx";
 import { toast } from "react-toastify";
-import { Download, Loader2, Save, UploadCloud } from "lucide-react";
+import { Download, Loader2, UploadCloud } from "lucide-react";
 import type { Project, Task, TeamMember } from "../types";
 import {
   findDataUrisInHtml,
   replaceDataUrisInCommentsAndUpload,
   replaceDataUrisInHtmlAndUpload,
 } from "../utils/dataURItoFile";
+import { useStoreWorkspace } from "../utils/store";
 
 /**
  * ExportImportControls (per-project)
  *
  * Props:
- * - projects: Project[] (used only to resolve project -> workspaceId if selectedProjectId provided)
+ * - projects: Project[] (used only to resolve project -> workspaceId if projectId provided)
  * - tasks: Task[]
  * - team: TeamMember[]
- * - selectedProjectId?: string  // when provided, export only tasks for this project (and related members)
+ * - projectId?: string  // when provided, export only tasks for this project (and related members)
  * - onImport: (payload: { tasks?: Task[]; team?: TeamMember[] }) => void
  *
  * Exports sheets:
@@ -31,17 +32,17 @@ export default function ExportImportControls({
   projects,
   tasks,
   team,
-  selectedProjectId,
   onImport,
 }: {
   projects?: Project[];
   tasks: Task[];
   team: TeamMember[];
-  selectedProjectId?: string;
   onImport: (payload: { tasks?: Task[]; team?: TeamMember[] }) => void;
 }) {
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+
+  const { workspaceId, projectId } = useStoreWorkspace();
 
   const safeString = (v: any) =>
     v === null || typeof v === "undefined" ? "" : String(v);
@@ -55,7 +56,15 @@ export default function ExportImportControls({
 
   async function exportXlsx() {
     try {
+      if (!projectId) {
+
+        toast.dark(
+          `Warning: Failed export task. Project ID not found!`
+        );
+        return
+      }
       setIsLoading(true);
+
       const MAX_EXCEL_CELL = 32767; // Excel limit for a single cell
       const truncations: string[] = [];
 
@@ -71,8 +80,8 @@ export default function ExportImportControls({
       };
 
       // Determine tasks to export (per-project if selected)
-      const filteredTasks = selectedProjectId
-        ? tasks.filter((t) => t.projectId === selectedProjectId)
+      const filteredTasks = projectId
+        ? tasks.filter((t) => t.projectId === projectId)
         : tasks.slice();
 
       // ---------------------------
@@ -101,8 +110,7 @@ export default function ExportImportControls({
             err
           );
           toast.dark(
-            `Warning: failed uploading embedded files for comments on task ${
-              t.id ?? ""
+            `Warning: failed uploading embedded files for comments on task ${t.id ?? ""
             }`
           );
         }
@@ -144,8 +152,7 @@ export default function ExportImportControls({
             err
           );
           toast.dark(
-            `Warning: failed uploading embedded files for description on task ${
-              t.id ?? ""
+            `Warning: failed uploading embedded files for description on task ${t.id ?? ""
             }`
           );
           // keep original description if upload fails (don't block export)
@@ -160,7 +167,7 @@ export default function ExportImportControls({
       }
 
       // Try to find project's workspaceId for broader team inclusion (optional)
-      const project = projects?.find((p) => p.id === selectedProjectId);
+      const project = projects?.find((p) => p.id === projectId);
       const projectWorkspaceId = project?.workspaceId;
 
       // Build a map for quick lookup of member email by id
@@ -174,7 +181,7 @@ export default function ExportImportControls({
           if (assigneeIds.size > 0 && assigneeIds.has(m.id)) return true;
           if (projectWorkspaceId && m.workspaceId === projectWorkspaceId)
             return true;
-          return !selectedProjectId;
+          return !projectId;
         })
         .map((m) => ({
           id: truncateForExcel(m.id ?? "", `team.id:${m.id ?? ""}`),
@@ -292,7 +299,7 @@ export default function ExportImportControls({
         "team"
       );
 
-      const projectTag = selectedProjectId ? `_${selectedProjectId}` : "";
+      const projectTag = projectId ? `_${projectId}` : "";
       const filename = `commitflow_export${projectTag}_${new Date()
         .toISOString()
         .slice(0, 10)}.xlsx`;
@@ -324,6 +331,15 @@ export default function ExportImportControls({
   function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     if (!f) return;
+
+    if (!projectId) {
+
+      toast.dark(
+        `Warning: Failed import task. Project ID not found!`
+      );
+      return
+    }
+
     setIsLoading(true);
     const reader = new FileReader();
     reader.onload = async (ev) => {
