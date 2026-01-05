@@ -24,11 +24,16 @@ export async function getProjects(workspaceId: string) {
           select: {
             id: true,
             status: true,
-            assigneeId: true,
+            taskAssignees: {
+              select: {
+                memberId: true,
+              },
+            },
           },
         },
       },
     });
+
 
     const enriched = results.map((project) => {
       const tasks = project.tasks;
@@ -44,6 +49,8 @@ export async function getProjects(workspaceId: string) {
           total: tasks.length,
           todo: tasks.filter((t) => t.status === "todo").length,
           inprogress: tasks.filter((t) => t.status === "inprogress").length,
+          qa: tasks.filter((t) => t.status === "qa").length,
+          deploy: tasks.filter((t) => t.status === "deploy").length,
           done: tasks.filter((t) => t.status === "done").length,
         },
       };
@@ -63,13 +70,18 @@ export async function getProjects(workspaceId: string) {
  */
 function baseTaskInclude() {
   return {
-    assignee: {
-      select: {
-        id: true,
-        name: true,
-        role: true,
-        email: true,
-        photo: true,
+    taskAssignees: {
+      include: {
+        member: {
+          select: {
+            id: true,
+            name: true,
+            role: true,
+            email: true,
+            photo: true,
+            phone: true,
+          },
+        },
       },
     },
     project: {
@@ -81,6 +93,7 @@ function baseTaskInclude() {
     comments: true,
   };
 }
+
 
 function buildTaskWhere(projectId?: string, status?: string) {
   // Only filter by project (no cross-workspace lookup)
@@ -166,6 +179,50 @@ export async function getInProgressTasks(projectId = "") {
 
 /**
  * =====================================
+ * QA TASKS
+ * =====================================
+ */
+export async function getQaTasks(projectId = "") {
+  try {
+    console.log("getQaTasks");
+
+    const results = await prisma.task.findMany({
+      where: await buildTaskWhere(projectId, "qa"),
+      include: baseTaskInclude(),
+      orderBy: { createdAt: "desc" },
+    });
+
+    return results;
+  } catch (error) {
+    logger.error("error fetching getQaTasks", error);
+    return [];
+  }
+}
+
+/**
+ * =====================================
+ * DEPLOY TASKS
+ * =====================================
+ */
+export async function getDeployTasks(projectId = "") {
+  try {
+    console.log("getDeployTasks");
+
+    const results = await prisma.task.findMany({
+      where: await buildTaskWhere(projectId, "deploy"),
+      include: baseTaskInclude(),
+      orderBy: { createdAt: "desc" },
+    });
+
+    return results;
+  } catch (error) {
+    logger.error("error fetching getDeployTasks", error);
+    return [];
+  }
+}
+
+/**
+ * =====================================
  * DONE TASKS
  * =====================================
  */
@@ -229,6 +286,8 @@ export async function getMembers(workspaceId: string) {
         total: member.Task.length,
         todo: member.Task.filter((t) => t.status === "todo").length,
         inprogress: member.Task.filter((t) => t.status === "inprogress").length,
+        qa: member.Task.filter((t) => t.status === "qa").length,
+        deploy: member.Task.filter((t) => t.status === "deploy").length,
         done: member.Task.filter((t) => t.status === "done").length,
       },
       tasks: member.Task,
@@ -247,10 +306,14 @@ export async function getUnassignedTasks(projectId: string = "") {
 
     const where: any = {
       isTrash: false,
-      assigneeId: null,
+      taskAssignees: {
+        none: {}, // 🔥 inti multi-assignee
+      },
     };
 
-    if (projectId) where.projectId = projectId;
+    if (projectId) {
+      where.projectId = projectId;
+    }
 
     const results = await prisma.task.findMany({
       where,
@@ -264,6 +327,7 @@ export async function getUnassignedTasks(projectId: string = "") {
     return [];
   }
 }
+
 
 export async function getUrgentTasks(projectId: string = "") {
   try {

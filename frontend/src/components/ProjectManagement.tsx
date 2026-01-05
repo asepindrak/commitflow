@@ -4,7 +4,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import Sidebar from "./Sidebar";
 import TaskModal from "./TaskModal";
-import type { Project, Task, TeamMember, Workspace } from "../types";
+import type { Project, Task, TaskAssignee, TeamMember, Workspace } from "../types";
 import {
   Sun,
   Moon,
@@ -35,6 +35,9 @@ import { playSound } from "../utils/playSound";
 import { getState, saveState } from "../utils/local";
 import EditMemberModal from "./EditMemberModal";
 import InviteLinkModal from "./InviteLinkModal";
+import { normalizeTaskAssignees } from "../utils/normalizeTaskAssignees";
+import { hydrateTask } from "../utils/hydrateTask";
+import { safeString } from "../utils/safeString";
 
 // Create local QueryClient so this component works even if app not wrapped globally
 const queryClient = new QueryClient();
@@ -610,7 +613,7 @@ export default function ProjectManagement({
             }
             if (!inserted) {
               // either column empty or insert at end
-              newList.push({ ...item, status: dropKey });
+              newList.push({ ...item, status: dropKey as "todo" | "inprogress" | "qa" | "deploy" | "done" | "blocked" | undefined });
             }
             return newList;
           });
@@ -1096,14 +1099,15 @@ export default function ProjectManagement({
                     rem.op === "update_task" &&
                     rem.payload &&
                     rem.payload.patch &&
-                    rem.payload.patch.assigneeId === originalTmpId
+                    Array.isArray(rem.payload.patch.taskAssignees)
                   ) {
-                    prefix(
-                      "updating rem.update_task.patch.assigneeId -> created.id",
-                      { rem }
-                    );
-                    rem.payload.patch.assigneeId = created.id;
+                    rem.payload.patch.taskAssignees =
+                      rem.payload.patch.taskAssignees.map((a: any) => ({
+                        memberId:
+                          a.memberId === originalTmpId ? created.id : a.memberId,
+                      }));
                   }
+
                 }
               }
             } else if (op.op === "delete_team") {
@@ -1420,8 +1424,7 @@ export default function ProjectManagement({
       projectId: activeProjectId || null,
       comments: [],
       priority: "low" as Task["priority"],
-      assigneeId: null as string | null,
-      assigneeName: null as string | null,
+      taskAssignees: [],
       startDate: null as string | null,
       dueDate: null as string | null,
     };
@@ -1489,25 +1492,23 @@ export default function ProjectManagement({
           id: updated.id,
           patch: {
             title: updated.title,
-            description: (updated as any).description ?? null,
+            description: updated.description ?? null,
             projectId: updated.projectId ?? null,
             status: updated.status ?? undefined,
-            priority: (updated as any).priority ?? undefined,
-            assigneeId: updated.assigneeId ?? null,
-            startDate:
-              (updated as any).startDate == null
-                ? null
-                : (updated as any).startDate instanceof Date
-                  ? (updated as any).startDate.toISOString()
-                  : String((updated as any).startDate),
-            dueDate:
-              (updated as any).dueDate == null
-                ? null
-                : (updated as any).dueDate instanceof Date
-                  ? (updated as any).dueDate.toISOString()
-                  : String((updated as any).dueDate),
+            priority: updated.priority ?? undefined,
+
+            taskAssignees: Array.isArray(updated.taskAssignees)
+              ? updated.taskAssignees.map((a: TaskAssignee) => ({
+                memberId: a.id,
+              }))
+              : [],
+
+
+            startDate: updated.startDate ?? null,
+            dueDate: updated.dueDate ?? null,
           },
         };
+
 
         // include comments if present on updated (may be [] or array)
         if (
@@ -1538,7 +1539,12 @@ export default function ProjectManagement({
       patch.projectId = updated.projectId ?? undefined;
       patch.status = updated.status ?? undefined;
       patch.priority = (updated as any).priority ?? undefined;
-      patch.assigneeId = updated.assigneeId ?? undefined;
+      patch.taskAssignees = Array.isArray((updated as any).taskAssignees)
+        ? (updated as any).taskAssignees.map((a: TaskAssignee) => ({
+          memberId: a.id,
+        }))
+        : [];
+
 
       if (typeof (updated as any).startDate !== "undefined") {
         patch.startDate =
@@ -1581,14 +1587,20 @@ export default function ProjectManagement({
           return (old as Task[]).map((t) => {
             if (nid(t.id) === nid(updated.id)) {
               const merged = {
-                ...t, // baseline local
-                ...result, // server authoritative fields
-                // ensure comments fallback: prefer server.comments, else local t.comments
+                ...t,
+                ...result,
+
+                taskAssignees:
+                  typeof result.taskAssignees !== "undefined"
+                    ? result.taskAssignees
+                    : t.taskAssignees,
+
                 comments:
-                  result && typeof result.comments !== "undefined"
+                  typeof result.comments !== "undefined"
                     ? result.comments
                     : t.comments,
               };
+
               return merged;
             }
             return t;
@@ -1626,13 +1638,18 @@ export default function ProjectManagement({
           ? {
             ...cur,
             ...result,
+            taskAssignees:
+              typeof result.taskAssignees !== "undefined"
+                ? result.taskAssignees
+                : cur.taskAssignees,
             comments:
-              result && typeof result.comments !== "undefined"
+              typeof result.comments !== "undefined"
                 ? result.comments
                 : cur.comments,
           }
           : cur
       );
+
     } catch (err) {
       console.error(
         "handleUpdateTask: updateTaskMutation failed, enqueueing fallback",
@@ -1745,12 +1762,16 @@ export default function ProjectManagement({
       s.filter((tm) => tm.id !== idOrName && tm.name !== idOrName)
     );
     setTasks((prev) =>
-      prev.map((task) =>
-        task.assigneeName === target.name
-          ? { ...task, assigneeName: undefined, assigneeId: undefined }
-          : task
-      )
+      prev.map((task) => ({
+        ...task,
+        taskAssignees: Array.isArray((task as any).taskAssignees)
+          ? (task as any).taskAssignees.filter(
+            (a: any) => String(a.memberId) !== String(target.id)
+          )
+          : [],
+      }))
     );
+
 
     try {
       await api.deleteTeamMember(target.id);
@@ -1776,6 +1797,7 @@ export default function ProjectManagement({
     tasks?: Task[];
     team?: string[] | any[];
   }) {
+    console.log("payload import", payload)
     const genTmpId = () => `tmp_${Math.random().toString(36).slice(2, 9)}`;
 
     // snapshot of current global team state (use the team variable from your component scope)
@@ -1793,7 +1815,7 @@ export default function ProjectManagement({
           userId: "",
           workspaceId: workspaceId || "",
           name: r,
-          role: null,
+          role: undefined,
           email: null,
           photo: null,
           phone: null,
@@ -1808,7 +1830,7 @@ export default function ProjectManagement({
         userId: r.userId ?? r.userid ?? r.user ?? "",
         workspaceId: workspaceId ?? "",
         name: r.name ?? r.Name ?? r.username ?? "",
-        role: r.role ?? r.Role ?? null,
+        role: r.role ?? r.Role ?? undefined,
         email: r.email ?? r.Email ?? null,
         photo: r.photo ?? r.Photo ?? null,
         phone: r.phone ?? r.Phone ?? null,
@@ -1986,12 +2008,6 @@ export default function ProjectManagement({
       }
     }
 
-    const nameToId = new Map(
-      liveTeamSnapshot
-        .filter((m) => m && m.name)
-        .map((m) => [String(m.name).toLowerCase(), m.id || ""])
-    );
-
     // Helper to parse comments
     const parseComments = (raw: any) => {
       if (!raw) return [];
@@ -2010,6 +2026,9 @@ export default function ProjectManagement({
     const incomingTasks: Task[] = (payload.tasks || []).map((r: any) => {
       const baseId = r.id ?? r.ID ?? r.Id ?? "";
       const id = baseId ? String(baseId) : genTmpId();
+
+
+
       return {
         id,
         clientId: undefined,
@@ -2017,8 +2036,7 @@ export default function ProjectManagement({
         title: r.title ?? r.Title ?? "",
         description: r.description ?? r.Description ?? null,
         status: r.status ?? r.Status ?? "todo",
-        assigneeId: r.assigneeId ?? r.assigneeid ?? r.assignee ?? null,
-        assigneeName: r.assigneeName ?? r.assignee ?? null,
+        taskAssignees: r.taskAssignees ?? [],
         priority: r.priority ?? r.Priority ?? null,
         startDate: r.startDate ?? r.StartDate ?? null,
         dueDate: r.dueDate ?? r.DueDate ?? null,
@@ -2026,7 +2044,9 @@ export default function ProjectManagement({
         createdAt: r.createdAt ?? r.CreatedAt ?? undefined,
         updatedAt: r.updatedAt ?? r.UpdatedAt ?? undefined,
       } as Task;
+
     });
+
 
     const makeSig = (t: {
       title?: string;
@@ -2057,41 +2077,121 @@ export default function ProjectManagement({
     // 3) if assigneeId maps from originalIdToServer -> use mapped server id
     // 4) fallback: match by assigneeName -> nameToId
     // 5) else null
-    const preparedTasks = uniqueIncoming.map((t) => {
-      const tmpId = nid(t.id).startsWith("tmp_") ? t.id : genTmpId();
-      let assigneeId = t.assigneeId ?? null;
+    console.log("team", team)
+    // 🔥 ENSURE TASK ASSIGNEES EXIST IN TEAM
+    for (const t of uniqueIncoming) {
+      for (const a of t.taskAssignees || []) {
+        if (!a.name) continue;
 
-      if (assigneeId && existingTeamIds.has(nid(assigneeId))) {
-        // assigneeId already exists in global team -> keep it
-        // eslint-disable-next-line no-self-assign
-        assigneeId = assigneeId;
-      } else if (assigneeId && tmpToServer.has(assigneeId)) {
-        assigneeId = tmpToServer.get(assigneeId)!;
-      } else if (assigneeId && originalIdToServer.has(assigneeId)) {
-        assigneeId = originalIdToServer.get(assigneeId)!;
-      } else if ((!assigneeId || assigneeId === "") && t.assigneeName) {
-        const found = nameToId.get(String(t.assigneeName).toLowerCase());
-        if (found) assigneeId = found;
-      } else {
-        // final fallback: null (don't send invalid ids to backend)
-        assigneeId = null;
+        const nameLower = a.name.toLowerCase();
+
+        const exists = liveTeamSnapshot.some(
+          (m) => m.name?.toLowerCase() === nameLower
+        );
+
+        if (!exists) {
+          const tmpId = genTmpId();
+          const newMember: TeamMember = {
+            id: tmpId,
+            clientId: tmpId,
+            userId: "",
+            workspaceId: workspaceId!,
+            name: a.name,
+            role: undefined,
+            email: undefined,
+            photo: undefined,
+            phone: undefined,
+            isTrash: false,
+            createdAt: undefined,
+            updatedAt: undefined,
+          };
+
+          liveTeamSnapshot.push(newMember);
+          tmpToServer.set(tmpId, tmpId);
+        }
       }
+    }
+
+    // ✅ BARU BUAT nameToId SETELAH SNAPSHOT FINAL
+    const nameToId = new Map(
+      liveTeamSnapshot
+        .filter((m) => m && m.name)
+        .map((m) => [m.name.toLowerCase(), m.id])
+    );
+
+
+    console.log("liveTeamSnapshot", liveTeamSnapshot)
+    const preparedTasks = uniqueIncoming.map((t) => {
+      console.log("TaskAssignees", t.taskAssignees)
+      const tmpId = nid(t.id).startsWith("tmp_") ? t.id : genTmpId();
+
+      const resolvedAssignees = (() => {
+        const map = new Map<string, any>();
+
+        for (const a of t.taskAssignees || []) {
+          let member: TeamMember | undefined;
+
+          // resolve by ID
+          if (a.id) {
+            member = liveTeamSnapshot.find(
+              (m) => nid(m.id) === nid(a.id)
+            );
+          }
+
+          // fallback by name
+          if (!member && a.name) {
+            member = liveTeamSnapshot.find(
+              (m) => m.name?.toLowerCase() === a.name.toLowerCase()
+            );
+          }
+
+          if (!member) continue;
+
+          map.set(nid(member.id), {
+            memberId: member.id,
+            member, // 🔥 INI KUNCI UTAMA
+          });
+        }
+
+        return Array.from(map.values());
+      })();
+
+
+
+
+      console.log(
+        "FINAL taskAssignees",
+        resolvedAssignees.map(a => ({
+          memberId: a.memberId,
+          name: a.member.name,
+          hasPhoto: !!a.member.photo
+        }))
+      );
+
+
 
       return {
         ...t,
         id: tmpId,
-        projectId: projectId,
-        assigneeId,
-      } as Task;
+        projectId,
+        taskAssignees: [...resolvedAssignees],
+      };
     });
 
     // optimistic insert tasks
     setTasks((prev) => {
       const prevSig = new Set(prev.map((p) => makeSig(p)));
-      const toAdd = preparedTasks.filter((t) => {
-        const s = makeSig(t);
-        return !prevSig.has(s);
-      });
+
+      const toAdd = preparedTasks
+        .filter((t) => {
+          const s = makeSig(t);
+          return !prevSig.has(s);
+        })
+        .map((t: any) => hydrateTask(t, liveTeamSnapshot));
+      console.log(
+        "AFTER hydrate",
+        toAdd
+      );
       return [...toAdd, ...prev];
     });
 
@@ -2104,6 +2204,7 @@ export default function ProjectManagement({
         id: undefined,
         comments: undefined,
         projectId: projectId,
+        taskAssignees: [...t.taskAssignees]
       };
       console.debug("createTask payload:", payloadForServer);
       return api
@@ -2286,6 +2387,8 @@ export default function ProjectManagement({
     toast.dark(
       "Imported tasks & members applied (parallellized; syncing in background)"
     );
+
+    window.location.reload()
   }
 
   const projectTasks = tasks.filter((t) => nid(t.projectId) === nid(projectId));
@@ -2299,6 +2402,16 @@ export default function ProjectManagement({
       key: "inprogress" as Task["status"],
       title: "In Progress",
       items: projectTasks.filter((t) => t.status === "inprogress"),
+    },
+    {
+      key: "qa" as Task["status"],
+      title: "QA",
+      items: projectTasks.filter((t) => t.status === "qa"),
+    },
+    {
+      key: "deploy" as Task["status"],
+      title: "Deploy",
+      items: projectTasks.filter((t) => t.status === "deploy"),
     },
     {
       key: "done" as Task["status"],
@@ -2562,7 +2675,7 @@ export default function ProjectManagement({
                   }
                   if (!inserted) {
                     // column empty or insert at end
-                    result.push({ ...moved, status });
+                    result.push({ ...moved, status: status as "todo" | "inprogress" | "qa" | "deploy" | "done" | "blocked" | undefined });
                   }
                   return result;
                 });

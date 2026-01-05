@@ -17,6 +17,8 @@ import {
   getMembers,
   getProjects,
   getTodoTasks,
+  getQaTasks,
+  getDeployTasks,
   getUnassignedTasks,
   getUrgentTasks,
 } from "./project.service";
@@ -87,6 +89,10 @@ export class AskService {
         return await getTodoTasks(args?.projectId);
       } else if (fn === "getInProgressTasks") {
         return await getInProgressTasks(args?.projectId);
+      } else if (fn === "getQaTasks") {
+        return await getQaTasks(args?.projectId);
+      } else if (fn === "getDeployTasks") {
+        return await getDeployTasks(args?.projectId);
       } else if (fn === "getDoneTasks") {
         return await getDoneTasks(args?.projectId);
       } else if (fn === "getUnassignedTasks") {
@@ -279,8 +285,7 @@ export class AskService {
         if (!followRes.ok) {
           logger.error(`OpenAI follow-up error: ${followRes.status}`);
           throw new Error(
-            `OpenAI follow-up error ${
-              followRes.status
+            `OpenAI follow-up error ${followRes.status
             } ${await followRes.text()}`
           );
         }
@@ -387,9 +392,8 @@ export class AskService {
             choices: [
               {
                 delta: {
-                  content: `An error occurred: ${
-                    error?.message || String(error)
-                  }`,
+                  content: `An error occurred: ${error?.message || String(error)
+                    }`,
                 },
               },
             ],

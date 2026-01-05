@@ -2,6 +2,7 @@
 import React, { useMemo, useState } from "react";
 import parse from "html-react-parser";
 import type { Task, TeamMember } from "../types";
+import { getTaskAssignees } from "../utils/getTaskAssignees";
 
 function hashStr(s: string) {
   let h = 5381;
@@ -47,19 +48,14 @@ export default function ListView({
 
   // helper: check if a task is assigned to current member
   const isAssignedToCurrent = (t: Task) => {
-    const aid = (t as any).assigneeId ?? null;
-    const aname = (t as any).assigneeName ?? null;
+    if (!currentMemberId) return false
 
-    if (aid && currentMemberId && String(aid) === String(currentMemberId))
-      return true;
-    if (
-      currentMember?.name &&
-      aname &&
-      String(aname).toLowerCase() === String(currentMember.name).toLowerCase()
+    const assignees = getTaskAssignees(t, team)
+    return assignees.some(
+      m => String(m.id) === String(currentMemberId)
     )
-      return true;
-    return false;
-  };
+  }
+
 
   // count assigned-to-me on all tasks
   const assignedCount = useMemo(
@@ -137,26 +133,23 @@ export default function ListView({
             onClick={() => setOnlyMine((v) => !v)}
             aria-pressed={onlyMine}
             title="Show only tasks assigned to you"
-            className={`inline-flex items-center gap-2 px-3 py-1 rounded-md text-sm font-medium transition-colors focus:outline-none ${
-              onlyMine
-                ? "bg-sky-600 text-white border border-sky-600 shadow-sm"
-                : "bg-white text-slate-700 dark:bg-gray-800 dark:text-slate-100 border border-gray-200 dark:border-gray-700"
-            }`}
+            className={`inline-flex items-center gap-2 px-3 py-1 rounded-md text-sm font-medium transition-colors focus:outline-none ${onlyMine
+              ? "bg-sky-600 text-white border border-sky-600 shadow-sm"
+              : "bg-white text-slate-700 dark:bg-gray-800 dark:text-slate-100 border border-gray-200 dark:border-gray-700"
+              }`}
           >
             {/* icon */}{" "}
             <span
-              className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs ${
-                onlyMine ? "bg-white/20" : "bg-sky-100 dark:bg-white/5"
-              }`}
+              className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs ${onlyMine ? "bg-white/20" : "bg-sky-100 dark:bg-white/5"
+                }`}
               aria-hidden
             >
               👤
             </span>
             <span className="whitespace-nowrap">Assigned to me</span>
             <span
-              className={`inline-flex items-center justify-center ml-1 px-2 py-0.5 rounded-full text-xs font-semibold ${
-                onlyMine ? "bg-white/20" : "bg-gray-100 dark:bg-white/5"
-              }`}
+              className={`inline-flex items-center justify-center ml-1 px-2 py-0.5 rounded-full text-xs font-semibold ${onlyMine ? "bg-white/20" : "bg-gray-100 dark:bg-white/5"
+                }`}
             >
               {assignedCount}
             </span>
@@ -184,29 +177,7 @@ export default function ListView({
           {visibleTasks.map((t) => {
             const pill = priorityPill(t.priority);
 
-            // derive assignee robustly: prefer assigneeId, fallback to assigneeName
-            const assigneeId = (t as any).assigneeId ?? null;
-            const assigneeNameFromTask = t.assigneeName ?? "";
-            const member =
-              (assigneeId && team.find((m) => m.id === assigneeId)) ??
-              (assigneeNameFromTask &&
-                team.find((m) => m.name === assigneeNameFromTask)) ??
-              undefined;
-            const assigneeLabel = member?.name ?? assigneeNameFromTask ?? "";
 
-            const hue = assigneeLabel ? hashStr(assigneeLabel) % 360 : 200;
-            const avatarBg = member?.photo
-              ? undefined
-              : typeof window !== "undefined" &&
-                document.documentElement.classList.contains("dark")
-              ? hslaStr(hue, 65, 50, 0.16)
-              : hslaStr(hue, 75, 85, 0.95);
-            const avatarText = member?.photo
-              ? undefined
-              : typeof window !== "undefined" &&
-                document.documentElement.classList.contains("dark")
-              ? hslStr(hue, 65, 80)
-              : hslStr(hue, 75, 25);
 
             // start/due formatting & states
             const startShort = formatDateShort(t.startDate);
@@ -252,34 +223,68 @@ export default function ListView({
                   </span>
                 </td>
                 <td className="px-4 py-3">
-                  <div className="flex items-center gap-3">
-                    <div
-                      className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold overflow-hidden"
-                      style={{ background: avatarBg, color: avatarText }}
-                      title={assigneeLabel || "Unassigned"}
-                    >
-                      {member?.photo ? (
-                        <img
-                          src={member.photo}
-                          alt={`${member.name} photo`}
-                          className="w-full h-full object-cover rounded-full"
-                        />
-                      ) : assigneeLabel ? (
-                        assigneeLabel
-                          .split(" ")
-                          .map((n: any) => n[0])
-                          .slice(0, 2)
-                          .join("")
-                          .toUpperCase()
-                      ) : (
-                        "—"
-                      )}
-                    </div>
-                    <div className="text-sm text-slate-900 dark:text-slate-100">
-                      {assigneeLabel || "Unassigned"}
-                    </div>
-                  </div>
+                  {(() => {
+                    const assignees = getTaskAssignees(t, team)
+
+                    if (assignees.length === 0) {
+                      return (
+                        <div className="text-sm text-gray-400">Unassigned</div>
+                      )
+                    }
+
+                    return (
+                      <div className="flex items-center gap-2">
+                        <div className="flex -space-x-2">
+                          {assignees.slice(0, 4).map((m) => {
+                            const hue = hashStr(m.name) % 360
+                            const bg = m.photo
+                              ? undefined
+                              : typeof window !== "undefined" &&
+                                document.documentElement.classList.contains("dark")
+                                ? hslaStr(hue, 65, 50, 0.16)
+                                : hslaStr(hue, 75, 85, 0.95)
+
+                            const color = m.photo
+                              ? undefined
+                              : typeof window !== "undefined" &&
+                                document.documentElement.classList.contains("dark")
+                                ? hslStr(hue, 65, 80)
+                                : hslStr(hue, 75, 25)
+
+                            return (
+                              <div
+                                key={m.id}
+                                className="w-8 h-8 rounded-full ring-2 ring-white dark:ring-gray-900 flex items-center justify-center text-xs font-semibold overflow-hidden"
+                                style={{ background: bg, color }}
+                                title={m.name}
+                              >
+                                {m.photo ? (
+                                  <img
+                                    src={m.photo}
+                                    alt={m.name}
+                                    className="w-full h-full object-cover"
+                                  />
+                                ) : (
+                                  m.name
+                                    .split(" ")
+                                    .map(n => n[0])
+                                    .slice(0, 2)
+                                    .join("")
+                                    .toUpperCase()
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+
+                        <div className="text-sm text-slate-900 dark:text-slate-100 truncate max-w-[160px]">
+                          {assignees.map(a => a.name).join(", ")}
+                        </div>
+                      </div>
+                    )
+                  })()}
                 </td>
+
 
                 {/* Start */}
                 <td className="px-4 py-3 text-sm text-slate-700 dark:text-slate-200">
@@ -292,19 +297,18 @@ export default function ListView({
                     <div className="inline-flex items-center">
                       {/* pill */}
                       <div
-                        className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium ${
-                          isDueOverdue
-                            ? "bg-red-700/10 dark:bg-red-600/20 text-red-500 dark:text-red-300"
-                            : isDueToday
+                        className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium ${isDueOverdue
+                          ? "bg-red-700/10 dark:bg-red-600/20 text-red-500 dark:text-red-300"
+                          : isDueToday
                             ? "bg-amber-700/10 dark:bg-amber-600/20 text-amber-500 dark:text-amber-300"
                             : "bg-emerald-700/10 dark:bg-emerald-600/20 text-emerald-500 dark:text-emerald-300"
-                        }`}
+                          }`}
                         title={
                           isDueOverdue
                             ? `overdue • ${t.dueDate}`
                             : isDueToday
-                            ? `due today • ${t.dueDate}`
-                            : `Due: ${t.dueDate}`
+                              ? `due today • ${t.dueDate}`
+                              : `Due: ${t.dueDate}`
                         }
                         aria-live="polite"
                       >
@@ -361,9 +365,8 @@ export default function ListView({
                           </span>
                           {(isDueOverdue || isDueToday) && (
                             <span
-                              className={`text-[11px] ${
-                                isDueOverdue ? "text-red-300" : "text-amber-300"
-                              }`}
+                              className={`text-[11px] ${isDueOverdue ? "text-red-300" : "text-amber-300"
+                                }`}
                             >
                               {isDueOverdue ? "overdue" : "due today"}
                             </span>

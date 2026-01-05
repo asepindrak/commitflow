@@ -92,7 +92,9 @@ Use:
 
 2. getTodoTasks  
 3. getInProgressTasks  
-4. getDoneTasks  
+4. getQaTasks  
+5. getDeployTasks  
+6. getDoneTasks  
    - When the user directly mentions task status
 
 ====================================================================

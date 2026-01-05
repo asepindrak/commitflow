@@ -20,7 +20,7 @@ const FE_URL = process.env?.FE_URL ?? "";
 
 @Injectable()
 export class ProjectManagementService {
-  constructor(private email: EmailService) {}
+  constructor(private email: EmailService) { }
   async getWorkspaces(userId) {
     const members = await prisma.teamMember.findMany({
       where: { isTrash: false, userId },
@@ -60,6 +60,11 @@ export class ProjectManagementService {
           where: { isTrash: false },
           orderBy: { createdAt: "desc" },
         },
+        taskAssignees: {
+          include: {
+            member: true,
+          },
+        },
       },
     });
 
@@ -86,6 +91,13 @@ export class ProjectManagementService {
           createdAt: c.createdAt?.toISOString(),
           updatedAt: c.updatedAt?.toISOString(),
         })),
+        taskAssignees: t.taskAssignees.map(a => ({
+          id: a.member.id,
+          name: a.member.name,
+          photo: a.member.photo,
+          phone: a.member.phone,
+          role: a.member.role
+        }))
       })),
       team: team.map((m) => ({ ...m })),
     };
@@ -301,6 +313,9 @@ export class ProjectManagementService {
 
   // Tasks
   async getTasks(projectId?: string) {
+
+    await this.migrateSingleAssigneeToMulti()
+
     const where = projectId
       ? { projectId, isTrash: false }
       : { isTrash: false };
@@ -311,6 +326,11 @@ export class ProjectManagementService {
         comments: {
           where: { isTrash: false },
           orderBy: { createdAt: "desc" },
+        },
+        taskAssignees: {
+          include: {
+            member: true,
+          },
         },
       },
     });
@@ -324,379 +344,363 @@ export class ProjectManagementService {
         createdAt: c.createdAt?.toISOString(),
         updatedAt: c.updatedAt?.toISOString(),
       })),
+      taskAssignees: t.taskAssignees.map(a => ({
+        id: a.member.id,
+        name: a.member.name,
+        photo: a.member.photo,
+        phone: a.member.phone,
+        role: a.member.role
+      }))
     }));
   }
+
+  // one time migration task assignee
+  async migrateSingleAssigneeToMulti() {
+    // 1️⃣ cek apakah taskAssignee sudah ada data
+    const existingCount = await prisma.taskAssignee.count()
+
+    if (existingCount > 0) {
+      console.log(
+        "[MIGRATION] TaskAssignee already has data. Migration skipped."
+      )
+      return { skipped: true, reason: "already_migrated" }
+    }
+
+    // 2️⃣ ambil task yang punya assigneeId
+    const tasksWithAssignee = await prisma.task.findMany({
+      where: {
+        assigneeId: { not: null },
+        isTrash: false,
+      },
+      select: {
+        id: true,
+        assigneeId: true,
+        createdAt: true,
+      },
+    })
+
+    if (tasksWithAssignee.length === 0) {
+      console.log("[MIGRATION] No tasks with assigneeId found.")
+      return { skipped: true, reason: "no_legacy_assignee" }
+    }
+
+    // 3️⃣ migrate
+    const data = tasksWithAssignee.map((t) => ({
+      taskId: t.id,
+      memberId: t.assigneeId!,
+      assignedAt: t.createdAt ?? new Date(),
+    }))
+
+    await prisma.taskAssignee.createMany({
+      data,
+      skipDuplicates: true,
+    })
+
+    console.log(
+      `[MIGRATION] Migrated ${data.length} tasks into TaskAssignee`
+    )
+
+    return {
+      migrated: data.length,
+    }
+  }
+
 
   // ------------------------------------------
   // Updated createTask / updateTask / patchTask
   // ------------------------------------------
   async createTask(
     payload: Partial<{
-      title: string;
-      description?: string;
-      projectId?: string | null;
-      status?: string;
-      priority?: string | null;
-      assigneeId?: string | null;
-      startDate?: string | null;
-      dueDate?: string | null;
-      clientId?: string | null; // optional client-generated id for idempotency
+      title: string
+      description?: string
+      projectId?: string | null
+      status?: string
+      priority?: string | null
+      taskAssignees?: { memberId: string }[]
+      startDate?: string | null
+      dueDate?: string | null
+      clientId?: string | null
     }>
   ) {
-    // validate projectId/assignee exist if provided (and not null)
-    if (
-      typeof payload.projectId !== "undefined" &&
-      payload.projectId !== null
-    ) {
+    // --------------------------------
+    // VALIDATE PROJECT
+    // --------------------------------
+    if (payload.projectId) {
       const p = await prisma.project.findUnique({
         where: { id: payload.projectId },
-      });
-      if (!p) throw new NotFoundException("Project not found");
+      })
+      if (!p) throw new NotFoundException("Project not found")
     }
 
-    let assigneeId: string | null = null;
-
-    if (typeof payload.assigneeId !== "undefined") {
-      // client provided something (could be null)
-      if (payload.assigneeId === null) {
-        assigneeId = null;
-      } else {
-        // validate it exists
-        const member = await prisma.teamMember.findUnique({
-          where: { id: payload.assigneeId },
-        });
-        if (!member) {
-          throw new BadRequestException(
-            `assigneeId ${payload.assigneeId} not found`
-          );
-        }
-        assigneeId = member.id;
-      }
-    } else {
-      // client did NOT provide assigneeId -> pick a sensible default (or null)
-      const member = await prisma.teamMember.findFirst();
-      assigneeId = member?.id ?? null;
-    }
-
-    // Defensive idempotency: if clientId provided and server already has it, return existing row
+    // --------------------------------
+    // IDEMPOTENCY CHECK
+    // --------------------------------
     if (payload.clientId) {
       const existing = await prisma.task.findFirst({
         where: { clientId: payload.clientId },
-      });
+        include: {
+          taskAssignees: { include: { member: true } },
+        },
+      })
       if (existing) {
-        console.log("[createTask] idempotent hit, returning existing");
-        return existing;
+        return {
+          ...existing,
+          createdAt: existing.createdAt?.toISOString(),
+          updatedAt: existing.updatedAt?.toISOString(),
+        }
       }
     }
 
-    // Create task (store startDate/dueDate as strings to match Prisma schema)
-    const t = await prisma.task.create({
-      data: {
-        title: payload.title ?? "Untitled Task",
-        description: payload.description ?? null,
-        projectId: payload.projectId ?? null,
-        status: payload.status ?? "todo",
-        priority: payload.priority ?? null,
-        // always pass either null or a valid id — never empty string
-        assigneeId: assigneeId,
-        startDate:
-          typeof payload.startDate === "undefined"
-            ? null
-            : payload.startDate ?? null,
-        dueDate:
-          typeof payload.dueDate === "undefined"
-            ? null
-            : payload.dueDate ?? null,
-        clientId: payload.clientId ?? null,
-      },
-    });
+    // --------------------------------
+    // VALIDATE ASSIGNEES (MULTI)
+    // --------------------------------
+    let assigneeIds: string[] = []
 
-    // return serialized created task (timestamps as ISO)
+    if (payload.taskAssignees?.length) {
+      assigneeIds = payload.taskAssignees.map(a => a.memberId)
+
+      const members = await prisma.teamMember.findMany({
+        where: { id: { in: assigneeIds } },
+      })
+
+      if (members.length !== assigneeIds.length) {
+        throw new BadRequestException("One or more assignees not found")
+      }
+    }
+
+    // --------------------------------
+    // CREATE TASK + ASSIGNEES (ATOMIC)
+    // --------------------------------
+    const task = await prisma.$transaction(async (tx) => {
+      const t = await tx.task.create({
+        data: {
+          title: payload.title ?? "Untitled Task",
+          description: payload.description ?? null,
+          projectId: payload.projectId ?? null,
+          status: payload.status ?? "todo",
+          priority: payload.priority ?? null,
+          startDate:
+            payload.startDate !== undefined ? payload.startDate : null,
+          dueDate:
+            payload.dueDate !== undefined ? payload.dueDate : null,
+          clientId: payload.clientId ?? null,
+        },
+      })
+
+      if (assigneeIds.length) {
+        await tx.taskAssignee.createMany({
+          data: assigneeIds.map(memberId => ({
+            taskId: t.id,
+            memberId,
+          })),
+          skipDuplicates: true,
+        })
+      }
+
+      return t
+    })
+
+    // --------------------------------
+    // RETURN SERIALIZED TASK
+    // --------------------------------
     return {
-      ...t,
-      createdAt: t.createdAt?.toISOString(),
-      updatedAt: t.updatedAt?.toISOString(),
-    };
+      ...task,
+      createdAt: task.createdAt?.toISOString(),
+      updatedAt: task.updatedAt?.toISOString(),
+    }
   }
+
 
   async updateTask(
     id: string,
     payload: Partial<{
-      title?: string;
-      description?: string;
-      projectId?: string | null;
-      status?: string;
-      priority?: string | null;
-      assigneeId?: string | null;
-      startDate?: string | null;
-      dueDate?: string | null;
+      title?: string
+      description?: string
+      projectId?: string | null
+      status?: string
+      priority?: string | null
+      taskAssignees?: { memberId: string }[]
+      startDate?: string | null
+      dueDate?: string | null
     }>,
     userId: string
   ) {
-    const exists: any = await prisma.task.findUnique({ where: { id } });
-    const data: any = exists;
-    if (!exists) throw new NotFoundException("Task not found");
-    const updatedAt = exists.updatedAt;
-    const status = exists.status;
-    const priority = exists.priority;
-    const description = exists.description;
-    const startDate = exists.description;
-    const dueDate = exists.dueDate;
-    const assigneeId = exists.assigneeId;
+    const existing = await prisma.task.findUnique({
+      where: { id },
+      include: {
+        taskAssignees: { include: { member: true } },
+      },
+    })
+    if (!existing) throw new NotFoundException("Task not found")
 
-    let project: any = null;
-    // validate projectId if present and not null (null means detach project)
-    if (typeof exists.projectId !== "undefined" && exists.projectId !== null) {
+    const prevAssignees = existing.taskAssignees
+    const prevAssigneeIds = prevAssignees.map(a => a.memberId)
+
+    // -----------------------------
+    // VALIDATE PROJECT
+    // -----------------------------
+    let project: any = null
+    if (payload.projectId !== undefined && payload.projectId !== null) {
       project = await prisma.project.findUnique({
-        where: { id: exists.projectId },
-      });
-      if (!project) throw new NotFoundException("Project not found");
+        where: { id: payload.projectId },
+      })
+      if (!project) throw new NotFoundException("Project not found")
+    } else if (existing.projectId) {
+      project = await prisma.project.findUnique({
+        where: { id: existing.projectId },
+      })
     }
 
-    let assignee: any = null;
-    // validate assignee if present and not null
-    if (
-      typeof payload.assigneeId !== "undefined" &&
-      payload.assigneeId !== null
-    ) {
-      const m = await prisma.teamMember.findUnique({
-        where: { id: payload.assigneeId },
-      });
-      if (!m) throw new NotFoundException("Assignee not found (payload)");
-      assignee = m;
-    } else if (data.assigneeId !== "undefined" && data.assigneeId !== null) {
-      const m = await prisma.teamMember.findUnique({
-        where: { id: data.assigneeId },
-      });
-      if (!m) throw new NotFoundException("Assignee not found (data)");
-      assignee = m;
+    // -----------------------------
+    // VALIDATE ASSIGNEES
+    // -----------------------------
+    let nextAssigneeIds: string[] = prevAssigneeIds
+
+    if (payload.taskAssignees) {
+      nextAssigneeIds = payload.taskAssignees.map(a => a.memberId)
+
+      const members = await prisma.teamMember.findMany({
+        where: { id: { in: nextAssigneeIds } },
+      })
+
+      if (members.length !== nextAssigneeIds.length) {
+        throw new BadRequestException("One or more assignees not found")
+      }
     }
 
-    // build clean data object with allowed fields only
-    if (typeof payload.title !== "undefined") data.title = payload.title;
-    if (typeof payload.description !== "undefined")
-      data.description = payload.description;
-    if (typeof payload.projectId !== "undefined")
-      data.projectId = payload.projectId;
-    if (typeof payload.status !== "undefined") data.status = payload.status;
-    if (typeof payload.priority !== "undefined")
-      data.priority = payload.priority;
-    if (typeof payload.assigneeId !== "undefined")
-      data.assigneeId = payload.assigneeId;
-
-    // keep date fields as strings to match Prisma schema
-    if (typeof payload.startDate !== "undefined") {
-      data.startDate =
-        payload.startDate === null ? null : String(payload.startDate);
-    }
-    if (typeof payload.dueDate !== "undefined") {
-      data.dueDate = payload.dueDate === null ? null : String(payload.dueDate);
-    }
-
-    data.updatedAt = new Date();
-
+    // -----------------------------
+    // UPDATE TASK CORE FIELDS
+    // -----------------------------
     const updated = await prisma.task.update({
       where: { id },
-      data,
-    });
-
-    // include fresh comments in returned object (if needed)
-    const withComments = await prisma.task.findUnique({
-      where: { id: updated.id },
-      include: {
-        comments: {
-          where: { isTrash: false },
-          orderBy: { createdAt: "desc" },
-        },
+      data: {
+        title: payload.title ?? existing.title,
+        description: payload.description ?? existing.description,
+        projectId:
+          payload.projectId !== undefined
+            ? payload.projectId
+            : existing.projectId,
+        status: payload.status ?? existing.status,
+        priority: payload.priority ?? existing.priority,
+        startDate:
+          payload.startDate !== undefined
+            ? payload.startDate
+            : existing.startDate,
+        dueDate:
+          payload.dueDate !== undefined ? payload.dueDate : existing.dueDate,
+        updatedAt: new Date(),
       },
-    });
+    })
 
-    //send email to team members
+    // -----------------------------
+    // SYNC TASK ASSIGNEES (REPLACE)
+    // -----------------------------
+    if (payload.taskAssignees) {
+      await prisma.$transaction([
+        prisma.taskAssignee.deleteMany({ where: { taskId: id } }),
+        prisma.taskAssignee.createMany({
+          data: nextAssigneeIds.map(memberId => ({
+            taskId: id,
+            memberId,
+          })),
+        }),
+      ])
+    }
+
+    // -----------------------------
+    // EMAIL TARGET
+    // -----------------------------
+    const assigneeNames = payload.taskAssignees
+      ? (
+        await prisma.teamMember.findMany({
+          where: { id: { in: nextAssigneeIds } },
+        })
+      )
+        .map(m => m.name)
+        .join(", ")
+      : prevAssignees.map(a => a.member.name).join(", ")
+
     const teams = await prisma.teamMember.findMany({
       where: {
-        workspaceId: project.workspaceId,
+        workspaceId: project?.workspaceId,
         isTrash: false,
         OR: [
           { isAdmin: true },
-          { id: data.assigneeId ?? "" },
-          { id: data.createdById ?? "" },
+          { id: { in: nextAssigneeIds } },
+          { id: existing.createdById ?? "" },
         ],
       },
       select: { email: true },
-    });
+    })
 
-    const projectName = project?.name ?? "No Project";
+    const toEmails: any = Array.from(
+      new Set(teams.map(t => t.email?.trim().toLowerCase()).filter(Boolean))
+    )
 
-    const toEmails = Array.from(
-      new Set(
-        teams
-          .map((t) => t.email?.trim().toLowerCase()) // normalisasi
-          .filter(Boolean) // buang null/undefined/empty
-      )
-    );
+    if (!toEmails.length) return updated
 
-    if (toEmails.length === 0) throw new Error("No recipient emails found");
-    // Format tanggal
+    // -----------------------------
+    // EMAIL CONTENT
+    // -----------------------------
     const format = (d: any) =>
-      d ? new Date(d).toLocaleDateString("en-US") : "—";
+      d ? new Date(d).toLocaleDateString("en-US") : "—"
 
-    let emailTitle = `➕ New Task Created`;
-    let emailDescription = `➕ A new task has been created on <strong>${projectName}</strong>.`;
-    if (updatedAt) {
-      emailTitle = `📝 Task Updated`;
-      emailDescription = `📝 A task has been updated on <strong>${projectName}</strong>.`;
-    }
-
-    if (status !== data.status) {
-      emailTitle = `➡️ Task Moved To ${data.status}`;
-      emailDescription = `➡️ A task has been moved to ${data.status} on <strong>${projectName}</strong>.`;
-    }
-
-    if (priority !== data.priority) {
-      emailTitle = `⚡ Task Priority Changed To ${data.priority}`;
-      emailDescription = `⚡ A task priority has been changed to ${data.priority} on <strong>${projectName}</strong>.`;
-    }
-
-    if (description !== data.description) {
-      emailTitle = `📝 Task Description has Changed`;
-      emailDescription = `📝 A task description has been changed on <strong>${projectName}</strong>.`;
-    }
-
-    if (startDate !== data.startDate) {
-      emailTitle = `📅 Task Start date has Changed To ${data.startDate}`;
-      emailDescription = `📅 A task Task Start date has been changed to ${data.startDate} on <strong>${projectName}</strong>.`;
-    }
-
-    if (dueDate !== data.dueDate) {
-      emailTitle = `📅 Task Due date has Changed To ${data.dueDate}`;
-      emailDescription = `📅 A task Due date has been changed to ${data.dueDate} on <strong>${projectName}</strong>.`;
-    }
-
-    if (assigneeId !== data.assigneeId) {
-      emailTitle = `👤 Task Assignee has Changed to ${
-        assignee?.name ?? "none"
-      }`;
-      emailDescription = `👤 A task Assignee has been changed to ${
-        assignee?.name ?? "none"
-      } on <strong>${projectName}</strong>.`;
-    }
+    const emailTitle = `📝 Task Updated`
+    const emailDescription = `📝 A task has been updated on <strong>${project?.name}</strong>.`
 
     const textMsg = `
-    ${emailDescription}
+${emailDescription}
 
-    Task Title:
-    ${updated.title}
+Task: ${updated.title}
+Status: ${updated.status}
+Assignees: ${assigneeNames}
+Priority: ${updated.priority ?? "—"}
+Start Date: ${format(updated.startDate)}
+Due Date: ${format(updated.dueDate)}
 
-    Description:
-    ${updated.description ?? "No description"}
-
-    Status: ${updated?.status}
-    Assignee: ${assignee?.name ?? "none"}
-    Priority: ${updated?.priority ?? "none"}
-    Start Date: ${format(updated?.startDate)}
-    Due Date: ${format(updated?.dueDate)}
-
-    Project:
-    ${projectName}
-
-    Regards,
-    CommitFlow Team
-    `;
+— CommitFlow Team
+`
 
     const htmlMsg = `
-      <div style="font-family: Arial, sans-serif; background:#f4f5f7; padding:24px;">
-        <div style="max-width:600px; margin:0 auto; background:#ffffff; border-radius:10px; padding:32px; box-shadow:0 4px 12px rgba(0,0,0,0.05);">
+<p><strong>${emailDescription}</strong></p>
+<p><b>Task:</b> ${updated.title}</p>
+<p><b>Status:</b> ${updated.status}</p>
+<p><b>Assignees:</b> ${assigneeNames}</p>
+<p><b>Priority:</b> ${updated.priority ?? "—"}</p>
+<p><b>Start:</b> ${format(updated.startDate)}</p>
+<p><b>Due:</b> ${format(updated.dueDate)}</p>
+`
 
-          <h2 style="color:#2d3748; margin:0 0 8px; font-size:22px;">
-            ${emailTitle}
-          </h2>
-
-          <p style="color:#4a5568; margin:0 0 20px; font-size:15px;">
-            ${emailDescription}
-          </p>
-
-          <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:20px; margin-bottom:24px;">
-
-            <p style="margin:0 0 14px; font-size:15px; color:#1a202c;">
-              <strong style="color:#2b6cb0;">Task Title:</strong><br>
-              ${updated.title}
-            </p>
-
-            <p style="margin:0 0 14px; font-size:15px;">
-              <strong style="color:#2b6cb0;">Description:</strong><br>
-              ${updated.description ?? "No description"}
-            </p>
-
-            <p style="margin:0 0 14px; font-size:15px;">
-              <strong style="color:#2b6cb0;">Status:</strong> ${
-                updated?.status
-              }<br>
-              <strong style="color:#2b6cb0;">Assignee:</strong> ${
-                assignee?.name ?? "none"
-              }<br>
-              <strong style="color:#2b6cb0;">Priority:</strong> ${
-                updated?.priority ?? "none"
-              }
-            </p>
-
-            <p style="margin:0 0 14px; font-size:15px;">
-              <strong style="color:#2b6cb0;">Start Date:</strong> ${format(
-                updated?.startDate
-              )}<br>
-              <strong style="color:#2b6cb0;">Due Date:</strong> ${format(
-                updated?.dueDate
-              )}
-            </p>
-
-            <p style="margin:0; font-size:15px;">
-              <strong style="color:#2b6cb0;">Project:</strong><br>
-              ${projectName}
-            </p>
-          </div>
-
-          <div style="text-align:center; margin-bottom:28px;">
-            <a href="${FE_URL}"
-              style="background:#2b6cb0; color:#fff; padding:12px 20px; border-radius:6px; text-decoration:none; font-size:14px; display:inline-block;">
-              Open Task
-            </a>
-          </div>
-
-          <p style="font-size:14px; color:#4a5568;">
-            You received this because you are a member of the workspace team.
-          </p>
-
-          <p style="font-size:13px; color:#a0aec0; text-align:center; margin-top:22px;">
-            — CommitFlow Team
-          </p>
-
-        </div>
-      </div>
-    `;
-
-    // KIRIM EMAIL
     for (const recipient of toEmails) {
       await this.email.sendMail({
         to: recipient ?? "",
         subject: `${emailTitle} | CommitFlow`,
         text: textMsg,
         html: htmlMsg,
-      });
-
-      await new Promise((r) => setTimeout(r, 200));
+      })
     }
 
-    // serialize timestamps
+    // -----------------------------
+    // RETURN UPDATED TASK
+    // -----------------------------
+    const withComments = await prisma.task.findUnique({
+      where: { id },
+      include: {
+        comments: {
+          where: { isTrash: false },
+          orderBy: { createdAt: "desc" },
+        },
+        taskAssignees: { include: { member: true } },
+      },
+    })
+
     return {
       ...withComments,
       createdAt: withComments?.createdAt?.toISOString(),
       updatedAt: withComments?.updatedAt?.toISOString(),
-      comments: (withComments?.comments || []).map((c) => ({
-        ...c,
-        createdAt: c.createdAt?.toISOString(),
-        updatedAt: c.updatedAt?.toISOString(),
-      })),
-    };
+    }
   }
+
 
   async patchTask(
     id: string,
@@ -706,7 +710,7 @@ export class ProjectManagementService {
       projectId?: string | null;
       status?: string;
       priority?: string | null;
-      assigneeId?: string | null;
+      taskAssignees?: { memberId: string; role?: string }[]
       startDate?: string | null;
       dueDate?: string | null;
     }>,
@@ -750,9 +754,22 @@ export class ProjectManagementService {
     taskId: string,
     payload: { author: string; body: string; attachments?: any[] }
   ) {
-    const task = await prisma.task.findUnique({ where: { id: taskId } });
-    if (!task) throw new NotFoundException("Task not found");
+    // -----------------------------
+    // GET TASK + ASSIGNEES
+    // -----------------------------
+    const task = await prisma.task.findUnique({
+      where: { id: taskId },
+      include: {
+        taskAssignees: {
+          select: { memberId: true },
+        },
+      },
+    })
+    if (!task) throw new NotFoundException("Task not found")
 
+    // -----------------------------
+    // CREATE COMMENT
+    // -----------------------------
     const c = await prisma.comment.create({
       data: {
         taskId,
@@ -760,127 +777,109 @@ export class ProjectManagementService {
         body: payload.body,
         attachments: payload.attachments ?? undefined,
       },
-    });
+    })
 
-    //send email to team members
-    const p = await prisma.project.findFirst({
+    // -----------------------------
+    // GET PROJECT
+    // -----------------------------
+    const project: any = await prisma.project.findFirst({
       where: { id: task.projectId ?? "", isTrash: false },
-    });
+    })
+    if (!project) throw new NotFoundException("Project not found")
 
-    if (!p) throw new NotFoundException("Project not found");
+    // -----------------------------
+    // RESOLVE EMAIL RECIPIENTS
+    // -----------------------------
+    const assigneeIds = task.taskAssignees.map(a => a.memberId)
 
-    //send email to team members
     const teams = await prisma.teamMember.findMany({
       where: {
-        workspaceId: p.workspaceId ?? "",
+        workspaceId: project.workspaceId,
         isTrash: false,
         OR: [
           { isAdmin: true },
-          { id: task.assigneeId ?? "" },
-          { id: task.createdById ?? "" },
+          ...(assigneeIds.length
+            ? [{ id: { in: assigneeIds } }]
+            : []),
+          ...(task.createdById ? [{ id: task.createdById }] : []),
         ],
       },
       select: { email: true },
-    });
+    })
 
-    // Extract + normalize + deduplicate emails
     const toEmails = Array.from(
-      new Set(teams.map((t) => t.email?.trim().toLowerCase()).filter(Boolean))
-    );
+      new Set(
+        teams
+          .map(t => t.email?.trim().toLowerCase())
+          .filter(Boolean)
+      )
+    )
 
-    if (toEmails.length === 0) throw new Error("No recipient emails found");
+    if (!toEmails.length) {
+      return {
+        ...c,
+        createdAt: c.createdAt?.toISOString(),
+        updatedAt: c.updatedAt?.toISOString(),
+      }
+    }
 
-    const projectName = p.name;
-    const taskName = task.title;
-    const author = payload.author;
-    const body = payload.body;
+    // -----------------------------
+    // EMAIL CONTENT
+    // -----------------------------
+    const projectName = project.name
+    const taskName = task.title
+    const author = payload.author
+    const body = payload.body
 
     const textMsg = `
-      💬 New Comment!
+💬 New Comment!
 
-      Project Name:
-      ${projectName}
+Project:
+${projectName}
 
-      Task Name:
-      ${taskName}
+Task:
+${taskName}
 
-      Author:
-      ${author}
+Author:
+${author}
 
-      Comment:
-      ${body}
+Comment:
+${body}
 
-      You are receiving this notification because you are part of the workspace team.
-
-      Regards,
-      CommitFlow Team
-    `;
+— CommitFlow Team
+`
 
     const htmlMsg = `
-      <div style="font-family: Arial, sans-serif; background:#f4f5f7; padding:24px;">
-        <div style="max-width:640px; margin:0 auto; background:#ffffff; border-radius:10px; padding:28px; box-shadow:0 6px 20px rgba(13,38,59,0.06);">
+<div style="font-family: Arial, sans-serif; background:#f4f5f7; padding:24px;">
+  <div style="max-width:640px; margin:0 auto; background:#ffffff; border-radius:10px; padding:28px; box-shadow:0 6px 20px rgba(13,38,59,0.06);">
 
-          <!-- Header -->
-          <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
-            <!-- optional small logo area -->
-            <div style="width:44px; height:44px; border-radius:8px; background:#eef2ff; display:flex; align-items:center; justify-content:center; font-size:20px;">
-              💬
-            </div>
-            <div>
-              <h2 style="color:#2d3748; font-size:18px; margin:0;">💬 New Comment!</h2>
-              <p style="margin:4px 0 0; color:#4a5568; font-size:13px;">Ada komentar baru di task yang kamu ikuti.</p>
-            </div>
-          </div>
+    <h2 style="color:#2d3748;">💬 New Comment</h2>
 
-          <!-- Card -->
-          <div style="background:#f8fafc; border:1px solid #e6eef9; border-radius:10px; padding:18px; margin:18px 0;">
-            <p style="margin:0 0 10px; font-size:14px; color:#1a202c;">
-              <strong style="color:#2b6cb0;">Project</strong><br>
-              ${projectName ?? "—"}
-            </p>
+    <p><strong>Project:</strong><br>${projectName}</p>
+    <p><strong>Task:</strong><br>${taskName}</p>
+    <p><strong>Author:</strong><br>${author}</p>
 
-            <p style="margin:0 0 10px; font-size:14px; color:#1a202c;">
-              <strong style="color:#2b6cb0;">Task</strong><br>
-              ${taskName ?? "—"}
-            </p>
+    <div style="margin-top:12px; padding:14px; background:#f8fafc; border-radius:8px;">
+      <strong>Comment</strong>
+      <p style="white-space:pre-wrap;">
+        ${body && body.length > 300 ? body.slice(0, 300) + "…" : body}
+      </p>
+    </div>
 
-            <p style="margin:0 0 10px; font-size:14px; color:#1a202c;">
-              <strong style="color:#2b6cb0;">Author</strong><br>
-              ${author ?? "Unknown"}
-            </p>
+    <div style="text-align:center; margin-top:20px;">
+      <a href="${FE_URL}"
+        style="background:#2b6cb0; color:#fff; padding:12px 18px; border-radius:6px; text-decoration:none;">
+        Open in CommitFlow
+      </a>
+    </div>
 
-            <div style="margin-top:6px; padding:12px; background:#ffffff; border-radius:8px; border:1px solid #edf2f7;">
-              <p style="margin:0; font-size:14px; color:#2d3748; line-height:1.5; white-space:pre-wrap;">
-                <strong style="display:block; color:#2b6cb0; margin-bottom:8px;">Comment</strong>
-                ${
-                  body && body.length > 100
-                    ? body.slice(0, 300) + "…"
-                    : body ?? "No comment content"
-                }
-              </p>
-            </div>
-          </div>
+  </div>
+</div>
+`
 
-          <!-- CTA -->
-          <div style="text-align:center; margin:18px 0;">
-            <a href="${FE_URL}"
-              style="display:inline-block; background:#2b6cb0; color:#fff; padding:12px 18px; border-radius:8px; text-decoration:none; font-size:14px;">
-              Open Comment in CommitFlow
-            </a>
-          </div>
-
-          <p style="font-size:13px; color:#4a5568; text-align:center; margin-top:8px;">
-            You are receiving this because you are a member of this workspace.
-          </p>
-
-          <p style="font-size:13px; color:#a0aec0; text-align:center; margin-top:18px;">
-            — CommitFlow Team
-          </p>
-
-        </div>
-      </div>
-    `;
-
+    // -----------------------------
+    // SEND EMAIL
+    // -----------------------------
     for (const recipient of toEmails) {
       try {
         await this.email.sendMail({
@@ -888,20 +887,21 @@ export class ProjectManagementService {
           subject: "💬 New Comment | CommitFlow",
           text: textMsg,
           html: htmlMsg,
-        });
-      } catch (error) {
-        logger.error(error);
+        })
+      } catch (err) {
+        logger.error(err)
       }
 
-      await new Promise((r) => setTimeout(r, 200));
+      await new Promise(r => setTimeout(r, 200))
     }
 
     return {
       ...c,
       createdAt: c.createdAt?.toISOString(),
       updatedAt: c.updatedAt?.toISOString(),
-    };
+    }
   }
+
 
   async updateComment(
     taskId: string,
@@ -1124,22 +1124,31 @@ export class ProjectManagementService {
   }
 
   async deleteTeamMember(id: string) {
-    const exists = await prisma.teamMember.findUnique({ where: { id } });
-    if (!exists) return { success: false, deleted: false };
+    const exists = await prisma.teamMember.findUnique({
+      where: { id },
+    })
+    if (!exists) return { success: false, deleted: false }
 
-    // remove assignee relation on tasks if any
     await prisma.$transaction([
-      prisma.task.updateMany({
-        where: { assigneeId: id },
-        data: { assigneeId: null },
+      // 1️⃣ hapus semua relasi taskAssignee
+      prisma.taskAssignee.deleteMany({
+        where: { memberId: id },
       }),
+
+      // 2️⃣ soft delete team member
       prisma.teamMember.update({
         where: { id },
-        data: { isTrash: true },
+        data: {
+          isTrash: true,
+          updatedAt: new Date(),
+        },
       }),
-    ]);
-    return { success: true, deleted: true };
+    ])
+
+    return { success: true, deleted: true }
   }
+
+
 
   async inviteTeamMember(
     payload: { email: string; workspaceId: string },
@@ -1335,70 +1344,64 @@ export class ProjectManagementService {
 
   // Export XLSX
   async exportXlsx(): Promise<Buffer> {
-    // fetch data
     const projects = await prisma.project.findMany({
       where: { isTrash: false },
-    });
+    })
 
-    // include assignee relation to get name easily
     const tasks = await prisma.task.findMany({
       where: { isTrash: false },
-      include: { assignee: true },
+      include: {
+        taskAssignees: {
+          include: { member: true },
+        },
+      },
       orderBy: { createdAt: "desc" },
-    });
+    })
 
     const team = await prisma.teamMember.findMany({
       where: { isTrash: false },
       orderBy: { name: "asc" },
-    });
+    })
 
-    const wb = new ExcelJS.Workbook();
+    const wb = new ExcelJS.Workbook()
 
-    // Projects sheet
-    const pSheet = wb.addWorksheet("Projects");
+    // ---------------- PROJECTS ----------------
+    const pSheet = wb.addWorksheet("Projects")
     pSheet.columns = [
       { header: "id", key: "id" },
       { header: "name", key: "name" },
       { header: "description", key: "description" },
       { header: "createdAt", key: "createdAt" },
       { header: "updatedAt", key: "updatedAt" },
-    ];
-    projects.forEach((p) =>
+    ]
+
+    projects.forEach(p =>
       pSheet.addRow({
-        id: p.id,
-        name: p.name,
-        description: p.description,
+        ...p,
         createdAt: p.createdAt?.toISOString(),
         updatedAt: p.updatedAt?.toISOString(),
       })
-    );
+    )
 
-    // Tasks sheet (include assigneeName column)
-    const tSheet = wb.addWorksheet("Tasks");
+    // ---------------- TASKS ----------------
+    const tSheet = wb.addWorksheet("Tasks")
     tSheet.columns = [
       { header: "id", key: "id" },
       { header: "title", key: "title" },
       { header: "description", key: "description" },
       { header: "projectId", key: "projectId" },
       { header: "status", key: "status" },
-      { header: "assigneeId", key: "assigneeId" },
-      { header: "assigneeName", key: "assigneeName" },
+      { header: "assigneeIds", key: "assigneeIds" },
+      { header: "assigneeNames", key: "assigneeNames" },
       { header: "priority", key: "priority" },
       { header: "startDate", key: "startDate" },
       { header: "dueDate", key: "dueDate" },
       { header: "createdAt", key: "createdAt" },
       { header: "updatedAt", key: "updatedAt" },
-    ];
+    ]
 
-    // prepare quick lookup map for team by id (fallback)
-    const teamById = new Map<string, any>();
-    for (const m of team) teamById.set(m.id, m);
-
-    tasks.forEach((t) => {
-      const assigneeName =
-        t.assignee?.name ??
-        (t.assigneeId ? teamById.get(t.assigneeId)?.name : null) ??
-        null;
+    tasks.forEach(t => {
+      const assignees = t.taskAssignees.map(a => a.member)
 
       tSheet.addRow({
         id: t.id,
@@ -1406,140 +1409,72 @@ export class ProjectManagementService {
         description: t.description,
         projectId: t.projectId,
         status: t.status,
-        assigneeId: t.assigneeId ?? null,
-        assigneeName,
+        assigneeIds: assignees.map(a => a.id).join(","),
+        assigneeNames: assignees.map(a => a.name).join(", "),
         priority: t.priority ?? null,
         startDate: t.startDate ?? null,
         dueDate: t.dueDate ?? null,
         createdAt: t.createdAt?.toISOString(),
         updatedAt: t.updatedAt?.toISOString(),
-      });
-    });
+      })
+    })
 
-    // Team sheet
-    const teamSheet = wb.addWorksheet("Team");
+    // ---------------- TEAM ----------------
+    const teamSheet = wb.addWorksheet("Team")
     teamSheet.columns = [
       { header: "id", key: "id" },
       { header: "name", key: "name" },
       { header: "role", key: "role" },
       { header: "email", key: "email" },
       { header: "photo", key: "photo" },
-    ];
-    team.forEach((m) =>
-      teamSheet.addRow({
-        id: m.id,
-        name: m.name,
-        role: m.role,
-        email: m.email,
-        photo: m.photo,
-      })
-    );
+    ]
 
-    const buf = await wb.xlsx.writeBuffer();
-    return Buffer.from(buf);
+    team.forEach(m => teamSheet.addRow(m))
+
+    const buf = await wb.xlsx.writeBuffer()
+    return Buffer.from(buf)
   }
+
 
   // Import XLSX
   async importXlsx(filePath: string) {
     if (!fs.existsSync(filePath))
-      throw new BadRequestException("File not found");
+      throw new BadRequestException("File not found")
 
-    const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.readFile(filePath);
+    const workbook = new ExcelJS.Workbook()
+    await workbook.xlsx.readFile(filePath)
 
-    const created = { projects: 0, tasks: 0, team: 0 };
+    const created = { projects: 0, tasks: 0, team: 0 }
 
-    // Projects
-    const projectsSheet = workbook.getWorksheet("Projects");
-    if (projectsSheet) {
-      const rows = projectsSheet.getRows(2, projectsSheet.rowCount - 1) ?? [];
-      for (const row of rows) {
-        const id = row.getCell(1).value?.toString();
-        const name = row.getCell(2).value?.toString() ?? "Untitled";
-        const description = row.getCell(3).value?.toString() ?? null;
-        const createdAtRaw = row.getCell(4).value;
-        const createdAt = createdAtRaw
-          ? new Date(createdAtRaw.toString())
-          : new Date();
+    // preload team
+    const allTeam = await prisma.teamMember.findMany({
+      where: { isTrash: false },
+    })
+    const teamMap = new Map(allTeam.map(m => [m.id, m]))
 
-        if (id) {
-          await prisma.project.upsert({
-            where: { id },
-            create: { id, name, description, createdAt },
-            update: { name, description, updatedAt: new Date() },
-          });
-        } else {
-          await prisma.project.create({
-            data: { name, description, createdAt },
-          });
-        }
-        created.projects++;
-      }
-    }
-
-    // Team
-    const teamSheet = workbook.getWorksheet("Team");
-    if (teamSheet) {
-      const rows = teamSheet.getRows(2, teamSheet.rowCount - 1) ?? [];
-      for (const row of rows) {
-        const id = row.getCell(1).value?.toString();
-        const name = row.getCell(2).value?.toString() ?? "Unnamed";
-        const role = row.getCell(3).value?.toString() ?? null;
-        const email = row.getCell(4).value?.toString() ?? null;
-        const photo = row.getCell(5).value?.toString() ?? null;
-
-        if (id) {
-          await prisma.teamMember.upsert({
-            where: { id },
-            create: { id, name, role, email, photo },
-            update: { name, role, email, photo },
-          });
-        } else {
-          await prisma.teamMember.create({
-            data: { name, role, email, photo },
-          });
-        }
-        created.team++;
-      }
-    }
-
-    // Tasks
-    const tasksSheet = workbook.getWorksheet("Tasks");
+    // ---------------- TASKS ----------------
+    const tasksSheet = workbook.getWorksheet("Tasks")
     if (tasksSheet) {
-      const rows = tasksSheet.getRows(2, tasksSheet.rowCount - 1) ?? [];
-
-      // preload team map to resolve names quickly
-      const allTeam = await prisma.teamMember.findMany({
-        where: { isTrash: false },
-      });
-      const teamMap = new Map<string, any>();
-      for (const m of allTeam) teamMap.set(m.id, m);
+      const rows = tasksSheet.getRows(2, tasksSheet.rowCount - 1) ?? []
 
       for (const row of rows) {
-        const id = row.getCell(1).value?.toString();
-        const title = row.getCell(2).value?.toString() ?? "Untitled";
-        const description = row.getCell(3).value?.toString() ?? null;
-        const projectId = row.getCell(4).value?.toString() ?? null;
-        const status = row.getCell(5).value?.toString() ?? "todo";
-        const assigneeIdCell = row.getCell(6).value?.toString() ?? null;
-        const assigneeNameCell = row.getCell(7).value?.toString() ?? null;
-        const priority = row.getCell(8).value?.toString() ?? null;
-        const startDate = row.getCell(9).value?.toString() ?? null;
-        const dueDate = row.getCell(10).value?.toString() ?? null;
-        const createdAtRaw = row.getCell(11).value;
-        const createdAt = createdAtRaw
-          ? new Date(createdAtRaw.toString())
-          : new Date();
+        const id = row.getCell(1).value?.toString()
+        const title = row.getCell(2).value?.toString() ?? "Untitled"
+        const description = row.getCell(3).value?.toString() ?? null
+        const projectId = row.getCell(4).value?.toString() ?? null
+        const status = row.getCell(5).value?.toString() ?? "todo"
+        const assigneeIdsRaw = row.getCell(6).value?.toString() ?? ""
+        const priority = row.getCell(8).value?.toString() ?? null
+        const startDate = row.getCell(9).value?.toString() ?? null
+        const dueDate = row.getCell(10).value?.toString() ?? null
 
-        // resolve assigneeId preferring explicit id, fallback to name lookup
-        let assigneeId = assigneeIdCell ?? null;
-        if ((!assigneeId || assigneeId === "") && assigneeNameCell) {
-          const found = allTeam.find((m) => m.name === assigneeNameCell);
-          if (found) assigneeId = found.id;
-        }
+        const assigneeIds = assigneeIdsRaw
+          .split(",")
+          .map(s => s.trim())
+          .filter(id => teamMap.has(id))
 
-        if (id) {
-          await prisma.task.upsert({
+        const task = id
+          ? await prisma.task.upsert({
             where: { id },
             create: {
               id,
@@ -1547,50 +1482,49 @@ export class ProjectManagementService {
               description,
               projectId,
               status,
-              assigneeId,
               priority,
               startDate,
               dueDate,
-              createdAt,
             },
             update: {
               title,
               description,
               projectId,
               status,
-              assigneeId,
               priority,
               startDate,
               dueDate,
               updatedAt: new Date(),
             },
-          });
-        } else {
-          await prisma.task.create({
+          })
+          : await prisma.task.create({
             data: {
               title,
               description,
               projectId,
               status,
-              assigneeId,
               priority,
               startDate,
               dueDate,
-              createdAt,
             },
-          });
+          })
+
+        if (assigneeIds.length) {
+          await prisma.taskAssignee.createMany({
+            data: assigneeIds.map(memberId => ({
+              taskId: task.id,
+              memberId,
+            })),
+            skipDuplicates: true,
+          })
         }
-        created.tasks++;
+
+        created.tasks++
       }
     }
 
-    // cleanup
-    try {
-      fs.unlinkSync(filePath);
-    } catch {
-      console.log("unlinksync failed");
-    }
-
-    return { success: true, ...created };
+    fs.unlinkSync(filePath)
+    return { success: true, ...created }
   }
+
 }

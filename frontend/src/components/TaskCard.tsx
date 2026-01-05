@@ -1,12 +1,16 @@
 import React, { useRef, useEffect, useState } from "react";
 import type { Task, TeamMember } from "../types";
 import parse from "html-react-parser";
+import { getAssigneeIds } from "../utils/getAssigneeIds";
+import { getTaskAssignees } from "../utils/getTaskAssignees";
 
-function hashStr(s: string) {
+function hashStr(s?: string) {
+  if (!s) return 0;
   let h = 5381;
   for (let i = 0; i < s.length; i++) h = (h * 33) ^ s.charCodeAt(i);
   return Math.abs(h);
 }
+
 function hslStr(h: number, s = 75, l = 50) {
   return `hsl(${h} ${s}% ${l}%)`;
 }
@@ -82,28 +86,9 @@ export const TaskCard = React.memo(
   }) {
     const pill = priorityPill(task.priority);
 
-    const assigneeId = (task as any).assigneeId ?? null;
-    const assigneeNameFromTask = task.assigneeName ?? "";
-    const member =
-      (assigneeId && team.find((m) => m.id === assigneeId)) ??
-      (assigneeNameFromTask &&
-        team.find((m) => m.name === assigneeNameFromTask)) ??
-      undefined;
-    const assigneeLabel = member?.name ?? assigneeNameFromTask ?? "";
+    const assignees = getTaskAssignees(task, team);
 
-    const hue = assigneeLabel ? hashStr(assigneeLabel) % 360 : 200;
-    const avatarBg = member?.photo
-      ? undefined
-      : typeof window !== "undefined" &&
-        document.documentElement.classList.contains("dark")
-      ? hslaStr(hue, 65, 50, 0.16)
-      : hslaStr(hue, 75, 85, 0.95);
-    const avatarText = member?.photo
-      ? undefined
-      : typeof window !== "undefined" &&
-        document.documentElement.classList.contains("dark")
-      ? hslStr(hue, 65, 80)
-      : hslStr(hue, 75, 25);
+
 
     // measure height to create a placeholder when dragging so layout doesn't jump
     const [measuredHeight, setMeasuredHeight] = useState<number | null>(null);
@@ -175,12 +160,12 @@ export const TaskCard = React.memo(
 
     const transformStyle = isBeingDragged
       ? {
-          position: "fixed" as const,
-          left: 0,
-          top: 0,
-          transform: `translate3d(${dragPos.x}px, ${dragPos.y}px, 0)`,
-          width: `${dragPos.width}px`,
-        }
+        position: "fixed" as const,
+        left: 0,
+        top: 0,
+        transform: `translate3d(${dragPos.x}px, ${dragPos.y}px, 0)`,
+        width: `${dragPos.width}px`,
+      }
       : {};
 
     // pointer-drag helpers to avoid opening modal on click and avoid jumps
@@ -285,17 +270,17 @@ export const TaskCard = React.memo(
 
     const draggedStyles = isBeingDragged
       ? {
-          position: "fixed" as const,
-          left: 0,
-          top: 0,
-          transform: `translate3d(${dragPos.x}px, ${dragPos.y}px, 0)`,
-          width: `${dragPos.width}px`,
-          boxSizing: "border-box",
-          zIndex: 9999,
-          pointerEvents: "none" as const,
-          willChange: "transform" as const,
-          transition: "none",
-        }
+        position: "fixed" as const,
+        left: 0,
+        top: 0,
+        transform: `translate3d(${dragPos.x}px, ${dragPos.y}px, 0)`,
+        width: `${dragPos.width}px`,
+        boxSizing: "border-box",
+        zIndex: 9999,
+        pointerEvents: "none" as const,
+        willChange: "transform" as const,
+        transition: "none",
+      }
       : {};
 
     return (
@@ -369,13 +354,107 @@ export const TaskCard = React.memo(
             <div className="flex gap-2 flex-wrap mt-1">
               {task.startDate
                 ? (() => {
-                    const sd = parseDateOnlySafe(task.startDate);
-                    return sd ? (
-                      <div
-                        className="flex items-center gap-2 px-3 py-1 rounded-full bg-sky-700/10 dark:bg-sky-600/20 
+                  const sd = parseDateOnlySafe(task.startDate);
+                  return sd ? (
+                    <div
+                      className="flex items-center gap-2 px-3 py-1 rounded-full bg-sky-700/10 dark:bg-sky-600/20 
                    text-xs font-medium text-sky-500 dark:text-sky-300"
-                        title={`Start: ${task.startDate}`}
+                      title={`Start: ${task.startDate}`}
+                    >
+                      <svg
+                        className="w-3.5 h-3.5"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        aria-hidden
                       >
+                        <path
+                          d="M8 7V3M16 7V3M3 11h18M5 21h14a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2z"
+                          stroke="currentColor"
+                          strokeWidth="1.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                      <span>{formatDateShort(task.startDate)}</span>
+                    </div>
+                  ) : null;
+                })()
+                : null}
+
+              {task.dueDate
+                ? (() => {
+                  const due = parseDateOnlySafe(task.dueDate);
+                  if (!due) return null;
+
+                  const now = new Date();
+                  const today = new Date(
+                    now.getFullYear(),
+                    now.getMonth(),
+                    now.getDate()
+                  );
+
+                  const isOverdue = due.getTime() < today.getTime();
+                  const isToday = due.getTime() === today.getTime();
+                  const baseClasses =
+                    "flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium";
+                  const overdueClasses =
+                    "bg-red-700/10 dark:bg-red-600/20 text-red-500 dark:text-red-300";
+                  const todayClasses =
+                    "bg-amber-700/10 dark:bg-amber-600/20 text-amber-500 dark:text-amber-300";
+                  const okClasses =
+                    "bg-emerald-700/10 dark:bg-emerald-600/20 text-emerald-500 dark:text-emerald-300";
+
+                  const pillClasses = isOverdue
+                    ? overdueClasses
+                    : isToday
+                      ? todayClasses
+                      : okClasses;
+                  const statusLabel = isOverdue
+                    ? "overdue"
+                    : isToday
+                      ? "due today"
+                      : "";
+
+                  return (
+                    <div
+                      className={`${baseClasses} ${pillClasses}`}
+                      title={
+                        statusLabel
+                          ? `${statusLabel} • ${task.dueDate}`
+                          : `Due: ${task.dueDate}`
+                      }
+                      aria-live="polite"
+                    >
+                      {isOverdue || isToday ? (
+                        <svg
+                          className="w-3.5 h-3.5"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          aria-hidden
+                        >
+                          <path
+                            d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
+                            stroke="currentColor"
+                            strokeWidth="1.2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                          <path
+                            d="M12 9v4"
+                            stroke="currentColor"
+                            strokeWidth="1.6"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                          <path
+                            d="M12 17h.01"
+                            stroke="currentColor"
+                            strokeWidth="1.6"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      ) : (
                         <svg
                           className="w-3.5 h-3.5"
                           viewBox="0 0 24 24"
@@ -390,169 +469,118 @@ export const TaskCard = React.memo(
                             strokeLinejoin="round"
                           />
                         </svg>
-                        <span>{formatDateShort(task.startDate)}</span>
-                      </div>
-                    ) : null;
-                  })()
-                : null}
+                      )}
 
-              {task.dueDate
-                ? (() => {
-                    const due = parseDateOnlySafe(task.dueDate);
-                    if (!due) return null;
-
-                    const now = new Date();
-                    const today = new Date(
-                      now.getFullYear(),
-                      now.getMonth(),
-                      now.getDate()
-                    );
-
-                    const isOverdue = due.getTime() < today.getTime();
-                    const isToday = due.getTime() === today.getTime();
-                    const baseClasses =
-                      "flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium";
-                    const overdueClasses =
-                      "bg-red-700/10 dark:bg-red-600/20 text-red-500 dark:text-red-300";
-                    const todayClasses =
-                      "bg-amber-700/10 dark:bg-amber-600/20 text-amber-500 dark:text-amber-300";
-                    const okClasses =
-                      "bg-emerald-700/10 dark:bg-emerald-600/20 text-emerald-500 dark:text-emerald-300";
-
-                    const pillClasses = isOverdue
-                      ? overdueClasses
-                      : isToday
-                      ? todayClasses
-                      : okClasses;
-                    const statusLabel = isOverdue
-                      ? "overdue"
-                      : isToday
-                      ? "due today"
-                      : "";
-
-                    return (
-                      <div
-                        className={`${baseClasses} ${pillClasses}`}
-                        title={
-                          statusLabel
-                            ? `${statusLabel} • ${task.dueDate}`
-                            : `Due: ${task.dueDate}`
-                        }
-                        aria-live="polite"
-                      >
-                        {isOverdue || isToday ? (
-                          <svg
-                            className="w-3.5 h-3.5"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            aria-hidden
-                          >
-                            <path
-                              d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
-                              stroke="currentColor"
-                              strokeWidth="1.2"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-                            <path
-                              d="M12 9v4"
-                              stroke="currentColor"
-                              strokeWidth="1.6"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-                            <path
-                              d="M12 17h.01"
-                              stroke="currentColor"
-                              strokeWidth="1.6"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-                          </svg>
-                        ) : (
-                          <svg
-                            className="w-3.5 h-3.5"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            aria-hidden
-                          >
-                            <path
-                              d="M8 7V3M16 7V3M3 11h18M5 21h14a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2z"
-                              stroke="currentColor"
-                              strokeWidth="1.5"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-                          </svg>
-                        )}
-
-                        <div className="flex flex-col leading-tight">
-                          <span className="text-xs text-slate-900 dark:text-slate-100">
-                            {formatDateShort(task.dueDate)}
-                          </span>
-                          {(isOverdue || isToday) && (
-                            <span
-                              className={`text-[11px] ${
-                                isOverdue ? "text-red-300" : "text-amber-300"
+                      <div className="flex flex-col leading-tight">
+                        <span className="text-xs text-slate-900 dark:text-slate-100">
+                          {formatDateShort(task.dueDate)}
+                        </span>
+                        {(isOverdue || isToday) && (
+                          <span
+                            className={`text-[11px] ${isOverdue ? "text-red-300" : "text-amber-300"
                               }`}
-                            >
-                              {isOverdue ? "overdue" : "due today"}
-                            </span>
-                          )}
-                        </div>
+                          >
+                            {isOverdue ? "overdue" : "due today"}
+                          </span>
+                        )}
                       </div>
-                    );
-                  })()
+                    </div>
+                  );
+                })()
                 : null}
             </div>
           </div>
 
           <div className="flex items-center gap-2 mt-3 pl-2">
-            <div
-              className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold overflow-hidden"
-              style={{ background: avatarBg, color: avatarText }}
-              title={assigneeLabel || "Unassigned"}
-            >
-              {member?.photo ? (
-                <img
-                  src={member.photo}
-                  alt={`${member.name} photo`}
-                  className="w-full h-full object-cover rounded-full"
-                />
-              ) : assigneeLabel ? (
-                assigneeLabel
-                  .split(" ")
-                  .map((n: any) => n[0])
-                  .slice(0, 2)
-                  .join("")
-                  .toUpperCase()
-              ) : (
-                "—"
-              )}
-            </div>
-            <div className="text-sm text-slate-900 dark:text-slate-100">
-              {assigneeLabel || "Unassigned"}
-            </div>
+            {assignees.length === 0 ? (
+              <div className="text-sm text-slate-400">Unassigned</div>
+            ) : (
+              <>
+                <div className="flex -space-x-2">
+                  {assignees.slice(0, 3).map((m: any) => {
+                    const hue = hashStr(m.name) % 360;
+                    const avatarBg = m.photo
+                      ? undefined
+                      : typeof window !== "undefined" &&
+                        document.documentElement.classList.contains("dark")
+                        ? hslaStr(hue, 65, 50, 0.16)
+                        : hslaStr(hue, 75, 85, 0.95);
+                    const avatarText = m.photo
+                      ? undefined
+                      : typeof window !== "undefined" &&
+                        document.documentElement.classList.contains("dark")
+                        ? hslStr(hue, 65, 80)
+                        : hslStr(hue, 75, 25);
+
+                    return (
+                      <div
+                        key={m.id}
+                        className="w-8 h-8 rounded-full border border-white flex items-center justify-center text-xs font-semibold overflow-hidden"
+                        style={{ background: avatarBg, color: avatarText }}
+                        title={m.name}
+                      >
+                        {m.photo ? (
+                          <img
+                            src={m.photo}
+                            alt={m.name}
+                            className="w-full h-full object-cover rounded-full"
+                          />
+                        ) : (
+                          m.name
+                            .split(" ")
+                            .map((n: string) => n[0])
+                            .slice(0, 2)
+                            .join("")
+                            .toUpperCase()
+                        )}
+                      </div>
+                    );
+                  })}
+
+                  {assignees.length > 3 && (
+                    <div className="w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-700 text-xs flex items-center justify-center border border-white">
+                      +{assignees.length - 3}
+                    </div>
+                  )}
+                </div>
+
+                <div className="text-sm text-slate-900 dark:text-slate-100 truncate max-w-[140px]">
+                  {assignees.map((m: any) => m.name).join(", ")}
+                </div>
+              </>
+            )}
           </div>
+
         </div>
       </>
     );
   },
   (prev, next) => {
+    // identity
     if (prev.task.id !== next.task.id) return false;
+
+    // primitive fields
     if (prev.task.title !== next.task.title) return false;
     if ((prev.task as any).description !== (next.task as any).description)
       return false;
     if (prev.task.priority !== next.task.priority) return false;
     if (prev.task.startDate !== next.task.startDate) return false;
     if (prev.task.dueDate !== next.task.dueDate) return false;
-    const prevAssignee =
-      (prev.task as any).assigneeId ?? (prev.task as any).assigneeName ?? null;
-    const nextAssignee =
-      (next.task as any).assigneeId ?? (next.task as any).assigneeName ?? null;
-    if (prevAssignee !== nextAssignee) return false;
+    if (prev.task.status !== next.task.status) return false;
+    if (
+      JSON.stringify(prev.task.taskAssignees) !==
+      JSON.stringify(next.task.taskAssignees)
+    ) return false;
+    // ✅ MULTI-ASSIGNEE SAFE COMPARISON
+    const prevAssignees = getAssigneeIds(prev.task);
+    const nextAssignees = getAssigneeIds(next.task);
 
-    // --- comments comparison: length + last createdAt (cheap & robust) ---
+    if (prevAssignees.length !== nextAssignees.length) return false;
+    for (let i = 0; i < prevAssignees.length; i++) {
+      if (prevAssignees[i] !== nextAssignees[i]) return false;
+    }
+
+    // --- comments comparison (cheap & robust) ---
     const prevComments: any[] = Array.isArray((prev.task as any).comments)
       ? (prev.task as any).comments
       : [];
@@ -565,18 +593,19 @@ export const TaskCard = React.memo(
     const getLastCreatedAt = (arr: any[]) =>
       arr.length === 0
         ? null
-        : (arr
-            .map((c: any) => c?.createdAt ?? c?.created_at ?? null)
-            .filter(Boolean)
-            .sort()
-            .slice(-1)[0] as string | null);
+        : arr
+          .map((c: any) => c?.createdAt ?? c?.created_at ?? null)
+          .filter(Boolean)
+          .sort()
+          .slice(-1)[0];
 
-    const prevLast = getLastCreatedAt(prevComments);
-    const nextLast = getLastCreatedAt(nextComments);
-    if (String(prevLast) !== String(nextLast)) return false;
-    // --- end comments comparison ---
+    if (String(getLastCreatedAt(prevComments)) !==
+      String(getLastCreatedAt(nextComments)))
+      return false;
 
+    // dragging state
     if (prev.isBeingDragged !== next.isBeingDragged) return false;
+
     if (prev.isBeingDragged) {
       return (
         prev.dragPos.x === next.dragPos.x &&
@@ -584,6 +613,7 @@ export const TaskCard = React.memo(
         prev.dragPos.width === next.dragPos.width
       );
     }
+
     return true;
   }
 );
