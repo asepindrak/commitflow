@@ -1498,14 +1498,14 @@ export default function ProjectManagement({
               (updated as any).startDate == null
                 ? null
                 : (updated as any).startDate instanceof Date
-                ? (updated as any).startDate.toISOString()
-                : String((updated as any).startDate),
+                  ? (updated as any).startDate.toISOString()
+                  : String((updated as any).startDate),
             dueDate:
               (updated as any).dueDate == null
                 ? null
                 : (updated as any).dueDate instanceof Date
-                ? (updated as any).dueDate.toISOString()
-                : String((updated as any).dueDate),
+                  ? (updated as any).dueDate.toISOString()
+                  : String((updated as any).dueDate),
           },
         };
 
@@ -1545,8 +1545,8 @@ export default function ProjectManagement({
           (updated as any).startDate === null
             ? null
             : (updated as any).startDate instanceof Date
-            ? (updated as any).startDate.toISOString()
-            : String((updated as any).startDate);
+              ? (updated as any).startDate.toISOString()
+              : String((updated as any).startDate);
       }
 
       if (typeof (updated as any).dueDate !== "undefined") {
@@ -1554,8 +1554,8 @@ export default function ProjectManagement({
           (updated as any).dueDate === null
             ? null
             : (updated as any).dueDate instanceof Date
-            ? (updated as any).dueDate.toISOString()
-            : String((updated as any).dueDate);
+              ? (updated as any).dueDate.toISOString()
+              : String((updated as any).dueDate);
       }
 
       // include comments when provided (array|null)
@@ -1624,13 +1624,13 @@ export default function ProjectManagement({
       setSelectedTask((cur) =>
         cur && nid(cur.id) === nid(updated.id)
           ? {
-              ...cur,
-              ...result,
-              comments:
-                result && typeof result.comments !== "undefined"
-                  ? result.comments
-                  : cur.comments,
-            }
+            ...cur,
+            ...result,
+            comments:
+              result && typeof result.comments !== "undefined"
+                ? result.comments
+                : cur.comments,
+          }
           : cur
       );
     } catch (err) {
@@ -2389,11 +2389,10 @@ export default function ProjectManagement({
     group relative inline-flex items-center gap-2 px-5 py-2.5
     rounded-2xl text-sm font-semibold backdrop-blur-md
     transition-all duration-300 
-    ${
-      syncing
-        ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-        : "bg-white/10 dark:bg-white/5 hover:bg-white/20 dark:hover:bg-white/10 border border-white/20 dark:border-white/10"
-    }
+    ${syncing
+                      ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                      : "bg-white/10 dark:bg-white/5 hover:bg-white/20 dark:hover:bg-white/10 border border-white/20 dark:border-white/10"
+                    }
     shadow-[0_4px_12px_rgba(0,0,0,0.1)]
     hover:shadow-[0_6px_16px_rgba(0,0,0,0.15)]
     active:scale-95
@@ -2402,11 +2401,10 @@ export default function ProjectManagement({
                   {/* spinning icon */}
                   <RefreshCw
                     size={18}
-                    className={`transition-transform ${
-                      syncing
-                        ? "animate-spin text-emerald-400"
-                        : "group-hover:rotate-180 text-gray-700 dark:text-white/80"
-                    }`}
+                    className={`transition-transform ${syncing
+                      ? "animate-spin text-emerald-400"
+                      : "group-hover:rotate-180 text-gray-700 dark:text-white/80"
+                      }`}
                   />
 
                   {/* label */}
@@ -2647,9 +2645,9 @@ export default function ProjectManagement({
                     const next = prev.map((t) =>
                       nid(t.id) === nid(taskId)
                         ? {
-                            ...t,
-                            comments: [tmpComment, ...(t.comments || [])],
-                          }
+                          ...t,
+                          comments: [tmpComment, ...(t.comments || [])],
+                        }
                         : t
                     );
 
