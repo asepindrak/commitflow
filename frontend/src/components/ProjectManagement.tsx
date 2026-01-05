@@ -1797,7 +1797,7 @@ export default function ProjectManagement({
     tasks?: Task[];
     team?: string[] | any[];
   }) {
-    console.log("payload import", payload)
+
     const genTmpId = () => `tmp_${Math.random().toString(36).slice(2, 9)}`;
 
     // snapshot of current global team state (use the team variable from your component scope)
@@ -2077,7 +2077,7 @@ export default function ProjectManagement({
     // 3) if assigneeId maps from originalIdToServer -> use mapped server id
     // 4) fallback: match by assigneeName -> nameToId
     // 5) else null
-    console.log("team", team)
+
     // 🔥 ENSURE TASK ASSIGNEES EXIST IN TEAM
     for (const t of uniqueIncoming) {
       for (const a of t.taskAssignees || []) {
@@ -2120,9 +2120,9 @@ export default function ProjectManagement({
     );
 
 
-    console.log("liveTeamSnapshot", liveTeamSnapshot)
+
     const preparedTasks = uniqueIncoming.map((t) => {
-      console.log("TaskAssignees", t.taskAssignees)
+
       const tmpId = nid(t.id).startsWith("tmp_") ? t.id : genTmpId();
 
       const resolvedAssignees = (() => {
@@ -2157,19 +2157,6 @@ export default function ProjectManagement({
       })();
 
 
-
-
-      console.log(
-        "FINAL taskAssignees",
-        resolvedAssignees.map(a => ({
-          memberId: a.memberId,
-          name: a.member.name,
-          hasPhoto: !!a.member.photo
-        }))
-      );
-
-
-
       return {
         ...t,
         id: tmpId,
@@ -2188,10 +2175,7 @@ export default function ProjectManagement({
           return !prevSig.has(s);
         })
         .map((t: any) => hydrateTask(t, liveTeamSnapshot));
-      console.log(
-        "AFTER hydrate",
-        toAdd
-      );
+
       return [...toAdd, ...prev];
     });
 
