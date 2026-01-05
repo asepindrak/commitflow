@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.11
+
+### Patch Changes
+
+- b2feea4: fix: export & import task
+
 ## 1.3.10
 
 ### Patch Changes
