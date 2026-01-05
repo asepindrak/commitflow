@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.0
+
+### Minor Changes
+
+- d7a2dfb: feat: my taks & report
+
 ## 1.3.11
 
 ### Patch Changes
