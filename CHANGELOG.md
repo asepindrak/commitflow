@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.1
+
+### Patch Changes
+
+- c799127: feat: notification
+
 ## 1.4.0
 
 ### Minor Changes
