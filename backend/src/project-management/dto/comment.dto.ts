@@ -7,6 +7,9 @@ export class CreateCommentDto {
     @IsString()
     body: string;
 
+    @IsString()
+    memberId: string;
+
     @IsOptional()
     @IsArray()
     attachments?: any[];

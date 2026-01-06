@@ -180,7 +180,7 @@ export async function getTaskComments(taskId: string) {
 
 export async function createComment(
   taskId: string,
-  payload: { author: string; body: string; attachments?: any[] }
+  payload: { author: string; body: string; memberId: string; attachments?: any[] }
 ) {
   const res = await apiFetch(`${BASE}/api/tasks/${taskId}/comments`, {
     method: "POST",

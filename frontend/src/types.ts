@@ -50,6 +50,9 @@ export type Task = {
   createdAt?: string;
   updatedAt?: string;
 
+  createdById?: string | null;
+  updatedById?: string | null;
+
   isTrash?: boolean;
 };
 

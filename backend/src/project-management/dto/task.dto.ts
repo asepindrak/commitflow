@@ -48,6 +48,14 @@ export class CreateTaskDto {
   @IsOptional()
   @IsString()
   clientId?: string | null;
+
+  @IsOptional()
+  @IsString()
+  createdById?: string | null;
+
+  @IsOptional()
+  @IsString()
+  updatedById?: string | null;
 }
 
 export class UpdateTaskDto {
@@ -84,6 +92,14 @@ export class UpdateTaskDto {
   @IsOptional()
   @IsString()
   dueDate?: string | null;
+
+  @IsOptional()
+  @IsString()
+  createdById?: string | null;
+
+  @IsOptional()
+  @IsString()
+  updatedById?: string | null;
 }
 
 export class PatchTaskDto {
@@ -120,5 +136,13 @@ export class PatchTaskDto {
   @IsOptional()
   @IsString()
   dueDate?: string | null;
+
+  @IsOptional()
+  @IsString()
+  createdById?: string | null;
+
+  @IsOptional()
+  @IsString()
+  updatedById?: string | null;
 }
 
