@@ -633,6 +633,8 @@ export class ProjectManagementService {
       startDate?: string | null
       dueDate?: string | null
       clientId?: string | null
+      createdById?: string | null
+      updatedById?: string | null
     }>
   ) {
     // --------------------------------
@@ -697,6 +699,7 @@ export class ProjectManagementService {
           dueDate:
             payload.dueDate !== undefined ? payload.dueDate : null,
           clientId: payload.clientId ?? null,
+          createdById: payload.createdById ?? null
         },
       })
 
@@ -735,6 +738,8 @@ export class ProjectManagementService {
       taskAssignees?: { memberId: string }[]
       startDate?: string | null
       dueDate?: string | null
+      createdById?: string | null
+      updatedById?: string | null
     }>,
     userId: string
   ) {
@@ -826,6 +831,8 @@ export class ProjectManagementService {
             : existing.dueDate,
 
         updatedAt: new Date(),
+
+        updatedById: payload.updatedById,
       },
     });
 
@@ -951,6 +958,8 @@ Due Date: ${format(updated.dueDate)}
       taskAssignees?: { memberId: string; role?: string }[]
       startDate?: string | null;
       dueDate?: string | null;
+      createdById?: string | null;
+      updatedById?: string | null;
     }>,
     userId: string
   ) {
@@ -990,7 +999,7 @@ Due Date: ${format(updated.dueDate)}
 
   async createComment(
     taskId: string,
-    payload: { author: string; body: string; attachments?: any[] }
+    payload: { author: string; body: string; memberId: string, attachments?: any[] }
   ) {
     // -----------------------------
     // GET TASK + ASSIGNEES
@@ -1012,11 +1021,20 @@ Due Date: ${format(updated.dueDate)}
       data: {
         taskId,
         author: payload.author,
+        memberId: payload.memberId,
         body: payload.body,
         attachments: payload.attachments ?? undefined,
       },
     })
 
+    //update task
+    const updateTask = await prisma.task.update({
+      where: { id: taskId },
+      data: {
+        updatedById: payload.memberId,
+        updatedAt: new Date()
+      }
+    })
     // -----------------------------
     // GET PROJECT
     // -----------------------------

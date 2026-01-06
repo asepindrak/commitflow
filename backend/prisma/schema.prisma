@@ -64,26 +64,31 @@ model User {
 }
 
 model TeamMember {
-  id            String    @id @default(uuid()) // pilih uuid supaya beda style dari user.id
-  clientId      String?   @unique
-  userId        String
-  workspaceId   String
-  name          String
-  role          String?
-  email         String?
-  photo         String?
-  phone         String?
-  isTrash       Boolean   @default(false)
-  isAdmin       Boolean   @default(false)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime?
-  Task          Task[]    @relation("TaskMembers")
-  TaskCreatedBy Task[]    @relation("TaskCreatedBy")
+  id          String  @id @default(uuid())
+  clientId    String? @unique
+  userId      String
+  workspaceId String
 
-  // FK ke Workspace
-  workspace     Workspace?     @relation("WorkspaceMembers", fields: [workspaceId], references: [id])
-  user          User?          @relation("UserMembers", fields: [userId], references: [id])
+  name  String
+  role  String?
+  email String?
+  photo String?
+  phone String?
+
+  isTrash Boolean @default(false)
+  isAdmin Boolean @default(false)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime?
+
+  // 🔗 RELATIONS (HARUS SESUAI NAMA)
+  assignedTasks Task[] @relation("TaskAssignee")
+
   taskAssignees TaskAssignee[]
+
+  // FK
+  workspace Workspace? @relation("WorkspaceMembers", fields: [workspaceId], references: [id])
+  user      User?      @relation("UserMembers", fields: [userId], references: [id])
 }
 
 model Workspace {
@@ -112,26 +117,38 @@ model Project {
 }
 
 model Task {
-  id            String         @id @default(uuid())
-  title         String
-  description   String?
-  status        String         @default("todo")
-  projectId     String?
-  project       Project?       @relation("ProjectTasks", fields: [projectId], references: [id])
-  assigneeId    String?
-  startDate     String?
-  dueDate       String?
-  finishDate    DateTime?
-  priority      String?
-  assignee      TeamMember?    @relation("TaskMembers", fields: [assigneeId], references: [id])
-  isTrash       Boolean        @default(false)
-  comments      Comment[]      @relation("TaskComments")
-  clientId      String?        @unique
-  createdAt     DateTime       @default(now())
-  createdById   String?
-  createdBy     TeamMember?    @relation("TaskCreatedBy", fields: [createdById], references: [id])
-  updatedAt     DateTime?
+  id          String  @id @default(uuid())
+  title       String
+  description String?
+  status      String  @default("todo")
+
+  projectId String?
+  project   Project? @relation("ProjectTasks", fields: [projectId], references: [id])
+
+  // 👤 ASSIGNEE (legacy single)
+  assigneeId String?
+  assignee   TeamMember? @relation("TaskAssignee", fields: [assigneeId], references: [id])
+
+  // 👥 MULTI ASSIGNEE
   taskAssignees TaskAssignee[]
+
+  startDate  String?
+  dueDate    String?
+  finishDate DateTime?
+  priority   String?
+
+  comments Comment[] @relation("TaskComments")
+
+  clientId String? @unique
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime?
+
+  // 👤 AUDIT FIELDS (Team Member ID)
+  createdById String?
+  updatedById String?
+
+  isTrash Boolean @default(false)
 }
 
 model TaskAssignee {
@@ -151,6 +168,7 @@ model Comment {
   id          String    @id @default(uuid())
   taskId      String
   task        Task      @relation("TaskComments", fields: [taskId], references: [id])
+  memberId    String?
   author      String
   body        String
   attachments Json? // optional JSON array of attachments metadata

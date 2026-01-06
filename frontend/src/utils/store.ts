@@ -10,12 +10,12 @@ const API_BASE = import.meta.env.VITE_API_URL?.replace(/\/$/, "") ?? "";
 function safeSetItem(k: string, v: string) {
   try {
     localStorage.setItem(k, v);
-  } catch {}
+  } catch { }
 }
 function safeRemoveItem(k: string) {
   try {
     localStorage.removeItem(k);
-  } catch {}
+  } catch { }
 }
 function clearSessionStorage() {
   safeRemoveItem("session_token");
@@ -212,7 +212,7 @@ const useAuthStore = create<AuthState>()(
                   localStorage.setItem("userId", parsed.userId);
                 if (parsed.user)
                   localStorage.setItem("user", JSON.stringify(parsed.user));
-              } catch {}
+              } catch { }
 
               return parsed.token;
             }
@@ -241,7 +241,7 @@ const useAuthStore = create<AuthState>()(
               localStorage.removeItem("token");
               localStorage.removeItem("userId");
               localStorage.removeItem("user");
-            } catch {}
+            } catch { }
 
             set({
               token: null,
@@ -271,7 +271,7 @@ const useAuthStore = create<AuthState>()(
               localStorage.removeItem("token");
               localStorage.removeItem("userId");
               localStorage.removeItem("user");
-            } catch {}
+            } catch { }
             set({
               token: null,
               refreshToken: null,
@@ -292,11 +292,11 @@ const useAuthStore = create<AuthState>()(
         try {
           if (token) safeSetItem("session_token", token);
           if (refreshToken) safeSetItem("refresh_token", refreshToken);
-        } catch {}
+        } catch { }
         try {
           if (userId) safeSetItem("userId", userId);
           if (user) safeSetItem("user", JSON.stringify(user));
-        } catch {}
+        } catch { }
         set({
           token: token ?? null,
           refreshToken: refreshToken ?? null,
@@ -319,7 +319,7 @@ const useAuthStore = create<AuthState>()(
             safeSetItem("refresh_token", (result as any).refreshToken);
           safeSetItem("userId", result.userId);
           safeSetItem("user", JSON.stringify(result.user));
-        } catch {}
+        } catch { }
         return result;
       },
 
@@ -337,7 +337,7 @@ const useAuthStore = create<AuthState>()(
             safeSetItem("refresh_token", (result as any).refreshToken);
           safeSetItem("userId", result.userId);
           safeSetItem("user", JSON.stringify(result.user));
-        } catch {}
+        } catch { }
         return result;
       },
 

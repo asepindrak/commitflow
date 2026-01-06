@@ -255,17 +255,23 @@ export async function getMembers(workspaceId: string) {
     const results = await prisma.teamMember.findMany({
       where: { isTrash: false, workspaceId },
       include: {
-        Task: {
-          where: { isTrash: false },
-          select: {
-            id: true,
-            title: true,
-            status: true,
-            projectId: true,
-            project: {
+        taskAssignees: {
+          where: {
+            task: { isTrash: false }
+          },
+          include: {
+            task: {
               select: {
                 id: true,
-                name: true,
+                title: true,
+                status: true,
+                projectId: true,
+                project: {
+                  select: {
+                    id: true,
+                    name: true,
+                  },
+                },
               },
             },
           },
@@ -274,24 +280,35 @@ export async function getMembers(workspaceId: string) {
       orderBy: { name: "asc" },
     });
 
-    const enriched = results.map((member) => ({
-      id: member.id,
-      clientId: member.clientId,
-      name: member.name,
-      role: member.role,
-      email: member.email,
-      phone: member.phone,
-      photo: member.photo,
-      stats: {
-        total: member.Task.length,
-        todo: member.Task.filter((t) => t.status === "todo").length,
-        inprogress: member.Task.filter((t) => t.status === "inprogress").length,
-        qa: member.Task.filter((t) => t.status === "qa").length,
-        deploy: member.Task.filter((t) => t.status === "deploy").length,
-        done: member.Task.filter((t) => t.status === "done").length,
-      },
-      tasks: member.Task,
-    }));
+
+    const enriched = results.map((member) => {
+      // ambil task dari pivot
+      const tasks = member.taskAssignees
+        .map((ta) => ta.task)
+        .filter(Boolean); // safety
+
+      return {
+        id: member.id,
+        clientId: member.clientId,
+        name: member.name,
+        role: member.role,
+        email: member.email,
+        phone: member.phone,
+        photo: member.photo,
+
+        stats: {
+          total: tasks.length,
+          todo: tasks.filter((t) => t.status === "todo").length,
+          inprogress: tasks.filter((t) => t.status === "inprogress").length,
+          qa: tasks.filter((t) => t.status === "qa").length,
+          deploy: tasks.filter((t) => t.status === "deploy").length,
+          done: tasks.filter((t) => t.status === "done").length,
+        },
+
+        tasks,
+      };
+    });
+
 
     return enriched;
   } catch (error) {

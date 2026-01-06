@@ -33,6 +33,7 @@ import {
   useUpdateTask,
   useDeleteTask,
   useTasksQuery,
+  useMyTasks,
 } from "../hooks/useTasks";
 import { useAuthStore, useStoreWorkspace } from "../utils/store";
 import EditProfileModal from "./EditProfileModal";
@@ -45,6 +46,8 @@ import { hydrateTask } from "../utils/hydrateTask";
 import { safeString } from "../utils/safeString";
 import MyTasksList from "./MyTasksList";
 import TasksReportTable from "./TasksReportTable";
+import NotificationBell from "./NotificationBell";
+import { useTaskReadStore } from "../utils/useTaskReadStore";
 
 // Create local QueryClient so this component works even if app not wrapped globally
 const queryClient = new QueryClient();
@@ -54,6 +57,15 @@ const nid = (x: any) =>
   typeof x === "undefined" || x === null ? "" : String(x);
 
 type ViewMode = "PROJECT" | "MY_TASKS" | "REPORT";
+
+type NotificationItem = {
+  taskId: string
+  projectId: string
+  type: "task" | "status" | "comment"
+  unread: boolean
+  lastEventAt: string
+}
+
 
 export default function ProjectManagement({
   isPlaySound,
@@ -65,7 +77,7 @@ export default function ProjectManagement({
   const initialWorkspaceId = getState("workspaceId");
   const initialProjectId = getState("projectId");
   const setAuth = useAuthStore((s) => s.setAuth); // ambil setter dari store
-
+  const markOpened = useTaskReadStore((s) => s.markOpened)
   const [isLoaded, setIsLoaded] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [isRequestSync, setIsRequestSync] = useState(false);
@@ -147,6 +159,13 @@ export default function ProjectManagement({
     : userWorkspaceActive.photo || null;
 
   const authTeamMemberId = userWorkspaceActive.id || null;
+
+  const { data, isLoading, error } = useMyTasks(
+    memberId,
+    workspaceId
+  )
+
+
   useEffect(() => {
     if (!authTeamMemberId) return;
     if (team && team.length > 0) return;
@@ -1171,6 +1190,7 @@ export default function ProjectManagement({
               await api.createComment(op.payload.taskId, {
                 author: op.payload.author,
                 body: op.payload.body,
+                memberId: op.payload.memberId ?? "",
                 attachments: op.payload.attachments || [],
               });
               prefix("API createComment success", {
@@ -1460,6 +1480,8 @@ export default function ProjectManagement({
       taskAssignees: [],
       startDate: null as string | null,
       dueDate: null as string | null,
+      createdById: null as string | null,
+      updatedById: null as string | null,
     };
 
     setTasks((s: any) => [optimistic, ...s]);
@@ -1539,6 +1561,8 @@ export default function ProjectManagement({
 
             startDate: updated.startDate ?? null,
             dueDate: updated.dueDate ?? null,
+            createdById: updated.createdById ?? null,
+            updatedById: updated.updatedById ?? null,
           },
         };
 
@@ -1571,6 +1595,8 @@ export default function ProjectManagement({
       patch.description = (updated as any).description ?? undefined;
       patch.projectId = updated.projectId ?? undefined;
       patch.status = updated.status ?? undefined;
+      patch.createdById = updated.createdById ?? undefined;
+      patch.updatedById = updated.updatedById ?? undefined;
       patch.priority = (updated as any).priority ?? undefined;
       patch.taskAssignees = Array.isArray((updated as any).taskAssignees)
         ? (updated as any).taskAssignees.map((a: TaskAssignee) => ({
@@ -2076,6 +2102,8 @@ export default function ProjectManagement({
         comments: parseComments(r.comments ?? r.Comments ?? r.COMMENT ?? ""),
         createdAt: r.createdAt ?? r.CreatedAt ?? undefined,
         updatedAt: r.updatedAt ?? r.UpdatedAt ?? undefined,
+        createdById: r.createdById ?? undefined,
+        updatedById: r.updatedById ?? undefined,
       } as Task;
 
     });
@@ -2305,6 +2333,7 @@ export default function ProjectManagement({
         const payload = {
           author: c.author ?? c.Author ?? "Imported",
           body: c.body ?? c.Body ?? String(c) ?? "",
+          memberId: c.memberId ?? String(c) ?? "",
           attachments: c.attachments ?? c.Attachments ?? [],
         };
         const p = api
@@ -2678,6 +2707,24 @@ export default function ProjectManagement({
                       <Volume2 className="w-5 h-5 text-cyan-400" />
                     )}
                   </button>
+
+                  <NotificationBell
+                    tasks={data ?? []}
+                    memberId={authTeamMemberId!}
+                    onOpenTask={(taskId, projectId) => {
+                      setActiveProjectId(projectId)
+
+                      const t = data.find(
+                        (x: any) => String(x.id) === String(taskId)
+                      )
+
+                      if (t) {
+                        setSelectedTask(t)
+                        markOpened(t.id)
+                      }
+                    }}
+                  />
+
                   <div className="relative profile-menu-area">
                     <button
                       onClick={() => setShowProfileMenu((v) => !v)}
@@ -2820,7 +2867,10 @@ export default function ProjectManagement({
                 dragPos={dragPos}
                 dragTaskId={dragTaskId}
                 startPointerDrag={startPointerDrag}
-                onSelectTask={(t) => setSelectedTask(t)}
+                onSelectTask={(t) => {
+                  markOpened(t.id)
+                  setSelectedTask(t)
+                }}
                 team={team}
               />
             )}
@@ -2898,6 +2948,7 @@ export default function ProjectManagement({
                     const created = await api.createComment(taskId, {
                       author,
                       body,
+                      memberId: userWorkspaceActive.id,
                       attachments,
                     });
 
