@@ -1,17 +1,17 @@
 # ========================= 
 # STAGE 1: BASE
 # =========================
-FROM node:22-alpine AS base
+FROM node:20-alpine AS base
 WORKDIR /app
 
 COPY package*.json ./
 RUN npm install -g npm@11
-
 # =========================
 # STAGE 2: DEPENDENCIES
 # =========================
 FROM base AS deps
 RUN npm install
+
 
 # =========================
 # STAGE 3: BUILD (Production)
