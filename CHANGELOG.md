@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.2
+
+### Patch Changes
+
+- 2333343: fix: icon pwa
+
 ## 1.4.1
 
 ### Patch Changes
