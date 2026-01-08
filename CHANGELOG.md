@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.3
+
+### Patch Changes
+
+- 8c714c8: fix: error VitePWA
+
 ## 1.4.2
 
 ### Patch Changes
