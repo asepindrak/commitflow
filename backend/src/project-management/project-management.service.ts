@@ -13,7 +13,12 @@ import { Prisma } from "@prisma/client";
 import { hashPassword } from "src/auth/utils";
 import { EmailService } from "src/email/email.service";
 import logger from "vico-logger";
-import { endOfDay, parseDateSafe, safeDate, startOfDay } from "src/helpers/safeDate";
+import {
+  endOfDay,
+  parseDateSafe,
+  safeDate,
+  startOfDay,
+} from "src/helpers/safeDate";
 
 const prisma = new PrismaClient();
 
@@ -21,7 +26,7 @@ const FE_URL = process.env?.FE_URL ?? "";
 
 @Injectable()
 export class ProjectManagementService {
-  constructor(private email: EmailService) { }
+  constructor(private email: EmailService) {}
   async getWorkspaces(userId) {
     const members = await prisma.teamMember.findMany({
       where: { isTrash: false, userId },
@@ -92,13 +97,13 @@ export class ProjectManagementService {
           createdAt: c.createdAt?.toISOString(),
           updatedAt: c.updatedAt?.toISOString(),
         })),
-        taskAssignees: t.taskAssignees.map(a => ({
+        taskAssignees: t.taskAssignees.map((a) => ({
           id: a.member.id,
           name: a.member.name,
           photo: a.member.photo,
           phone: a.member.phone,
-          role: a.member.role
-        }))
+          role: a.member.role,
+        })),
       })),
       team: team.map((m) => ({ ...m })),
     };
@@ -112,7 +117,7 @@ export class ProjectManagementService {
       description?: string | null;
       clientId?: string | null;
     },
-    userId
+    userId,
   ) {
     // optional idempotency by clientId (if you add unique constraint later)
     if (payload.clientId) {
@@ -278,7 +283,7 @@ export class ProjectManagementService {
 
   async updateProject(
     id: string,
-    payload: Partial<{ name: string; description?: string }>
+    payload: Partial<{ name: string; description?: string }>,
   ) {
     const exists = await prisma.project.findUnique({ where: { id } });
     if (!exists) throw new NotFoundException("Project not found");
@@ -313,11 +318,7 @@ export class ProjectManagementService {
   }
 
   // Tasks
-  async getTasks(
-    projectId?: string,
-    startDate?: string,
-    endDate?: string
-  ) {
+  async getTasks(projectId?: string, startDate?: string, endDate?: string) {
     await this.migrateSingleAssigneeToMulti();
 
     const now = new Date();
@@ -326,11 +327,15 @@ export class ProjectManagementService {
     const defaultStart = new Date();
     defaultStart.setDate(now.getDate() - 60);
 
-    const start =
-      startDate ? startOfDay(new Date(startDate)) : startOfDay(defaultStart);
+    // 🔥 DEFAULT END: tomorrow (to handle timezone differences)
+    const defaultEnd = new Date();
+    defaultEnd.setDate(now.getDate() + 1);
 
-    const end =
-      endDate ? endOfDay(new Date(endDate)) : endOfDay(now);
+    const start = startDate
+      ? startOfDay(safeDate(startDate)!)
+      : startOfDay(defaultStart);
+
+    const end = endDate ? endOfDay(safeDate(endDate)!) : endOfDay(defaultEnd);
 
     const where: any = {
       isTrash: false,
@@ -379,32 +384,36 @@ export class ProjectManagementService {
     }));
   }
 
-
   // Tasks
   async getMyTasks(
     memberId?: string,
     workspaceId?: string,
     startDate?: string,
-    endDate?: string
+    endDate?: string,
   ) {
-    const now = new Date()
+    const now = new Date();
 
     // default: 60 hari terakhir
-    const defaultStart = new Date()
-    defaultStart.setDate(now.getDate() - 60)
+    const defaultStart = new Date();
+    defaultStart.setDate(now.getDate() - 60);
 
-    const start = safeDate(startDate)
-    const end = safeDate(endDate)
+    // default end besok (untuk memastikan task hari ini selalu terfilter)
+    const defaultEnd = new Date();
+    defaultEnd.setDate(now.getDate() + 1);
+
+    const start = safeDate(startDate);
+    const end = safeDate(endDate);
 
     const createdAtFilter =
       start || end
         ? {
-          ...(start && { gte: start }),
-          ...(end && { lte: end }),
-        }
+            ...(start && { gte: startOfDay(start) }),
+            ...(end && { lte: endOfDay(end) }),
+          }
         : {
-          gte: defaultStart,
-        }
+            gte: startOfDay(defaultStart),
+            lte: endOfDay(defaultEnd),
+          };
 
     const where = {
       isTrash: false,
@@ -421,7 +430,7 @@ export class ProjectManagementService {
           some: { memberId },
         },
       }),
-    }
+    };
 
     const tasks = await prisma.task.findMany({
       where,
@@ -447,7 +456,7 @@ export class ProjectManagementService {
           select: { id: true, name: true },
         },
       },
-    })
+    });
 
     return tasks.map((t) => ({
       ...t,
@@ -460,9 +469,9 @@ export class ProjectManagementService {
       })),
       project: t.project
         ? {
-          id: t.project.id,
-          name: t.project.name,
-        }
+            id: t.project.id,
+            name: t.project.name,
+          }
         : null,
       taskAssignees: t.taskAssignees.map((a) => ({
         id: a.member.id,
@@ -471,24 +480,25 @@ export class ProjectManagementService {
         phone: a.member.phone,
         role: a.member.role,
       })),
-    }))
+    }));
   }
-
-
 
   // Tasks Workspace
   async getTasksWorkspace(
     workspaceId?: string,
     memberId?: string,
     startDate?: string,
-    endDate?: string
+    endDate?: string,
   ) {
-
     const now = new Date();
 
     // default 60 days
     const defaultStart = new Date();
     defaultStart.setDate(now.getDate() - 60);
+
+    // default end tomorrow (to ensure today's tasks are always included)
+    const defaultEnd = new Date();
+    defaultEnd.setDate(now.getDate() + 1);
 
     const parsedStart = parseDateSafe(startDate);
     const parsedEnd = parseDateSafe(endDate);
@@ -497,15 +507,12 @@ export class ProjectManagementService {
       ? startOfDay(parsedStart)
       : startOfDay(defaultStart);
 
-    const end = parsedEnd
-      ? endOfDay(parsedEnd)
-      : endOfDay(now);
+    const end = parsedEnd ? endOfDay(parsedEnd) : endOfDay(defaultEnd);
 
     const safeMemberId =
       memberId && memberId !== "undefined" && memberId !== "null"
         ? memberId
         : undefined;
-
 
     const where: any = {
       isTrash: false,
@@ -522,7 +529,6 @@ export class ProjectManagementService {
         },
       }),
     };
-
 
     const tasks = await prisma.task.findMany({
       where,
@@ -550,7 +556,6 @@ export class ProjectManagementService {
       },
     });
 
-
     return tasks.map((t) => ({
       ...t,
       createdAt: t.createdAt?.toISOString(),
@@ -573,10 +578,10 @@ export class ProjectManagementService {
   // one time migration task assignee
   async migrateSingleAssigneeToMulti() {
     // 1️⃣ cek apakah taskAssignee sudah ada data
-    const existingCount = await prisma.taskAssignee.count()
+    const existingCount = await prisma.taskAssignee.count();
 
     if (existingCount > 0) {
-      return { skipped: true, reason: "already_migrated" }
+      return { skipped: true, reason: "already_migrated" };
     }
 
     // 2️⃣ ambil task yang punya assigneeId
@@ -590,11 +595,11 @@ export class ProjectManagementService {
         assigneeId: true,
         createdAt: true,
       },
-    })
+    });
 
     if (tasksWithAssignee.length === 0) {
-      console.log("[MIGRATION] No tasks with assigneeId found.")
-      return { skipped: true, reason: "no_legacy_assignee" }
+      console.log("[MIGRATION] No tasks with assigneeId found.");
+      return { skipped: true, reason: "no_legacy_assignee" };
     }
 
     // 3️⃣ migrate
@@ -602,40 +607,37 @@ export class ProjectManagementService {
       taskId: t.id,
       memberId: t.assigneeId!,
       assignedAt: t.createdAt ?? new Date(),
-    }))
+    }));
 
     await prisma.taskAssignee.createMany({
       data,
       skipDuplicates: true,
-    })
+    });
 
-    console.log(
-      `[MIGRATION] Migrated ${data.length} tasks into TaskAssignee`
-    )
+    console.log(`[MIGRATION] Migrated ${data.length} tasks into TaskAssignee`);
 
     return {
       migrated: data.length,
-    }
+    };
   }
-
 
   // ------------------------------------------
   // Updated createTask / updateTask / patchTask
   // ------------------------------------------
   async createTask(
     payload: Partial<{
-      title: string
-      description?: string
-      projectId?: string | null
-      status?: string
-      priority?: string | null
-      taskAssignees?: { memberId: string }[]
-      startDate?: string | null
-      dueDate?: string | null
-      clientId?: string | null
-      createdById?: string | null
-      updatedById?: string | null
-    }>
+      title: string;
+      description?: string;
+      projectId?: string | null;
+      status?: string;
+      priority?: string | null;
+      taskAssignees?: { memberId: string }[];
+      startDate?: string | null;
+      dueDate?: string | null;
+      clientId?: string | null;
+      createdById?: string | null;
+      updatedById?: string | null;
+    }>,
   ) {
     // --------------------------------
     // VALIDATE PROJECT
@@ -643,8 +645,8 @@ export class ProjectManagementService {
     if (payload.projectId) {
       const p = await prisma.project.findUnique({
         where: { id: payload.projectId },
-      })
-      if (!p) throw new NotFoundException("Project not found")
+      });
+      if (!p) throw new NotFoundException("Project not found");
     }
 
     // --------------------------------
@@ -656,30 +658,30 @@ export class ProjectManagementService {
         include: {
           taskAssignees: { include: { member: true } },
         },
-      })
+      });
       if (existing) {
         return {
           ...existing,
           createdAt: existing.createdAt?.toISOString(),
           updatedAt: existing.updatedAt?.toISOString(),
-        }
+        };
       }
     }
 
     // --------------------------------
     // VALIDATE ASSIGNEES (MULTI)
     // --------------------------------
-    let assigneeIds: string[] = []
+    let assigneeIds: string[] = [];
 
     if (payload.taskAssignees?.length) {
-      assigneeIds = payload.taskAssignees.map(a => a.memberId)
+      assigneeIds = payload.taskAssignees.map((a) => a.memberId);
 
       const members = await prisma.teamMember.findMany({
         where: { id: { in: assigneeIds } },
-      })
+      });
 
       if (members.length !== assigneeIds.length) {
-        throw new BadRequestException("One or more assignees not found")
+        throw new BadRequestException("One or more assignees not found");
       }
     }
 
@@ -694,27 +696,25 @@ export class ProjectManagementService {
           projectId: payload.projectId ?? null,
           status: payload.status ?? "todo",
           priority: payload.priority ?? null,
-          startDate:
-            payload.startDate !== undefined ? payload.startDate : null,
-          dueDate:
-            payload.dueDate !== undefined ? payload.dueDate : null,
+          startDate: payload.startDate !== undefined ? payload.startDate : null,
+          dueDate: payload.dueDate !== undefined ? payload.dueDate : null,
           clientId: payload.clientId ?? null,
-          createdById: payload.createdById ?? null
+          createdById: payload.createdById ?? null,
         },
-      })
+      });
 
       if (assigneeIds.length) {
         await tx.taskAssignee.createMany({
-          data: assigneeIds.map(memberId => ({
+          data: assigneeIds.map((memberId) => ({
             taskId: t.id,
             memberId,
           })),
           skipDuplicates: true,
-        })
+        });
       }
 
-      return t
-    })
+      return t;
+    });
 
     // --------------------------------
     // RETURN SERIALIZED TASK
@@ -723,66 +723,65 @@ export class ProjectManagementService {
       ...task,
       createdAt: task.createdAt?.toISOString(),
       updatedAt: task.updatedAt?.toISOString(),
-    }
+    };
   }
-
 
   async updateTask(
     id: string,
     payload: Partial<{
-      title?: string
-      description?: string
-      projectId?: string | null
-      status?: string
-      priority?: string | null
-      taskAssignees?: { memberId: string }[]
-      startDate?: string | null
-      dueDate?: string | null
-      createdById?: string | null
-      updatedById?: string | null
+      title?: string;
+      description?: string;
+      projectId?: string | null;
+      status?: string;
+      priority?: string | null;
+      taskAssignees?: { memberId: string }[];
+      startDate?: string | null;
+      dueDate?: string | null;
+      createdById?: string | null;
+      updatedById?: string | null;
     }>,
-    userId: string
+    userId: string,
   ) {
     const existing = await prisma.task.findUnique({
       where: { id },
       include: {
         taskAssignees: { include: { member: true } },
       },
-    })
-    if (!existing) throw new NotFoundException("Task not found")
+    });
+    if (!existing) throw new NotFoundException("Task not found");
 
-    const prevAssignees = existing.taskAssignees
-    const prevAssigneeIds = prevAssignees.map(a => a.memberId)
+    const prevAssignees = existing.taskAssignees;
+    const prevAssigneeIds = prevAssignees.map((a) => a.memberId);
 
     // -----------------------------
     // VALIDATE PROJECT
     // -----------------------------
-    let project: any = null
+    let project: any = null;
     if (payload.projectId !== undefined && payload.projectId !== null) {
       project = await prisma.project.findUnique({
         where: { id: payload.projectId },
-      })
-      if (!project) throw new NotFoundException("Project not found")
+      });
+      if (!project) throw new NotFoundException("Project not found");
     } else if (existing.projectId) {
       project = await prisma.project.findUnique({
         where: { id: existing.projectId },
-      })
+      });
     }
 
     // -----------------------------
     // VALIDATE ASSIGNEES
     // -----------------------------
-    let nextAssigneeIds: string[] = prevAssigneeIds
+    let nextAssigneeIds: string[] = prevAssigneeIds;
 
     if (payload.taskAssignees) {
-      nextAssigneeIds = payload.taskAssignees.map(a => a.memberId)
+      nextAssigneeIds = payload.taskAssignees.map((a) => a.memberId);
 
       const members = await prisma.teamMember.findMany({
         where: { id: { in: nextAssigneeIds } },
-      })
+      });
 
       if (members.length !== nextAssigneeIds.length) {
-        throw new BadRequestException("One or more assignees not found")
+        throw new BadRequestException("One or more assignees not found");
       }
     }
 
@@ -798,7 +797,6 @@ export class ProjectManagementService {
       // batal selesai
       finishDateUpdate = null;
     }
-
 
     // -----------------------------
     // UPDATE TASK CORE FIELDS
@@ -826,16 +824,13 @@ export class ProjectManagementService {
             : existing.startDate,
 
         dueDate:
-          payload.dueDate !== undefined
-            ? payload.dueDate
-            : existing.dueDate,
+          payload.dueDate !== undefined ? payload.dueDate : existing.dueDate,
 
         updatedAt: new Date(),
 
         updatedById: payload.updatedById,
       },
     });
-
 
     // -----------------------------
     // SYNC TASK ASSIGNEES (REPLACE)
@@ -844,12 +839,12 @@ export class ProjectManagementService {
       await prisma.$transaction([
         prisma.taskAssignee.deleteMany({ where: { taskId: id } }),
         prisma.taskAssignee.createMany({
-          data: nextAssigneeIds.map(memberId => ({
+          data: nextAssigneeIds.map((memberId) => ({
             taskId: id,
             memberId,
           })),
         }),
-      ])
+      ]);
     }
 
     // -----------------------------
@@ -857,13 +852,13 @@ export class ProjectManagementService {
     // -----------------------------
     const assigneeNames = payload.taskAssignees
       ? (
-        await prisma.teamMember.findMany({
-          where: { id: { in: nextAssigneeIds } },
-        })
-      )
-        .map(m => m.name)
-        .join(", ")
-      : prevAssignees.map(a => a.member.name).join(", ")
+          await prisma.teamMember.findMany({
+            where: { id: { in: nextAssigneeIds } },
+          })
+        )
+          .map((m) => m.name)
+          .join(", ")
+      : prevAssignees.map((a) => a.member.name).join(", ");
 
     const teams = await prisma.teamMember.findMany({
       where: {
@@ -876,22 +871,22 @@ export class ProjectManagementService {
         ],
       },
       select: { email: true },
-    })
+    });
 
     const toEmails: any = Array.from(
-      new Set(teams.map(t => t.email?.trim().toLowerCase()).filter(Boolean))
-    )
+      new Set(teams.map((t) => t.email?.trim().toLowerCase()).filter(Boolean)),
+    );
 
-    if (!toEmails.length) return updated
+    if (!toEmails.length) return updated;
 
     // -----------------------------
     // EMAIL CONTENT
     // -----------------------------
     const format = (d: any) =>
-      d ? new Date(d).toLocaleDateString("en-US") : "—"
+      d ? new Date(d).toLocaleDateString("en-US") : "—";
 
-    const emailTitle = `📝 Task Updated`
-    const emailDescription = `📝 A task has been updated on <strong>${project?.name}</strong>.`
+    const emailTitle = `📝 Task Updated`;
+    const emailDescription = `📝 A task has been updated on <strong>${project?.name}</strong>.`;
 
     const textMsg = `
 ${emailDescription}
@@ -904,7 +899,7 @@ Start Date: ${format(updated.startDate)}
 Due Date: ${format(updated.dueDate)}
 
 — CommitFlow Team
-`
+`;
 
     const htmlMsg = `
 <p><strong>${emailDescription}</strong></p>
@@ -914,7 +909,7 @@ Due Date: ${format(updated.dueDate)}
 <p><b>Priority:</b> ${updated.priority ?? "—"}</p>
 <p><b>Start:</b> ${format(updated.startDate)}</p>
 <p><b>Due:</b> ${format(updated.dueDate)}</p>
-`
+`;
 
     for (const recipient of toEmails) {
       await this.email.sendMail({
@@ -922,7 +917,7 @@ Due Date: ${format(updated.dueDate)}
         subject: `${emailTitle} | CommitFlow`,
         text: textMsg,
         html: htmlMsg,
-      })
+      });
     }
 
     // -----------------------------
@@ -937,15 +932,14 @@ Due Date: ${format(updated.dueDate)}
         },
         taskAssignees: { include: { member: true } },
       },
-    })
+    });
 
     return {
       ...withComments,
       createdAt: withComments?.createdAt?.toISOString(),
       updatedAt: withComments?.updatedAt?.toISOString(),
-    }
+    };
   }
-
 
   async patchTask(
     id: string,
@@ -955,13 +949,13 @@ Due Date: ${format(updated.dueDate)}
       projectId?: string | null;
       status?: string;
       priority?: string | null;
-      taskAssignees?: { memberId: string; role?: string }[]
+      taskAssignees?: { memberId: string; role?: string }[];
       startDate?: string | null;
       dueDate?: string | null;
       createdById?: string | null;
       updatedById?: string | null;
     }>,
-    userId: string
+    userId: string,
   ) {
     // reuse updateTask logic (keeps validations & logging)
     return this.updateTask(id, patch, userId);
@@ -999,7 +993,12 @@ Due Date: ${format(updated.dueDate)}
 
   async createComment(
     taskId: string,
-    payload: { author: string; body: string; memberId: string, attachments?: any[] }
+    payload: {
+      author: string;
+      body: string;
+      memberId: string;
+      attachments?: any[];
+    },
   ) {
     // -----------------------------
     // GET TASK + ASSIGNEES
@@ -1011,8 +1010,8 @@ Due Date: ${format(updated.dueDate)}
           select: { memberId: true },
         },
       },
-    })
-    if (!task) throw new NotFoundException("Task not found")
+    });
+    if (!task) throw new NotFoundException("Task not found");
 
     // -----------------------------
     // CREATE COMMENT
@@ -1025,28 +1024,28 @@ Due Date: ${format(updated.dueDate)}
         body: payload.body,
         attachments: payload.attachments ?? undefined,
       },
-    })
+    });
 
     //update task
     const updateTask = await prisma.task.update({
       where: { id: taskId },
       data: {
         updatedById: payload.memberId,
-        updatedAt: new Date()
-      }
-    })
+        updatedAt: new Date(),
+      },
+    });
     // -----------------------------
     // GET PROJECT
     // -----------------------------
     const project: any = await prisma.project.findFirst({
       where: { id: task.projectId ?? "", isTrash: false },
-    })
-    if (!project) throw new NotFoundException("Project not found")
+    });
+    if (!project) throw new NotFoundException("Project not found");
 
     // -----------------------------
     // RESOLVE EMAIL RECIPIENTS
     // -----------------------------
-    const assigneeIds = task.taskAssignees.map(a => a.memberId)
+    const assigneeIds = task.taskAssignees.map((a) => a.memberId);
 
     const teams = await prisma.teamMember.findMany({
       where: {
@@ -1054,38 +1053,32 @@ Due Date: ${format(updated.dueDate)}
         isTrash: false,
         OR: [
           { isAdmin: true },
-          ...(assigneeIds.length
-            ? [{ id: { in: assigneeIds } }]
-            : []),
+          ...(assigneeIds.length ? [{ id: { in: assigneeIds } }] : []),
           ...(task.createdById ? [{ id: task.createdById }] : []),
         ],
       },
       select: { email: true },
-    })
+    });
 
     const toEmails = Array.from(
-      new Set(
-        teams
-          .map(t => t.email?.trim().toLowerCase())
-          .filter(Boolean)
-      )
-    )
+      new Set(teams.map((t) => t.email?.trim().toLowerCase()).filter(Boolean)),
+    );
 
     if (!toEmails.length) {
       return {
         ...c,
         createdAt: c.createdAt?.toISOString(),
         updatedAt: c.updatedAt?.toISOString(),
-      }
+      };
     }
 
     // -----------------------------
     // EMAIL CONTENT
     // -----------------------------
-    const projectName = project.name
-    const taskName = task.title
-    const author = payload.author
-    const body = payload.body
+    const projectName = project.name;
+    const taskName = task.title;
+    const author = payload.author;
+    const body = payload.body;
 
     const textMsg = `
 💬 New Comment!
@@ -1103,7 +1096,7 @@ Comment:
 ${body}
 
 — CommitFlow Team
-`
+`;
 
     const htmlMsg = `
 <div style="font-family: Arial, sans-serif; background:#f4f5f7; padding:24px;">
@@ -1131,7 +1124,7 @@ ${body}
 
   </div>
 </div>
-`
+`;
 
     // -----------------------------
     // SEND EMAIL
@@ -1143,26 +1136,25 @@ ${body}
           subject: "💬 New Comment | CommitFlow",
           text: textMsg,
           html: htmlMsg,
-        })
+        });
       } catch (err) {
-        logger.error(err)
+        logger.error(err);
       }
 
-      await new Promise(r => setTimeout(r, 200))
+      await new Promise((r) => setTimeout(r, 200));
     }
 
     return {
       ...c,
       createdAt: c.createdAt?.toISOString(),
       updatedAt: c.updatedAt?.toISOString(),
-    }
+    };
   }
-
 
   async updateComment(
     taskId: string,
     commentId: string,
-    patch: Partial<{ body?: string; attachments?: any[] }>
+    patch: Partial<{ body?: string; attachments?: any[] }>,
   ) {
     const comment = await prisma.comment.findUnique({
       where: { id: commentId },
@@ -1214,7 +1206,7 @@ ${body}
       password?: string;
       clientId?: string | null;
       workspaceId: string;
-    }>
+    }>,
   ) {
     const {
       clientId,
@@ -1289,7 +1281,7 @@ ${body}
       if (err?.code === "P2002") {
         // you may inspect err.meta.target to know which field caused conflict
         throw new ConflictException(
-          "Unique constraint failed (email or clientId)"
+          "Unique constraint failed (email or clientId)",
         );
       }
       console.error("createTeamMember transaction error", err);
@@ -1306,7 +1298,7 @@ ${body}
       password?: string;
       isAdmin?: boolean;
       photo?: string;
-    }>
+    }>,
   ) {
     // 1) ensure team member exists
     const exists = await prisma.teamMember.findUnique({ where: { id } });
@@ -1371,7 +1363,7 @@ ${body}
       if (err?.code === "P2002") {
         // err.meta?.target may indicate which column (e.g. ['email'])
         throw new ConflictException(
-          "Unique constraint failed (email or other field)"
+          "Unique constraint failed (email or other field)",
         );
       }
       console.error("updateTeamMember error", err);
@@ -1382,8 +1374,8 @@ ${body}
   async deleteTeamMember(id: string) {
     const exists = await prisma.teamMember.findUnique({
       where: { id },
-    })
-    if (!exists) return { success: false, deleted: false }
+    });
+    if (!exists) return { success: false, deleted: false };
 
     await prisma.$transaction([
       // 1️⃣ hapus semua relasi taskAssignee
@@ -1399,16 +1391,14 @@ ${body}
           updatedAt: new Date(),
         },
       }),
-    ])
+    ]);
 
-    return { success: true, deleted: true }
+    return { success: true, deleted: true };
   }
-
-
 
   async inviteTeamMember(
     payload: { email: string; workspaceId: string },
-    userId: string
+    userId: string,
   ) {
     if (!payload.email) throw new NotFoundException("Email invalid");
     if (!payload.workspaceId) throw new NotFoundException("Workspace invalid");
@@ -1602,7 +1592,7 @@ ${body}
   async exportXlsx(): Promise<Buffer> {
     const projects = await prisma.project.findMany({
       where: { isTrash: false },
-    })
+    });
 
     const tasks = await prisma.task.findMany({
       where: { isTrash: false },
@@ -1612,35 +1602,35 @@ ${body}
         },
       },
       orderBy: { createdAt: "desc" },
-    })
+    });
 
     const team = await prisma.teamMember.findMany({
       where: { isTrash: false },
       orderBy: { name: "asc" },
-    })
+    });
 
-    const wb = new ExcelJS.Workbook()
+    const wb = new ExcelJS.Workbook();
 
     // ---------------- PROJECTS ----------------
-    const pSheet = wb.addWorksheet("Projects")
+    const pSheet = wb.addWorksheet("Projects");
     pSheet.columns = [
       { header: "id", key: "id" },
       { header: "name", key: "name" },
       { header: "description", key: "description" },
       { header: "createdAt", key: "createdAt" },
       { header: "updatedAt", key: "updatedAt" },
-    ]
+    ];
 
-    projects.forEach(p =>
+    projects.forEach((p) =>
       pSheet.addRow({
         ...p,
         createdAt: p.createdAt?.toISOString(),
         updatedAt: p.updatedAt?.toISOString(),
-      })
-    )
+      }),
+    );
 
     // ---------------- TASKS ----------------
-    const tSheet = wb.addWorksheet("Tasks")
+    const tSheet = wb.addWorksheet("Tasks");
     tSheet.columns = [
       { header: "id", key: "id" },
       { header: "title", key: "title" },
@@ -1654,10 +1644,10 @@ ${body}
       { header: "dueDate", key: "dueDate" },
       { header: "createdAt", key: "createdAt" },
       { header: "updatedAt", key: "updatedAt" },
-    ]
+    ];
 
-    tasks.forEach(t => {
-      const assignees = t.taskAssignees.map(a => a.member)
+    tasks.forEach((t) => {
+      const assignees = t.taskAssignees.map((a) => a.member);
 
       tSheet.addRow({
         id: t.id,
@@ -1665,122 +1655,120 @@ ${body}
         description: t.description,
         projectId: t.projectId,
         status: t.status,
-        assigneeIds: assignees.map(a => a.id).join(","),
-        assigneeNames: assignees.map(a => a.name).join(", "),
+        assigneeIds: assignees.map((a) => a.id).join(","),
+        assigneeNames: assignees.map((a) => a.name).join(", "),
         priority: t.priority ?? null,
         startDate: t.startDate ?? null,
         dueDate: t.dueDate ?? null,
         createdAt: t.createdAt?.toISOString(),
         updatedAt: t.updatedAt?.toISOString(),
-      })
-    })
+      });
+    });
 
     // ---------------- TEAM ----------------
-    const teamSheet = wb.addWorksheet("Team")
+    const teamSheet = wb.addWorksheet("Team");
     teamSheet.columns = [
       { header: "id", key: "id" },
       { header: "name", key: "name" },
       { header: "role", key: "role" },
       { header: "email", key: "email" },
       { header: "photo", key: "photo" },
-    ]
+    ];
 
-    team.forEach(m => teamSheet.addRow(m))
+    team.forEach((m) => teamSheet.addRow(m));
 
-    const buf = await wb.xlsx.writeBuffer()
-    return Buffer.from(buf)
+    const buf = await wb.xlsx.writeBuffer();
+    return Buffer.from(buf);
   }
-
 
   // Import XLSX
   async importXlsx(filePath: string) {
     if (!fs.existsSync(filePath))
-      throw new BadRequestException("File not found")
+      throw new BadRequestException("File not found");
 
-    const workbook = new ExcelJS.Workbook()
-    await workbook.xlsx.readFile(filePath)
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.readFile(filePath);
 
-    const created = { projects: 0, tasks: 0, team: 0 }
+    const created = { projects: 0, tasks: 0, team: 0 };
 
     // preload team
     const allTeam = await prisma.teamMember.findMany({
       where: { isTrash: false },
-    })
-    const teamMap = new Map(allTeam.map(m => [m.id, m]))
+    });
+    const teamMap = new Map(allTeam.map((m) => [m.id, m]));
 
     // ---------------- TASKS ----------------
-    const tasksSheet = workbook.getWorksheet("Tasks")
+    const tasksSheet = workbook.getWorksheet("Tasks");
     if (tasksSheet) {
-      const rows = tasksSheet.getRows(2, tasksSheet.rowCount - 1) ?? []
+      const rows = tasksSheet.getRows(2, tasksSheet.rowCount - 1) ?? [];
 
       for (const row of rows) {
-        const id = row.getCell(1).value?.toString()
-        const title = row.getCell(2).value?.toString() ?? "Untitled"
-        const description = row.getCell(3).value?.toString() ?? null
-        const projectId = row.getCell(4).value?.toString() ?? null
-        const status = row.getCell(5).value?.toString() ?? "todo"
-        const assigneeIdsRaw = row.getCell(6).value?.toString() ?? ""
-        const priority = row.getCell(8).value?.toString() ?? null
-        const startDate = row.getCell(9).value?.toString() ?? null
-        const dueDate = row.getCell(10).value?.toString() ?? null
+        const id = row.getCell(1).value?.toString();
+        const title = row.getCell(2).value?.toString() ?? "Untitled";
+        const description = row.getCell(3).value?.toString() ?? null;
+        const projectId = row.getCell(4).value?.toString() ?? null;
+        const status = row.getCell(5).value?.toString() ?? "todo";
+        const assigneeIdsRaw = row.getCell(6).value?.toString() ?? "";
+        const priority = row.getCell(8).value?.toString() ?? null;
+        const startDate = row.getCell(9).value?.toString() ?? null;
+        const dueDate = row.getCell(10).value?.toString() ?? null;
 
         const assigneeIds = assigneeIdsRaw
           .split(",")
-          .map(s => s.trim())
-          .filter(id => teamMap.has(id))
+          .map((s) => s.trim())
+          .filter((id) => teamMap.has(id));
 
         const task = id
           ? await prisma.task.upsert({
-            where: { id },
-            create: {
-              id,
-              title,
-              description,
-              projectId,
-              status,
-              priority,
-              startDate,
-              dueDate,
-            },
-            update: {
-              title,
-              description,
-              projectId,
-              status,
-              priority,
-              startDate,
-              dueDate,
-              updatedAt: new Date(),
-            },
-          })
+              where: { id },
+              create: {
+                id,
+                title,
+                description,
+                projectId,
+                status,
+                priority,
+                startDate,
+                dueDate,
+              },
+              update: {
+                title,
+                description,
+                projectId,
+                status,
+                priority,
+                startDate,
+                dueDate,
+                updatedAt: new Date(),
+              },
+            })
           : await prisma.task.create({
-            data: {
-              title,
-              description,
-              projectId,
-              status,
-              priority,
-              startDate,
-              dueDate,
-            },
-          })
+              data: {
+                title,
+                description,
+                projectId,
+                status,
+                priority,
+                startDate,
+                dueDate,
+              },
+            });
 
         if (assigneeIds.length) {
           await prisma.taskAssignee.createMany({
-            data: assigneeIds.map(memberId => ({
+            data: assigneeIds.map((memberId) => ({
               taskId: task.id,
               memberId,
             })),
             skipDuplicates: true,
-          })
+          });
         }
 
-        created.tasks++
+        created.tasks++;
       }
     }
 
-    fs.unlinkSync(filePath)
-    return { success: true, ...created }
+    fs.unlinkSync(filePath);
+    return { success: true, ...created };
   }
-
 }
