@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.5
+
+### Patch Changes
+
+- c40387f: fix create new task
+
 ## 1.4.4
 
 ### Patch Changes
