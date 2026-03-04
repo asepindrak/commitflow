@@ -104,12 +104,19 @@ export default function ProjectManagement({
     () => {
       const d = new Date();
       d.setDate(d.getDate() - 60);
-      return d.toISOString().slice(0, 10);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${y}-${m}-${day}`;
     },
   );
 
   const [tasksEndDate, setTasksEndDate] = useState<string | undefined>(() => {
-    return new Date().toISOString().slice(0, 10);
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
   });
 
   const prevDateRangeRef = useRef<string>("");
