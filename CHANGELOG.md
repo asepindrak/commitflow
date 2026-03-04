@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.4
+
+### Patch Changes
+
+- 435e86b: fix error when creating new task
+
 ## 1.4.3
 
 ### Patch Changes
