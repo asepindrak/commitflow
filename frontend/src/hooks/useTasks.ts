@@ -150,12 +150,17 @@ export function useDeleteTask() {
   );
 }
 
-export function useMyTasks(memberId?: string, workspaceId?: string) {
+export function useMyTasks(
+  memberId?: string,
+  workspaceId?: string,
+  startDate?: string,
+  endDate?: string,
+) {
   return useQuery({
-    queryKey: ["my-tasks", memberId, workspaceId],
+    queryKey: ["my-tasks", memberId, workspaceId, startDate, endDate],
     queryFn: async () => {
       if (!memberId || !workspaceId) return [];
-      return await getMyTasks(workspaceId, memberId);
+      return await getMyTasks(memberId, workspaceId, startDate, endDate);
     },
     enabled: !!memberId && !!workspaceId,
   });

@@ -166,7 +166,12 @@ export default function ProjectManagement({
 
   const authTeamMemberId = userWorkspaceActive.id || null;
 
-  const { data, isLoading, error } = useMyTasks(memberId, workspaceId);
+  const { data, isLoading, error } = useMyTasks(
+    memberId,
+    activeWorkspaceId,
+    tasksStartDate,
+    tasksEndDate,
+  );
 
   useEffect(() => {
     if (!authTeamMemberId) return;
