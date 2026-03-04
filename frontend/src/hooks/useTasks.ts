@@ -64,7 +64,17 @@ export function useCreateTask() {
             payload.id ||
             payload.clientId ||
             `tmp_${Math.random().toString(36).slice(2, 9)}`,
+          clientId:
+            payload?.clientId ||
+            payload?.id ||
+            // ensure we can reconcile later even if caller didn't provide id
+            undefined,
         };
+
+        // if no clientId provided by caller, use the optimistic id as clientId
+        if (!optimisticTask.clientId) {
+          (optimisticTask as any).clientId = optimisticTask.id;
+        }
 
         for (const [qk, oldData] of prevEntries) {
           if (Array.isArray(oldData)) {
@@ -74,7 +84,11 @@ export function useCreateTask() {
 
         return {
           prevEntries,
-          clientId: payload?.clientId ?? payload?.id ?? null,
+          // carry the identifier we used for the optimistic record
+          clientId:
+            payload?.clientId ??
+            payload?.id ??
+            (optimisticTask as any).clientId,
         };
       },
       onSuccess: (data: any, payload: any, context: any) => {
