@@ -1495,9 +1495,6 @@ export default function ProjectManagement({
         const id = nid(lt.id);
         const cid = nid((lt as any).clientId);
 
-        // If creatingTask is true and this is a tmp task, definitely keep it!
-        if (creatingTask && id.startsWith("tmp_")) return true;
-
         return !serverIds.has(id) && (!cid || !serverClientIds.has(cid));
       });
 
