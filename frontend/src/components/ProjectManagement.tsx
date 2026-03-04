@@ -4,7 +4,13 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import Sidebar from "./Sidebar";
 import TaskModal from "./TaskModal";
-import type { Project, Task, TaskAssignee, TeamMember, Workspace } from "../types";
+import type {
+  Project,
+  Task,
+  TaskAssignee,
+  TeamMember,
+  Workspace,
+} from "../types";
 import {
   Sun,
   Moon,
@@ -59,13 +65,12 @@ const nid = (x: any) =>
 type ViewMode = "PROJECT" | "MY_TASKS" | "REPORT";
 
 type NotificationItem = {
-  taskId: string
-  projectId: string
-  type: "task" | "status" | "comment"
-  unread: boolean
-  lastEventAt: string
-}
-
+  taskId: string;
+  projectId: string;
+  type: "task" | "status" | "comment";
+  unread: boolean;
+  lastEventAt: string;
+};
 
 export default function ProjectManagement({
   isPlaySound,
@@ -77,7 +82,7 @@ export default function ProjectManagement({
   const initialWorkspaceId = getState("workspaceId");
   const initialProjectId = getState("projectId");
   const setAuth = useAuthStore((s) => s.setAuth); // ambil setter dari store
-  const markOpened = useTaskReadStore((s) => s.markOpened)
+  const markOpened = useTaskReadStore((s) => s.markOpened);
   const [isLoaded, setIsLoaded] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [isRequestSync, setIsRequestSync] = useState(false);
@@ -95,11 +100,13 @@ export default function ProjectManagement({
   const [viewMode, setViewMode] = useState<ViewMode>("PROJECT");
   // 🗓️ GLOBAL DATE RANGE (for TaskBoard)
   const [showDateFilter, setShowDateFilter] = useState(false);
-  const [tasksStartDate, setTasksStartDate] = useState<string | undefined>(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 60);
-    return d.toISOString().slice(0, 10);
-  });
+  const [tasksStartDate, setTasksStartDate] = useState<string | undefined>(
+    () => {
+      const d = new Date();
+      d.setDate(d.getDate() - 60);
+      return d.toISOString().slice(0, 10);
+    },
+  );
 
   const [tasksEndDate, setTasksEndDate] = useState<string | undefined>(() => {
     return new Date().toISOString().slice(0, 10);
@@ -109,24 +116,23 @@ export default function ProjectManagement({
 
   const dateRangeKey = `${tasksStartDate ?? ""}|${tasksEndDate ?? ""}`;
 
-
   const { workspaceId, setWorkspaceId, projectId, setProjectId } =
     useStoreWorkspace();
 
   const [activeProjectId, setActiveProjectId] = useState<string>(
-    initialProjectId ? initialProjectId : projects[0]?.id ?? ""
+    initialProjectId ? initialProjectId : (projects[0]?.id ?? ""),
   );
 
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string>(
-    initialWorkspaceId ? initialWorkspaceId : workspaces[0]?.id ?? ""
+    initialWorkspaceId ? initialWorkspaceId : (workspaces[0]?.id ?? ""),
   );
   const [lastActiveWorkspaceId, setLastActiveWorkspaceId] = useState<string>(
-    initialWorkspaceId ? initialWorkspaceId : workspaces[0]?.id ?? ""
+    initialWorkspaceId ? initialWorkspaceId : (workspaces[0]?.id ?? ""),
   );
 
   const rafRef = useRef<number | null>(null);
   const pendingPosRef = useRef<{ x: number; y: number; width: number } | null>(
-    null
+    null,
   );
 
   const token = useAuthStore((s) => s.token);
@@ -141,7 +147,7 @@ export default function ProjectManagement({
 
   const userWorkspace = team.filter(
     (item: any) =>
-      item.workspaceId === activeWorkspaceId && item.userId === userId
+      item.workspaceId === activeWorkspaceId && item.userId === userId,
   );
 
   const userWorkspaceActive =
@@ -160,11 +166,7 @@ export default function ProjectManagement({
 
   const authTeamMemberId = userWorkspaceActive.id || null;
 
-  const { data, isLoading, error } = useMyTasks(
-    memberId,
-    workspaceId
-  )
-
+  const { data, isLoading, error } = useMyTasks(memberId, workspaceId);
 
   useEffect(() => {
     if (!authTeamMemberId) return;
@@ -200,7 +202,7 @@ export default function ProjectManagement({
       if (isLoaded) {
         playSound("/sounds/close.mp3", isPlaySound);
       }
-      setActiveProjectId("")
+      setActiveProjectId("");
     }
   }, [viewMode]);
 
@@ -214,7 +216,7 @@ export default function ProjectManagement({
 
   useEffect(() => {
     if (activeProjectId === "") {
-      return
+      return;
     }
     if (activeWorkspaceId === lastActiveWorkspaceId && isLoaded) {
       playSound("/sounds/close.mp3", isPlaySound);
@@ -223,7 +225,7 @@ export default function ProjectManagement({
     }
     saveState("projectId", activeProjectId);
     setProjectId(activeProjectId);
-    setViewMode("PROJECT")
+    setViewMode("PROJECT");
   }, [activeProjectId]);
 
   const onOffSound = () => {
@@ -404,7 +406,7 @@ export default function ProjectManagement({
     const cardEl = els.find(
       (el) =>
         (el as HTMLElement).closest &&
-        (el as HTMLElement).closest("[data-task-id]")
+        (el as HTMLElement).closest("[data-task-id]"),
     );
     let dropKeyEl: HTMLElement | null = null;
     let insertBeforeTaskId: string | null = null;
@@ -414,7 +416,7 @@ export default function ProjectManagement({
     if (cardEl) {
       // get the actual card container (closest with data-task-id)
       const cardContainer = (cardEl as HTMLElement).closest(
-        "[data-task-id]"
+        "[data-task-id]",
       ) as HTMLElement | null;
       if (cardContainer) {
         const targetTaskId =
@@ -425,7 +427,7 @@ export default function ProjectManagement({
 
         // find column that contains this card
         columnEl = cardContainer.closest(
-          "[data-drop-key]"
+          "[data-drop-key]",
         ) as HTMLElement | null;
         dropKeyEl = columnEl;
 
@@ -450,10 +452,10 @@ export default function ProjectManagement({
       const col = els.find(
         (el) =>
           (el as HTMLElement).closest &&
-          (el as HTMLElement).closest("[data-drop-key]")
+          (el as HTMLElement).closest("[data-drop-key]"),
       );
       columnEl = (col as HTMLElement)?.closest?.(
-        "[data-drop-key]"
+        "[data-drop-key]",
       ) as HTMLElement | null;
       dropKeyEl = columnEl;
     }
@@ -463,7 +465,7 @@ export default function ProjectManagement({
       const dropKey = (dropKeyEl as HTMLElement).dataset.dropKey;
       // get array of card elements inside column in DOM order
       const cardsInColumn = Array.from(
-        (dropKeyEl as HTMLElement).querySelectorAll("[data-task-id]")
+        (dropKeyEl as HTMLElement).querySelectorAll("[data-task-id]"),
       ) as HTMLElement[];
       if (cardsInColumn.length === 0) {
         insertIndex = 0;
@@ -472,13 +474,13 @@ export default function ProjectManagement({
         insertIndex = cardsInColumn.findIndex(
           (c) =>
             (c.dataset.taskId ?? c.id.replace(/^taskcard-/, "")) ===
-            insertBeforeTaskId
+            insertBeforeTaskId,
         );
         if (insertIndex === -1) insertIndex = cardsInColumn.length; // fallback to end
       } else if (cardEl) {
         // pointer was on lower half of a card -> insert after that card
         const targetCardEl = (cardEl as HTMLElement).closest(
-          "[data-task-id]"
+          "[data-task-id]",
         ) as HTMLElement | null;
         const idx = cardsInColumn.findIndex((c) => c === targetCardEl);
         insertIndex = idx === -1 ? cardsInColumn.length : idx + 1;
@@ -508,7 +510,7 @@ export default function ProjectManagement({
     clientX: number,
     clientY: number,
     el: HTMLElement | null,
-    opts: { captureImmediately?: boolean } = {}
+    opts: { captureImmediately?: boolean } = {},
   ) {
     // set dragging id asap
     setDragTaskId(id);
@@ -528,7 +530,7 @@ export default function ProjectManagement({
       try {
         const hit = document.elementFromPoint(
           clientX,
-          clientY
+          clientY,
         ) as HTMLElement | null;
         if (hit) {
           // Prefer the closest ancestor that looks like a task card (data-task-id or id starting with taskcard-)
@@ -634,7 +636,7 @@ export default function ProjectManagement({
       try {
         const { dropKey, insertIndex } = findDropTargetAndIndex(
           ev.clientX,
-          ev.clientY
+          ev.clientY,
         );
 
         if (dropKey != null && typeof insertIndex === "number") {
@@ -676,7 +678,17 @@ export default function ProjectManagement({
             }
             if (!inserted) {
               // either column empty or insert at end
-              newList.push({ ...item, status: dropKey as "todo" | "inprogress" | "qa" | "deploy" | "done" | "blocked" | undefined });
+              newList.push({
+                ...item,
+                status: dropKey as
+                  | "todo"
+                  | "inprogress"
+                  | "qa"
+                  | "deploy"
+                  | "done"
+                  | "blocked"
+                  | undefined,
+              });
             }
             return newList;
           });
@@ -704,7 +716,7 @@ export default function ProjectManagement({
               },
               onSettled: () =>
                 qcRef.current.invalidateQueries(["tasks", activeProjectId]),
-            }
+            },
           );
         } else {
           // no valid drop target -> simply reset drag
@@ -825,7 +837,7 @@ export default function ProjectManagement({
     activeProjectId ?? "",
     activeWorkspaceId ?? "",
     tasksStartDate,
-    tasksEndDate
+    tasksEndDate,
   );
 
   const createTaskMutation = useCreateTask();
@@ -851,7 +863,7 @@ export default function ProjectManagement({
       const snapshot = { workspaces, projects, tasks, ui: { dark }, team };
       localStorage.setItem(
         "commitflow_local_snapshot",
-        JSON.stringify(snapshot)
+        JSON.stringify(snapshot),
       );
     } catch (e) {
       console.warn("Failed to save local snapshot", e);
@@ -917,7 +929,7 @@ export default function ProjectManagement({
     const wsHandle = createRealtimeSocket(
       qcRef.current,
       () => activeProjectId,
-      () => activeWorkspaceId
+      () => activeWorkspaceId,
     );
 
     prefix("websocket handle created", { wsHandleExists: !!wsHandle });
@@ -1074,11 +1086,11 @@ export default function ProjectManagement({
               if (!workspaceIdToUse || typeof workspaceIdToUse !== "string") {
                 console.warn(
                   "flushQueue: create_project missing workspaceId — skipping for now, will retry later",
-                  op
+                  op,
                 );
                 prefix(
                   "create_project - MISSING workspaceId, will break and retry later",
-                  { op }
+                  { op },
                 );
                 // don't remove this op; break to retry later
                 break;
@@ -1117,7 +1129,7 @@ export default function ProjectManagement({
                   ) {
                     prefix(
                       "updating rem.update_task.patch.projectId -> created.id",
-                      { rem }
+                      { rem },
                     );
                     rem.payload.patch.projectId = created.id;
                   }
@@ -1170,10 +1182,11 @@ export default function ProjectManagement({
                     rem.payload.patch.taskAssignees =
                       rem.payload.patch.taskAssignees.map((a: any) => ({
                         memberId:
-                          a.memberId === originalTmpId ? created.id : a.memberId,
+                          a.memberId === originalTmpId
+                            ? created.id
+                            : a.memberId,
                       }));
                   }
-
                 }
               }
             } else if (op.op === "delete_team") {
@@ -1282,7 +1295,7 @@ export default function ProjectManagement({
               {
                 op,
                 retryCount: op.__retryCount,
-              }
+              },
             );
             // persist current queue (with updated op.__retryCount)
             localStorage.setItem("cf_op_queue_v1", JSON.stringify(queue));
@@ -1335,7 +1348,7 @@ export default function ProjectManagement({
 
     const intervalId: number | undefined = window.setInterval(
       attemptFlush,
-      7000
+      7000,
     );
     window.addEventListener("online", attemptFlush);
 
@@ -1390,9 +1403,8 @@ export default function ProjectManagement({
       // invalidate selectedTask if not in new range
       setSelectedTask((cur) => {
         if (!cur) return cur;
-        return serverTasks.some((t) => nid(t.id) === nid(cur.id))
-          ? cur
-          : null;
+        if (nid(cur.id).startsWith("tmp_")) return cur;
+        return serverTasks.some((t) => nid(t.id) === nid(cur.id)) ? cur : null;
       });
 
       return;
@@ -1435,7 +1447,7 @@ export default function ProjectManagement({
         const tmpLocalOnly = localComments.filter(
           (c: any) =>
             String(c.id).startsWith("c_tmp_") &&
-            !serverComments.some((sc: any) => nid(sc.id) === nid(c.id))
+            !serverComments.some((sc: any) => nid(sc.id) === nid(c.id)),
         );
 
         if (tmpLocalOnly.length) {
@@ -1453,14 +1465,18 @@ export default function ProjectManagement({
 
       // sync selectedTask ref
       const mergedMap = new Map(merged.map((t) => [nid(t.id), t]));
-      setSelectedTask((cur) =>
-        cur ? mergedMap.get(nid(cur.id)) ?? null : null
-      );
+      setSelectedTask((cur) => {
+        if (!cur) return null;
+        const found = mergedMap.get(nid(cur.id));
+        if (found) return found;
+        // keep optimistic task if it's currently selected (prevents auto-close during creation)
+        if (nid(cur.id).startsWith("tmp_")) return cur;
+        return null;
+      });
 
       return merged;
     });
   }, [tasksQuery.data, activeProjectId, dateRangeKey]);
-
 
   async function handleAddTask(title: string) {
     if (!activeProjectId) {
@@ -1496,7 +1512,7 @@ export default function ProjectManagement({
 
       setTasks((s) => {
         const replaced = s.map((t) =>
-          nid(t.id) === nid(optimistic.id) ? created : t
+          nid(t.id) === nid(optimistic.id) ? created : t,
         );
         const map = new Map<string, Task>();
         for (const t of replaced) map.set(nid(t.id), t);
@@ -1504,7 +1520,7 @@ export default function ProjectManagement({
       });
 
       setSelectedTask((cur) =>
-        cur && nid(cur.id) === nid(optimistic.id) ? created : cur
+        cur && nid(cur.id) === nid(optimistic.id) ? created : cur,
       );
 
       qcRef.current.invalidateQueries(["tasks", activeProjectId]);
@@ -1513,7 +1529,7 @@ export default function ProjectManagement({
         "[handleAddTask] create failed:",
         err,
         "optimistic:",
-        optimistic
+        optimistic,
       );
       try {
         enqueueOp({
@@ -1535,7 +1551,7 @@ export default function ProjectManagement({
       const next = s.map((t) => (nid(t.id) === nid(updated.id) ? updated : t));
       // also update selectedTask to the same reference so modal sees latest immediately
       setSelectedTask((cur) =>
-        cur && nid(cur.id) === nid(updated.id) ? updated : cur
+        cur && nid(cur.id) === nid(updated.id) ? updated : cur,
       );
       return next;
     });
@@ -1554,10 +1570,9 @@ export default function ProjectManagement({
 
             taskAssignees: Array.isArray(updated.taskAssignees)
               ? updated.taskAssignees.map((a: TaskAssignee) => ({
-                memberId: a.id,
-              }))
+                  memberId: a.id,
+                }))
               : [],
-
 
             startDate: updated.startDate ?? null,
             dueDate: updated.dueDate ?? null,
@@ -1565,7 +1580,6 @@ export default function ProjectManagement({
             updatedById: updated.updatedById ?? null,
           },
         };
-
 
         // include comments if present on updated (may be [] or array)
         if (
@@ -1600,10 +1614,9 @@ export default function ProjectManagement({
       patch.priority = (updated as any).priority ?? undefined;
       patch.taskAssignees = Array.isArray((updated as any).taskAssignees)
         ? (updated as any).taskAssignees.map((a: TaskAssignee) => ({
-          memberId: a.id,
-        }))
+            memberId: a.id,
+          }))
         : [];
-
 
       if (typeof (updated as any).startDate !== "undefined") {
         patch.startDate =
@@ -1683,7 +1696,7 @@ export default function ProjectManagement({
           };
         });
         console.log(
-          "[handleUpdateTask] merged server result into single-task cache"
+          "[handleUpdateTask] merged server result into single-task cache",
         );
       } catch (e) {
         // ignore
@@ -1695,24 +1708,23 @@ export default function ProjectManagement({
       setSelectedTask((cur) =>
         cur && nid(cur.id) === nid(updated.id)
           ? {
-            ...cur,
-            ...result,
-            taskAssignees:
-              typeof result.taskAssignees !== "undefined"
-                ? result.taskAssignees
-                : cur.taskAssignees,
-            comments:
-              typeof result.comments !== "undefined"
-                ? result.comments
-                : cur.comments,
-          }
-          : cur
+              ...cur,
+              ...result,
+              taskAssignees:
+                typeof result.taskAssignees !== "undefined"
+                  ? result.taskAssignees
+                  : cur.taskAssignees,
+              comments:
+                typeof result.comments !== "undefined"
+                  ? result.comments
+                  : cur.comments,
+            }
+          : cur,
       );
-
     } catch (err) {
       console.error(
         "handleUpdateTask: updateTaskMutation failed, enqueueing fallback",
-        err
+        err,
       );
       try {
         enqueueOp({
@@ -1818,19 +1830,18 @@ export default function ProjectManagement({
     }
     const prevTeam = team;
     setTeam((s) =>
-      s.filter((tm) => tm.id !== idOrName && tm.name !== idOrName)
+      s.filter((tm) => tm.id !== idOrName && tm.name !== idOrName),
     );
     setTasks((prev) =>
       prev.map((task) => ({
         ...task,
         taskAssignees: Array.isArray((task as any).taskAssignees)
           ? (task as any).taskAssignees.filter(
-            (a: any) => String(a.memberId) !== String(target.id)
-          )
+              (a: any) => String(a.memberId) !== String(target.id),
+            )
           : [],
-      }))
+      })),
     );
-
 
     try {
       await api.deleteTeamMember(target.id);
@@ -1856,12 +1867,11 @@ export default function ProjectManagement({
     tasks?: Task[];
     team?: string[] | any[];
   }) {
-
     const genTmpId = () => `tmp_${Math.random().toString(36).slice(2, 9)}`;
 
     // snapshot of current global team state (use the team variable from your component scope)
     const existingTeamById = new Map<string, TeamMember>(
-      (team || []).map((m) => [nid(m.id), m])
+      (team || []).map((m) => [nid(m.id), m]),
     );
     const existingTeamIds = new Set(Array.from(existingTeamById.keys()));
 
@@ -1902,10 +1912,10 @@ export default function ProjectManagement({
     // Merge incoming with existing team (prefer existing entries when ids match)
     const mergeTeam = (prev: TeamMember[], incoming: TeamMember[]) => {
       const byId = new Map(
-        prev.filter((p) => !!p.id).map((p) => [nid(p.id), p])
+        prev.filter((p) => !!p.id).map((p) => [nid(p.id), p]),
       );
       const byNameLower = new Map(
-        prev.map((p) => [p?.name ? p?.name.toLowerCase() : "", p])
+        prev.map((p) => [p?.name ? p?.name.toLowerCase() : "", p]),
       );
       for (const n of incoming) {
         // normalize incoming id (keep original string as-is but use nid() as key)
@@ -1931,7 +1941,7 @@ export default function ProjectManagement({
       for (const v of byNameLower.values()) {
         if (
           !result.some((r) =>
-            r?.name ? r?.name.toLowerCase() : "" === v.name.toLowerCase()
+            r?.name ? r?.name.toLowerCase() : "" === v.name.toLowerCase(),
           )
         )
           result.push(v);
@@ -2021,7 +2031,7 @@ export default function ProjectManagement({
             let foundKey: string | undefined;
             if (clientId) {
               foundKey = Array.from(map.keys()).find(
-                (k) => k === clientId || map.get(k)?.clientId === clientId
+                (k) => k === clientId || map.get(k)?.clientId === clientId,
               );
             }
             if (!foundKey) {
@@ -2054,7 +2064,7 @@ export default function ProjectManagement({
         (x) =>
           (x.clientId && x.clientId === cm.clientId) ||
           (x.email && cm.email && x.email === cm.email) ||
-          (x.name && cm.name && x.name === cm.name)
+          (x.name && cm.name && x.name === cm.name),
       );
       if (idx !== -1) liveTeamSnapshot[idx] = { ...cm };
       else liveTeamSnapshot.push({ ...cm });
@@ -2086,8 +2096,6 @@ export default function ProjectManagement({
       const baseId = r.id ?? r.ID ?? r.Id ?? "";
       const id = baseId ? String(baseId) : genTmpId();
 
-
-
       return {
         id,
         clientId: undefined,
@@ -2105,9 +2113,7 @@ export default function ProjectManagement({
         createdById: r.createdById ?? undefined,
         updatedById: r.updatedById ?? undefined,
       } as Task;
-
     });
-
 
     const makeSig = (t: {
       title?: string;
@@ -2116,7 +2122,7 @@ export default function ProjectManagement({
       dueDate?: any;
     }) =>
       `${(t.title || "").trim().toLowerCase()}|${nid(t.projectId)}|${nid(
-        t.startDate
+        t.startDate,
       )}|${nid(t.dueDate)}`;
 
     const existingSignatures = new Set(tasks.map((t) => makeSig(t)));
@@ -2147,7 +2153,7 @@ export default function ProjectManagement({
         const nameLower = a.name.toLowerCase();
 
         const exists = liveTeamSnapshot.some(
-          (m) => m.name?.toLowerCase() === nameLower
+          (m) => m.name?.toLowerCase() === nameLower,
         );
 
         if (!exists) {
@@ -2177,13 +2183,10 @@ export default function ProjectManagement({
     const nameToId = new Map(
       liveTeamSnapshot
         .filter((m) => m && m.name)
-        .map((m) => [m.name.toLowerCase(), m.id])
+        .map((m) => [m.name.toLowerCase(), m.id]),
     );
 
-
-
     const preparedTasks = uniqueIncoming.map((t) => {
-
       const tmpId = nid(t.id).startsWith("tmp_") ? t.id : genTmpId();
 
       const resolvedAssignees = (() => {
@@ -2194,15 +2197,13 @@ export default function ProjectManagement({
 
           // resolve by ID
           if (a.id) {
-            member = liveTeamSnapshot.find(
-              (m) => nid(m.id) === nid(a.id)
-            );
+            member = liveTeamSnapshot.find((m) => nid(m.id) === nid(a.id));
           }
 
           // fallback by name
           if (!member && a.name) {
             member = liveTeamSnapshot.find(
-              (m) => m.name?.toLowerCase() === a.name.toLowerCase()
+              (m) => m.name?.toLowerCase() === a.name.toLowerCase(),
             );
           }
 
@@ -2216,7 +2217,6 @@ export default function ProjectManagement({
 
         return Array.from(map.values());
       })();
-
 
       return {
         ...t,
@@ -2249,7 +2249,7 @@ export default function ProjectManagement({
         id: undefined,
         comments: undefined,
         projectId: projectId,
-        taskAssignees: [...t.taskAssignees]
+        taskAssignees: [...t.taskAssignees],
       };
       console.debug("createTask payload:", payloadForServer);
       return api
@@ -2302,7 +2302,7 @@ export default function ProjectManagement({
           const created = ct.created;
           const tmpId = ct.tmpId;
           const sig = `${(created.title || "").trim().toLowerCase()}|${nid(
-            created.projectId
+            created.projectId,
           )}|${nid(created.startDate)}|${nid(created.dueDate)}`;
           if (sigToTask.has(sig)) {
             const collision = sigToTask.get(sig)!;
@@ -2393,7 +2393,7 @@ export default function ProjectManagement({
             };
           }
           return t;
-        })
+        }),
       );
     }
 
@@ -2426,15 +2426,15 @@ export default function ProjectManagement({
     console.debug("tmpToServer:", Array.from(tmpToServer.entries()));
     console.debug(
       "originalIdToServer:",
-      Array.from(originalIdToServer.entries())
+      Array.from(originalIdToServer.entries()),
     );
     console.debug("nameToId:", Array.from(nameToId.entries()));
 
     toast.dark(
-      "Imported tasks & members applied (parallellized; syncing in background)"
+      "Imported tasks & members applied (parallellized; syncing in background)",
     );
 
-    window.location.reload()
+    window.location.reload();
   }
 
   const projectTasks = tasks.filter((t) => nid(t.projectId) === nid(projectId));
@@ -2499,12 +2499,12 @@ export default function ProjectManagement({
               })
               .then((created) => {
                 setProjects((prev) =>
-                  prev.map((pp) => (pp.id === p.id ? created : pp))
+                  prev.map((pp) => (pp.id === p.id ? created : pp)),
                 );
                 setTasks((prev) =>
                   prev.map((t) =>
-                    t.projectId === p.id ? { ...t, projectId: created.id } : t
-                  )
+                    t.projectId === p.id ? { ...t, projectId: created.id } : t,
+                  ),
                 );
                 setActiveProjectId((cur) => (cur === p.id ? created.id : cur));
               })
@@ -2537,14 +2537,19 @@ export default function ProjectManagement({
         <main className="flex-1 h-full overflow-auto">
           <div className="cf-main-container p-8 min-h-full">
             <div className="flex items-center justify-between mb-4">
-              {!showDateFilter &&
+              {!showDateFilter && (
                 <h2 className="text-3xl font-extrabold bg-gradient-to-r from-blue-600 via-sky-500 to-cyan-400 bg-clip-text text-transparent">
-                  {viewMode === "PROJECT" ? projects.find((x) => x.id === activeProjectId)?.name || "—" : viewMode === "MY_TASKS" ? "My Tasks" : "Report"}
+                  {viewMode === "PROJECT"
+                    ? projects.find((x) => x.id === activeProjectId)?.name ||
+                      "—"
+                    : viewMode === "MY_TASKS"
+                      ? "My Tasks"
+                      : "Report"}
                 </h2>
-              }
-              {viewMode === "PROJECT" &&
+              )}
+              {viewMode === "PROJECT" && (
                 <div className="flex items-center gap-5">
-                  {!showDateFilter &&
+                  {!showDateFilter && (
                     <button
                       onClick={() => setShowDateFilter(!showDateFilter)}
                       className="group inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold
@@ -2554,22 +2559,25 @@ export default function ProjectManagement({
                     >
                       <Calendar
                         size={18}
-                        className={`transition-transform ${syncing
-                          ? "animate-spin text-emerald-400"
-                          : "group-hover:rotate-15 text-gray-700 dark:text-white/80"
-                          }`}
+                        className={`transition-transform ${
+                          syncing
+                            ? "animate-spin text-emerald-400"
+                            : "group-hover:rotate-15 text-gray-700 dark:text-white/80"
+                        }`}
                       />
                       Date
                     </button>
-                  }
-                  {showDateFilter &&
+                  )}
+                  {showDateFilter && (
                     <>
-                      <div className="
+                      <div
+                        className="
                         flex items-center gap-2 px-3 py-2 rounded-lg border
                         bg-white/60 dark:bg-gray-800/60
                         border-gray-300 dark:border-gray-700
                         text-sm
-                      ">
+                      "
+                      >
                         <input
                           type="date"
                           value={tasksStartDate ?? ""}
@@ -2597,7 +2605,7 @@ export default function ProjectManagement({
                             past.setDate(now.getDate() - 60);
                             setTasksStartDate(past.toISOString().slice(0, 10));
                             setTasksEndDate(now.toISOString().slice(0, 10));
-                            setShowDateFilter(!showDateFilter)
+                            setShowDateFilter(!showDateFilter);
                           }}
                           className="group inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold
                       bg-white border border-gray-200 text-gray-700 cursor-pointer
@@ -2606,16 +2614,17 @@ export default function ProjectManagement({
                         >
                           <CalendarX
                             size={18}
-                            className={`transition-transform ${syncing
-                              ? "animate-spin text-emerald-400"
-                              : "group-hover:rotate-15 text-gray-700 dark:text-white/80"
-                              }`}
+                            className={`transition-transform ${
+                              syncing
+                                ? "animate-spin text-emerald-400"
+                                : "group-hover:rotate-15 text-gray-700 dark:text-white/80"
+                            }`}
                           />
                           Reset
                         </button>
                       )}
                     </>
-                  }
+                  )}
                   <button
                     onClick={handleSync}
                     disabled={syncing}
@@ -2623,10 +2632,11 @@ export default function ProjectManagement({
                     group relative inline-flex items-center gap-2 px-5 py-2.5
                     rounded-2xl text-sm font-semibold backdrop-blur-md
                     transition-all duration-300 
-                    ${syncing
+                    ${
+                      syncing
                         ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
                         : "bg-white/10 dark:bg-white/5 hover:bg-white/20 dark:hover:bg-white/10 border border-white/20 dark:border-white/10"
-                      }
+                    }
                     shadow-[0_4px_12px_rgba(0,0,0,0.1)]
                     hover:shadow-[0_6px_16px_rgba(0,0,0,0.15)]
                     active:scale-95
@@ -2635,10 +2645,11 @@ export default function ProjectManagement({
                     {/* spinning icon */}
                     <RefreshCw
                       size={18}
-                      className={`transition-transform ${syncing
-                        ? "animate-spin text-emerald-400"
-                        : "group-hover:rotate-180 text-gray-700 dark:text-white/80"
-                        }`}
+                      className={`transition-transform ${
+                        syncing
+                          ? "animate-spin text-emerald-400"
+                          : "group-hover:rotate-180 text-gray-700 dark:text-white/80"
+                      }`}
                     />
 
                     {/* label */}
@@ -2712,15 +2723,15 @@ export default function ProjectManagement({
                     tasks={data ?? []}
                     memberId={authTeamMemberId!}
                     onOpenTask={(taskId, projectId) => {
-                      setActiveProjectId(projectId)
+                      setActiveProjectId(projectId);
 
                       const t = data.find(
-                        (x: any) => String(x.id) === String(taskId)
-                      )
+                        (x: any) => String(x.id) === String(taskId),
+                      );
 
                       if (t) {
-                        setSelectedTask(t)
-                        markOpened(t.id)
+                        setSelectedTask(t);
+                        markOpened(t.id);
                       }
                     }}
                   />
@@ -2765,16 +2776,28 @@ export default function ProjectManagement({
                     )}
                   </div>
                 </div>
-              }
+              )}
             </div>
             {viewMode === "MY_TASKS" && memberId && (
               <>
-                <MyTasksList memberId={memberId} workspaceId={activeWorkspaceId} onSelectTask={(projectId: string) => setActiveProjectId(projectId)} />
+                <MyTasksList
+                  memberId={memberId}
+                  workspaceId={activeWorkspaceId}
+                  onSelectTask={(projectId: string) =>
+                    setActiveProjectId(projectId)
+                  }
+                />
               </>
             )}
             {viewMode === "REPORT" && activeWorkspaceId && (
               <>
-                <TasksReportTable workspaceId={activeWorkspaceId} onSelectTask={(projectId: string) => setActiveProjectId(projectId)} team={team} />
+                <TasksReportTable
+                  workspaceId={activeWorkspaceId}
+                  onSelectTask={(projectId: string) =>
+                    setActiveProjectId(projectId)
+                  }
+                  team={team}
+                />
               </>
             )}
             {viewMode === "PROJECT" && (
@@ -2784,7 +2807,7 @@ export default function ProjectManagement({
                 onDropTo={(
                   status?: string,
                   draggedId?: string,
-                  insertIndex?: number
+                  insertIndex?: number,
                 ) => {
                   if (!draggedId) return;
 
@@ -2792,7 +2815,7 @@ export default function ProjectManagement({
                   setTasks((s) => {
                     const clone = [...s];
                     const fromIdx = clone.findIndex(
-                      (t) => nid(t.id) === nid(draggedId)
+                      (t) => nid(t.id) === nid(draggedId),
                     );
                     if (fromIdx === -1) return s;
 
@@ -2825,7 +2848,17 @@ export default function ProjectManagement({
                     }
                     if (!inserted) {
                       // column empty or insert at end
-                      result.push({ ...moved, status: status as "todo" | "inprogress" | "qa" | "deploy" | "done" | "blocked" | undefined });
+                      result.push({
+                        ...moved,
+                        status: status as
+                          | "todo"
+                          | "inprogress"
+                          | "qa"
+                          | "deploy"
+                          | "done"
+                          | "blocked"
+                          | undefined,
+                      });
                     }
                     return result;
                   });
@@ -2858,7 +2891,7 @@ export default function ProjectManagement({
                           activeProjectId,
                         ]);
                       },
-                    }
+                    },
                   );
                 }}
                 onDragStart={handleDragStart}
@@ -2868,8 +2901,8 @@ export default function ProjectManagement({
                 dragTaskId={dragTaskId}
                 startPointerDrag={startPointerDrag}
                 onSelectTask={(t) => {
-                  markOpened(t.id)
-                  setSelectedTask(t)
+                  markOpened(t.id);
+                  setSelectedTask(t);
                 }}
                 team={team}
               />
@@ -2912,10 +2945,10 @@ export default function ProjectManagement({
                     const next = prev.map((t) =>
                       nid(t.id) === nid(taskId)
                         ? {
-                          ...t,
-                          comments: [tmpComment, ...(t.comments || [])],
-                        }
-                        : t
+                            ...t,
+                            comments: [tmpComment, ...(t.comments || [])],
+                          }
+                        : t,
                     );
 
                     // update selectedTask to the new object reference (so modal receives new prop)
@@ -2926,13 +2959,13 @@ export default function ProjectManagement({
                     // persist snapshot so close->open reads the updated tasks immediately
                     try {
                       const snapshotRaw = localStorage.getItem(
-                        "commitflow_local_snapshot"
+                        "commitflow_local_snapshot",
                       );
                       const snap = snapshotRaw ? JSON.parse(snapshotRaw) : {};
                       snap.tasks = next;
                       localStorage.setItem(
                         "commitflow_local_snapshot",
-                        JSON.stringify(snap)
+                        JSON.stringify(snap),
                       );
                     } catch (e) {
                       console.warn("persist snapshot failed", e);
@@ -2957,10 +2990,10 @@ export default function ProjectManagement({
                       const next = prev.map((t) => {
                         if (nid(t.id) !== nid(taskId)) return t;
                         const cs = (t.comments || []).map((c: any) =>
-                          c.id === tmpId ? created : c
+                          c.id === tmpId ? created : c,
                         );
                         const has = cs.some(
-                          (c: any) => nid(c.id) === nid(created.id)
+                          (c: any) => nid(c.id) === nid(created.id),
                         );
                         return { ...t, comments: has ? cs : [...cs, created] };
                       });
@@ -2972,13 +3005,13 @@ export default function ProjectManagement({
                       // persist updated snapshot
                       try {
                         const snapRaw = localStorage.getItem(
-                          "commitflow_local_snapshot"
+                          "commitflow_local_snapshot",
                         );
                         const snap = snapRaw ? JSON.parse(snapRaw) : {};
                         snap.tasks = next;
                         localStorage.setItem(
                           "commitflow_local_snapshot",
-                          JSON.stringify(snap)
+                          JSON.stringify(snap),
                         );
                       } catch (e) {
                         console.warn("persist updated snapshot failed", e);
