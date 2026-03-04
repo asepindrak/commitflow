@@ -6,14 +6,20 @@ type Getter = (() => string) | undefined;
 export function createRealtimeSocket(
   qc: QueryClient,
   getActiveProjectId?: Getter,
-  getActiveWorkspaceId?: Getter
+  getActiveWorkspaceId?: Getter,
 ) {
   const base = import.meta.env.VITE_API_URL?.replace(/\/$/, "") ?? "";
   const wsUrl = base.replace(/^http/, "ws") + "/ws"; // sesuaikan endpoint di backend
 
-  let ws: WebSocket | null = null;
+  // Only attempt to connect if the URL looks valid (not localhost:3000 if using prod API, etc.)
+  // and only if not explicitly disabled.
+  if (!base || base.includes("localhost:3000")) {
+    console.log("[WS] skipping connection for local dev or empty base");
+    return { close: () => {} };
+  }
   let attempts = 0;
   let shouldStop = false;
+  let ws: WebSocket | null = null;
 
   const connect = () => {
     attempts++;

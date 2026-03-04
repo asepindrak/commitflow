@@ -32,7 +32,7 @@ export type Task = {
   description?: string;
 
   projectId?: string | null;
-
+  workspaceId?: string | null;
   status?: "todo" | "inprogress" | "qa" | "deploy" | "done" | "blocked";
 
   startDate?: string | null;
@@ -55,7 +55,6 @@ export type Task = {
 
   isTrash?: boolean;
 };
-
 
 export type TeamMember = {
   id: string;

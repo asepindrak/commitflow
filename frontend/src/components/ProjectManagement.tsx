@@ -1412,6 +1412,8 @@ export default function ProjectManagement({
 
     // 🧠 NORMAL MERGE (REALTIME / OPTIMISTIC SAFE)
     setTasks((localTasks) => {
+      // console.log("[ProjectManagement] merging tasks", { serverTasksCount: serverTasks.length, localTasksCount: localTasks.length });
+
       // 1) Group local tasks by ID (real and tmp) and clientId (if available)
       const localById = new Map(localTasks.map((t) => [nid(t.id), t]));
       const localByClientId = new Map();
@@ -1480,6 +1482,10 @@ export default function ProjectManagement({
       const localOnly = localTasks.filter((lt) => {
         const id = nid(lt.id);
         const cid = nid((lt as any).clientId);
+
+        // If creatingTask is true and this is a tmp task, definitely keep it!
+        if (creatingTask && id.startsWith("tmp_")) return true;
+
         return !serverIds.has(id) && (!cid || !serverClientIds.has(cid));
       });
 
@@ -1489,22 +1495,60 @@ export default function ProjectManagement({
       const mergedMap = new Map(merged.map((t) => [nid(t.id), t]));
       setSelectedTask((cur) => {
         if (!cur) return null;
-        const found = mergedMap.get(nid(cur.id));
+        const curId = nid(cur.id);
+        const curCid = nid((cur as any).clientId);
+
+        const found = mergedMap.get(curId);
         if (found) return found;
 
-        // keep optimistic task if it's currently selected
-        if (nid(cur.id).startsWith("tmp_")) return cur;
+        // check by clientId as fallback (if cur has a clientId)
+        if (curCid) {
+          const foundByCid = Array.from(mergedMap.values()).find(
+            (t) => nid((t as any).clientId) === curCid || nid(t.id) === curCid,
+          );
+          if (foundByCid) return foundByCid;
+        }
+
+        // If creatingTask is true, don't auto-close!
+        if (creatingTask) {
+          return cur;
+        }
+
+        // keep optimistic task if it's currently selected and not yet in merged list
+        if (curId.startsWith("tmp_")) {
+          return cur;
+        }
 
         // also keep if it's in localTasks (prevents auto-close during creation)
-        const inLocal = localTasks.find((t) => nid(t.id) === nid(cur.id));
+        const inLocal = localTasks.find(
+          (t) =>
+            nid(t.id) === curId ||
+            (curCid && nid((t as any).clientId) === curCid) ||
+            (curCid && nid(t.id) === curCid),
+        );
         if (inLocal) return inLocal;
 
+        // If the current task is NOT in the merged map but was recently created (has clientId)
+        // we might still be waiting for the server to return it in the main task list.
+        if (curCid && curCid.startsWith("tmp_")) {
+          return cur;
+        }
+
+        console.log(
+          "[ProjectManagement] auto-closing TaskModal: task not found in merged list",
+          {
+            curId,
+            curCid,
+            localTasksCount: localTasks.length,
+            mergedCount: merged.length,
+          },
+        );
         return null;
       });
 
       return merged;
     });
-  }, [tasksQuery.data, activeProjectId, dateRangeKey]);
+  }, [tasksQuery.data, activeProjectId, dateRangeKey, creatingTask]);
 
   async function handleAddTask(title: string) {
     if (!activeProjectId) {
@@ -1514,11 +1558,13 @@ export default function ProjectManagement({
     if (creatingTask) return;
     setCreatingTask(true);
     playSound("/sounds/incoming.mp3", isPlaySound);
+
     const optimistic: Task = {
       id: `tmp_${Math.random().toString(36).slice(2, 9)}`,
       title,
       status: "todo" as Task["status"],
       projectId: activeProjectId || null,
+      workspaceId: activeWorkspaceId || null, // ensure workspaceId is included
       comments: [],
       priority: "low" as Task["priority"],
       taskAssignees: [],
@@ -1532,17 +1578,19 @@ export default function ProjectManagement({
     setSelectedTask(optimistic);
 
     try {
-      const { id: _tmp, ...payload } = { ...optimistic, title } as any;
-      const created = await createTaskMutation.mutateAsync({
-        ...payload,
-        clientId: optimistic.id,
-      });
+      const payload = { ...optimistic, title, clientId: optimistic.id };
+      delete (payload as any).id; // Remove tmp_ ID so server generates real one
+
+      console.log("[handleAddTask] mutation started with payload:", payload);
+      const created = await createTaskMutation.mutateAsync(payload);
+      console.log("[handleAddTask] mutation success:", created);
+
+      // Merge optimistic and created to ensure no data loss (e.g. projectId)
+      const mergedTask = { ...optimistic, ...created, clientId: optimistic.id };
 
       setTasks((s) => {
         const replaced = s.map((t) =>
-          nid(t.id) === nid(optimistic.id)
-            ? { ...created, clientId: optimistic.id }
-            : t,
+          nid(t.id) === nid(optimistic.id) ? mergedTask : t,
         );
         const map = new Map<string, Task>();
         for (const t of replaced) map.set(nid(t.id), t);
@@ -1550,8 +1598,10 @@ export default function ProjectManagement({
       });
 
       setSelectedTask((cur) =>
-        cur && nid(cur.id) === nid(optimistic.id)
-          ? { ...created, clientId: optimistic.id }
+        cur &&
+        (nid(cur.id) === nid(optimistic.id) ||
+          nid((cur as any).clientId) === nid(optimistic.id))
+          ? mergedTask
           : cur,
       );
 
