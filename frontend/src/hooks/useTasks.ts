@@ -56,7 +56,10 @@ export function useCreateTask() {
         }
 
         // apply optimistic insertion to every tasks* query
-        const optimisticTask = payload; // payload usually contains clientId as id
+        const optimisticTask = {
+          ...payload,
+          id: payload.id || payload.clientId || `tmp_${Math.random().toString(36).slice(2, 9)}`,
+        };
         for (const [qk, data] of prevEntries) {
           try {
             qc.setQueryData(qk, (old: any) =>

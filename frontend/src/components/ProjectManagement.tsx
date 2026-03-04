@@ -120,14 +120,14 @@ export default function ProjectManagement({
     useStoreWorkspace();
 
   const [activeProjectId, setActiveProjectId] = useState<string>(
-    initialProjectId ? initialProjectId : (projects[0]?.id ?? ""),
+    initialProjectId ? initialProjectId : projects[0]?.id ?? "",
   );
 
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string>(
-    initialWorkspaceId ? initialWorkspaceId : (workspaces[0]?.id ?? ""),
+    initialWorkspaceId ? initialWorkspaceId : workspaces[0]?.id ?? "",
   );
   const [lastActiveWorkspaceId, setLastActiveWorkspaceId] = useState<string>(
-    initialWorkspaceId ? initialWorkspaceId : (workspaces[0]?.id ?? ""),
+    initialWorkspaceId ? initialWorkspaceId : workspaces[0]?.id ?? "",
   );
 
   const rafRef = useRef<number | null>(null);
@@ -1412,12 +1412,21 @@ export default function ProjectManagement({
 
     // 🧠 NORMAL MERGE (REALTIME / OPTIMISTIC SAFE)
     setTasks((localTasks) => {
-      const tmp = localTasks.filter((t) => nid(t.id).startsWith("tmp_"));
-
+      // 1) Group local tasks by ID (real and tmp) and clientId (if available)
       const localById = new Map(localTasks.map((t) => [nid(t.id), t]));
+      const localByClientId = new Map();
+      localTasks.forEach((t) => {
+        const cid = (t as any).clientId;
+        if (cid) localByClientId.set(nid(cid), t);
+      });
 
+      // 2) Merge server tasks with local versions (preserving local changes like comments)
       const mergedServerTasks: Task[] = serverTasks.map((st) => {
-        const lt = localById.get(nid(st.id));
+        // Try to find local version by id or by clientId (useful if server returned real id but cache still has tmp id)
+        const lt =
+          localById.get(nid(st.id)) ||
+          localByClientId.get(nid(st.id)) ||
+          localByClientId.get(nid((st as any).clientId));
 
         // merge comments safely
         const serverComments = Array.isArray((st as any).comments)
@@ -1461,7 +1470,20 @@ export default function ProjectManagement({
         return { ...st, comments: chosenComments };
       });
 
-      const merged = [...mergedServerTasks, ...tmp];
+      // 3) Keep tasks that are in local state but not yet in server tasks
+      // (This covers the gap between mutateAsync return and refetch completion)
+      const serverIds = new Set(serverTasks.map((st) => nid(st.id)));
+      const serverClientIds = new Set(
+        serverTasks.map((st) => nid((st as any).clientId)).filter((id) => id),
+      );
+
+      const localOnly = localTasks.filter((lt) => {
+        const id = nid(lt.id);
+        const cid = nid((lt as any).clientId);
+        return !serverIds.has(id) && (!cid || !serverClientIds.has(cid));
+      });
+
+      const merged = [...mergedServerTasks, ...localOnly];
 
       // sync selectedTask ref
       const mergedMap = new Map(merged.map((t) => [nid(t.id), t]));
@@ -1469,8 +1491,14 @@ export default function ProjectManagement({
         if (!cur) return null;
         const found = mergedMap.get(nid(cur.id));
         if (found) return found;
-        // keep optimistic task if it's currently selected (prevents auto-close during creation)
+
+        // keep optimistic task if it's currently selected
         if (nid(cur.id).startsWith("tmp_")) return cur;
+
+        // also keep if it's in localTasks (prevents auto-close during creation)
+        const inLocal = localTasks.find((t) => nid(t.id) === nid(cur.id));
+        if (inLocal) return inLocal;
+
         return null;
       });
 
@@ -1512,7 +1540,9 @@ export default function ProjectManagement({
 
       setTasks((s) => {
         const replaced = s.map((t) =>
-          nid(t.id) === nid(optimistic.id) ? created : t,
+          nid(t.id) === nid(optimistic.id)
+            ? { ...created, clientId: optimistic.id }
+            : t,
         );
         const map = new Map<string, Task>();
         for (const t of replaced) map.set(nid(t.id), t);
@@ -1520,7 +1550,9 @@ export default function ProjectManagement({
       });
 
       setSelectedTask((cur) =>
-        cur && nid(cur.id) === nid(optimistic.id) ? created : cur,
+        cur && nid(cur.id) === nid(optimistic.id)
+          ? { ...created, clientId: optimistic.id }
+          : cur,
       );
 
       qcRef.current.invalidateQueries(["tasks", activeProjectId]);
@@ -1623,8 +1655,8 @@ export default function ProjectManagement({
           (updated as any).startDate === null
             ? null
             : (updated as any).startDate instanceof Date
-              ? (updated as any).startDate.toISOString()
-              : String((updated as any).startDate);
+            ? (updated as any).startDate.toISOString()
+            : String((updated as any).startDate);
       }
 
       if (typeof (updated as any).dueDate !== "undefined") {
@@ -1632,8 +1664,8 @@ export default function ProjectManagement({
           (updated as any).dueDate === null
             ? null
             : (updated as any).dueDate instanceof Date
-              ? (updated as any).dueDate.toISOString()
-              : String((updated as any).dueDate);
+            ? (updated as any).dueDate.toISOString()
+            : String((updated as any).dueDate);
       }
 
       // include comments when provided (array|null)
@@ -2543,8 +2575,8 @@ export default function ProjectManagement({
                     ? projects.find((x) => x.id === activeProjectId)?.name ||
                       "—"
                     : viewMode === "MY_TASKS"
-                      ? "My Tasks"
-                      : "Report"}
+                    ? "My Tasks"
+                    : "Report"}
                 </h2>
               )}
               {viewMode === "PROJECT" && (
