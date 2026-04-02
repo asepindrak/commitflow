@@ -17,9 +17,6 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Update npm versi terbaru
-RUN npm install -g npm@11
-
 # Salin dependency info lebih dulu
 COPY package*.json ./
 
