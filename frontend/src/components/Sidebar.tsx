@@ -9,6 +9,7 @@ import {
   Menu,
   ListTodo,
   Table,
+  MessageSquare,
 } from "lucide-react";
 import type { Project, TeamMember, Workspace } from "../types";
 import { motion, AnimatePresence } from "framer-motion";
@@ -476,6 +477,25 @@ export default function Sidebar({
               <ListTodo size={17} />
               {!collapsed && (
                 <span className="font-semibold text-sm">My Tasks</span>
+              )}
+            </button>
+          </div>
+
+          {/* Group Chat Menu */}
+          <div className="mb-2 px-2">
+            <button
+              onClick={() => onOpenViewMode("GROUP_CHAT")}
+              className={`
+              w-full flex items-center gap-3 px-3 py-2 rounded-xl
+              transition-all duration-150
+              hover:bg-violet-50 dark:hover:bg-violet-900/20
+              text-violet-600 dark:text-violet-300
+              ${collapsed ? "justify-center" : ""}
+            `}
+            >
+              <MessageSquare size={17} />
+              {!collapsed && (
+                <span className="font-semibold text-sm">Group Chat</span>
               )}
             </button>
           </div>

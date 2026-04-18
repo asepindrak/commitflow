@@ -187,6 +187,21 @@ model Invite {
   updatedAt   DateTime?
 }
 
+model GroupChatMessage {
+  id          String   @id @default(cuid())
+  workspaceId String
+  memberId    String
+  memberName  String
+  memberPhoto String?
+  content     String   @db.Text
+  attachments Json?
+  replyTo     Json?
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId, createdAt])
+  @@map("group_chat_message")
+}
+
 enum Role {
   USER
   ADMIN

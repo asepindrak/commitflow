@@ -52,6 +52,7 @@ import { hydrateTask } from "../utils/hydrateTask";
 import { safeString } from "../utils/safeString";
 import MyTasksList from "./MyTasksList";
 import TasksReportTable from "./TasksReportTable";
+import GroupChat from "./GroupChat";
 import NotificationBell from "./NotificationBell";
 import { useTaskReadStore } from "../utils/useTaskReadStore";
 
@@ -62,7 +63,7 @@ const queryClient = new QueryClient();
 const nid = (x: any) =>
   typeof x === "undefined" || x === null ? "" : String(x);
 
-type ViewMode = "PROJECT" | "MY_TASKS" | "REPORT";
+type ViewMode = "PROJECT" | "MY_TASKS" | "REPORT" | "GROUP_CHAT";
 
 type NotificationItem = {
   taskId: string;
@@ -210,7 +211,11 @@ export default function ProjectManagement({
   }, []);
 
   useEffect(() => {
-    if (viewMode === "MY_TASKS" || viewMode === "REPORT") {
+    if (
+      viewMode === "MY_TASKS" ||
+      viewMode === "REPORT" ||
+      viewMode === "GROUP_CHAT"
+    ) {
       if (isLoaded) {
         playSound("/sounds/close.mp3", isPlaySound);
       }
@@ -2635,7 +2640,9 @@ export default function ProjectManagement({
                       "—"
                     : viewMode === "MY_TASKS"
                       ? "My Tasks"
-                      : "Report"}
+                      : viewMode === "GROUP_CHAT"
+                        ? "Group Chat"
+                        : "Report"}
                 </h2>
               )}
               {viewMode === "PROJECT" && (
@@ -2870,6 +2877,16 @@ export default function ProjectManagement({
               )}
             </div>
             <div className="px-8 pt-6 pb-8">
+              {viewMode === "GROUP_CHAT" && activeWorkspaceId && (
+                <GroupChat
+                  workspaceId={activeWorkspaceId}
+                  workspaceName={
+                    workspaces.find((w) => w.id === activeWorkspaceId)?.name ??
+                    "Workspace"
+                  }
+                  team={team}
+                />
+              )}
               {viewMode === "MY_TASKS" && memberId && (
                 <>
                   <MyTasksList

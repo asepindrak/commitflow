@@ -16,6 +16,7 @@ import { SharedModule } from "./common/shared.module";
 import { UploadModule } from "./upload/upload.module";
 import { ProjectManagementModule } from "./project-management/project-management.module";
 import { EmailModule } from "./email/email.module";
+import { GroupChatModule } from "./group-chat/group-chat.module";
 import { APP_GUARD } from "@nestjs/core";
 
 @Module({
@@ -35,6 +36,7 @@ import { APP_GUARD } from "@nestjs/core";
     UploadModule,
     ProjectManagementModule,
     EmailModule,
+    GroupChatModule,
   ],
   controllers: [AppController, AskController],
   providers: [
