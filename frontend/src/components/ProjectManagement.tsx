@@ -3092,15 +3092,23 @@ export default function ProjectManagement({
                   onRefreshTasks={() => setIsRequestSync(true)}
                 />
               )}
-              {viewMode === "DM" && activeWorkspaceId && authTeamMemberId && (
-                <DirectMessages
-                  workspaceId={activeWorkspaceId}
-                  myMemberId={authTeamMemberId}
-                  myName={user?.name ?? "Unknown"}
-                  myPhoto={userPhoto ?? undefined}
-                  team={team}
-                  isPlaySound={isPlaySound}
-                />
+              {viewMode === "DM" && activeWorkspaceId && (
+                <>
+                  {authTeamMemberId ? (
+                    <DirectMessages
+                      workspaceId={activeWorkspaceId}
+                      myMemberId={authTeamMemberId}
+                      myName={user?.name ?? "Unknown"}
+                      myPhoto={userPhoto ?? undefined}
+                      team={team}
+                      isPlaySound={isPlaySound}
+                    />
+                  ) : (
+                    <div className="flex items-center justify-center py-20 text-gray-400 text-sm">
+                      Loading team data…
+                    </div>
+                  )}
+                </>
               )}
               {viewMode === "INTEGRATIONS" && activeWorkspaceId && (
                 <IntegrationsPanel workspaceId={activeWorkspaceId} />
