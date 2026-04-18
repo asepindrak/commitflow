@@ -18,8 +18,19 @@ export type SendMailOptions = {
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
   private transporter: Mail;
+  private readonly enabled: boolean;
 
   constructor(private readonly config: ConfigService) {
+    this.enabled =
+      this.config.get<string>("EMAIL_ENABLED", "true").toLowerCase() === "true";
+
+    if (!this.enabled) {
+      this.logger.warn("Email sending is DISABLED (EMAIL_ENABLED=false)");
+      // Create a dummy transporter so the property is always initialised
+      this.transporter = nodemailer.createTransport({ jsonTransport: true });
+      return;
+    }
+
     const host = this.config.get<string>("SMTP_HOST", "127.0.0.1");
     const port = Number(this.config.get<string>("SMTP_PORT", "587"));
     const user = this.config.get<string>("SMTP_USER");
@@ -68,6 +79,15 @@ export class EmailService {
   }
 
   async sendMail(opts: SendMailOptions) {
+    if (!this.enabled) {
+      this.logger.debug(
+        `Email skipped (EMAIL_ENABLED=false): "${opts.subject}" → ${
+          Array.isArray(opts.to) ? opts.to.join(",") : opts.to
+        }`
+      );
+      return { ok: true, skipped: true };
+    }
+
     const from = opts.from ?? this.defaultFrom();
 
     const mail: Mail.Options = {
