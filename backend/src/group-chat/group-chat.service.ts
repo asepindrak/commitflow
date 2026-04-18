@@ -26,4 +26,13 @@ export class GroupChatService {
   }) {
     return this.prisma.groupChatMessage.create({ data });
   }
+
+  async deleteMessage(messageId: string, memberId: string) {
+    const msg = await this.prisma.groupChatMessage.findUnique({
+      where: { id: messageId },
+    });
+    if (!msg || msg.memberId !== memberId) return null;
+    await this.prisma.groupChatMessage.delete({ where: { id: messageId } });
+    return msg;
+  }
 }

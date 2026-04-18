@@ -1,4 +1,10 @@
-import React, { useEffect, useRef, useState, useCallback } from "react";
+import React, {
+  useEffect,
+  useRef,
+  useState,
+  useCallback,
+  useMemo,
+} from "react";
 import { io, Socket } from "socket.io-client";
 import {
   Send,
@@ -11,6 +17,11 @@ import {
   Image,
   FileText,
   CornerUpLeft,
+  Search,
+  FolderOpen,
+  Download,
+  Trash2,
+  AtSign,
 } from "lucide-react";
 import type { TeamMember } from "../types";
 import { useAuthStore } from "../utils/store";
@@ -101,6 +112,31 @@ function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+// ─── Render text with @mention highlights ────────────────────────────────────
+function RichContent({ text, isMine }: { text: string; isMine: boolean }) {
+  const parts = text.split(/(@\w[\w\s]*?\w(?=\s|$|[.,!?;:])|@\w+)/g);
+  return (
+    <>
+      {parts.map((part, i) =>
+        part.startsWith("@") ? (
+          <span
+            key={i}
+            className={`font-semibold ${
+              isMine
+                ? "text-sky-100 bg-white/20"
+                : "text-sky-500 dark:text-sky-400 bg-sky-50 dark:bg-sky-900/30"
+            } rounded px-0.5`}
+          >
+            {part}
+          </span>
+        ) : (
+          <React.Fragment key={i}>{part}</React.Fragment>
+        ),
+      )}
+    </>
+  );
 }
 
 function isImage(type: string) {
@@ -258,11 +294,20 @@ export default function GroupChat({
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [fileManagerOpen, setFileManagerOpen] = useState(false);
+  const [fileManagerTab, setFileManagerTab] = useState<"images" | "files">(
+    "images",
+  );
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [mentionIdx, setMentionIdx] = useState(0);
 
   const socketRef = useRef<Socket | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   // ── Load history ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -302,6 +347,10 @@ export default function GroupChat({
         if (prev.some((m) => m.id === msg.id)) return prev;
         return [...prev, msg];
       });
+    });
+
+    socket.on("group-chat:deleted", ({ messageId }: { messageId: string }) => {
+      setMessages((prev) => prev.filter((m) => m.id !== messageId));
     });
 
     return () => {
@@ -483,7 +532,80 @@ export default function GroupChat({
     replyingTo,
   ]);
 
+  // ── Mention logic ──────────────────────────────────────────────────────────
+  const workspaceTeam = useMemo(
+    () => team.filter((m) => m.workspaceId === workspaceId),
+    [team, workspaceId],
+  );
+
+  const mentionCandidates = useMemo(() => {
+    if (mentionQuery === null) return [];
+    const q = mentionQuery.toLowerCase();
+    return workspaceTeam.filter((m) => m.name.toLowerCase().includes(q));
+  }, [mentionQuery, workspaceTeam]);
+
+  const detectMention = (value: string, cursorPos: number) => {
+    // Look backwards from cursor to find an unfinished @mention
+    const before = value.slice(0, cursorPos);
+    const match = before.match(/@([\w\s]*)$/);
+    if (match) {
+      setMentionQuery(match[1]);
+      setMentionIdx(0);
+    } else {
+      setMentionQuery(null);
+    }
+  };
+
+  const insertMention = (member: TeamMember) => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    const cursorPos = ta.selectionStart;
+    const before = input.slice(0, cursorPos);
+    const after = input.slice(cursorPos);
+    const atIdx = before.lastIndexOf("@");
+    if (atIdx === -1) return;
+    const newBefore = before.slice(0, atIdx) + `@${member.name} `;
+    setInput(newBefore + after);
+    setMentionQuery(null);
+    // Restore cursor after React re-render
+    requestAnimationFrame(() => {
+      ta.focus();
+      const pos = newBefore.length;
+      ta.setSelectionRange(pos, pos);
+    });
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    setInput(val);
+    detectMention(val, e.target.selectionStart);
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Mention popup keyboard navigation
+    if (mentionQuery !== null && mentionCandidates.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setMentionIdx((v) => (v + 1) % mentionCandidates.length);
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setMentionIdx((v) => (v <= 0 ? mentionCandidates.length - 1 : v - 1));
+        return;
+      }
+      if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        insertMention(mentionCandidates[mentionIdx]);
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setMentionQuery(null);
+        return;
+      }
+    }
+
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -507,11 +629,48 @@ export default function GroupChat({
     setPendingFiles((prev) => [...prev, ...newEntries]);
   };
 
+  // ── Search filter ─────────────────────────────────────────────────────────
+  const filteredMessages = useMemo(() => {
+    if (!searchQuery.trim()) return messages;
+    const q = searchQuery.toLowerCase();
+    return messages.filter(
+      (m) =>
+        m.content.toLowerCase().includes(q) ||
+        m.memberName.toLowerCase().includes(q) ||
+        (m.attachments as ChatAttachment[] | undefined)?.some((a) =>
+          a.name.toLowerCase().includes(q),
+        ),
+    );
+  }, [messages, searchQuery]);
+
+  // ── Shared files (for file manager) ──────────────────────────────────────
+  const sharedFiles = useMemo(() => {
+    const all: (ChatAttachment & { senderName: string; sentAt: string })[] = [];
+    for (const msg of messages) {
+      const atts = Array.isArray(msg.attachments)
+        ? (msg.attachments as ChatAttachment[])
+        : [];
+      for (const a of atts) {
+        all.push({ ...a, senderName: msg.memberName, sentAt: msg.createdAt });
+      }
+    }
+    return all.reverse(); // newest first
+  }, [messages]);
+
+  const sharedImages = useMemo(
+    () => sharedFiles.filter((f) => isImage(f.type)),
+    [sharedFiles],
+  );
+  const sharedDocs = useMemo(
+    () => sharedFiles.filter((f) => !isImage(f.type)),
+    [sharedFiles],
+  );
+
   // ── Grouped messages ────────────────────────────────────────────────────────
   function isGrouped(i: number) {
     if (i === 0) return false;
-    const prev = messages[i - 1];
-    const cur = messages[i];
+    const prev = filteredMessages[i - 1];
+    const cur = filteredMessages[i];
     if (prev.memberId !== cur.memberId) return false;
     const diff =
       new Date(cur.createdAt).getTime() - new Date(prev.createdAt).getTime();
@@ -546,6 +705,33 @@ export default function GroupChat({
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Search toggle */}
+          <button
+            onClick={() => {
+              setSearchOpen((v) => !v);
+              if (!searchOpen)
+                setTimeout(() => searchInputRef.current?.focus(), 80);
+              else setSearchQuery("");
+            }}
+            title="Search messages"
+            className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${
+              searchOpen
+                ? "bg-sky-100 dark:bg-sky-900/30 text-sky-500"
+                : "text-gray-400 hover:text-sky-500 hover:bg-gray-100 dark:hover:bg-gray-800"
+            }`}
+          >
+            <Search size={15} />
+          </button>
+
+          {/* File manager toggle */}
+          <button
+            onClick={() => setFileManagerOpen(true)}
+            title="Shared files"
+            className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:text-sky-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+          >
+            <FolderOpen size={15} />
+          </button>
+
           <span
             className={`w-2 h-2 rounded-full ${connected ? "bg-emerald-400" : "bg-red-400"}`}
             title={connected ? "Connected" : "Disconnected"}
@@ -576,6 +762,36 @@ export default function GroupChat({
         </div>
       </div>
 
+      {/* ── Search bar ──────────────────────────────────────────────────── */}
+      {searchOpen && (
+        <div className="shrink-0 px-4 py-2.5 border-b border-gray-100 dark:border-gray-800/70 bg-gray-50/80 dark:bg-gray-900/40 backdrop-blur-sm flex items-center gap-2.5">
+          <Search size={14} className="text-gray-400 shrink-0" />
+          <input
+            ref={searchInputRef}
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search messages, users, or files…"
+            className="flex-1 bg-transparent text-sm text-slate-800 dark:text-slate-100 placeholder-gray-400 dark:placeholder-gray-600 outline-none"
+          />
+          {searchQuery && (
+            <span className="text-[10px] text-gray-400 shrink-0">
+              {filteredMessages.length} result
+              {filteredMessages.length !== 1 ? "s" : ""}
+            </span>
+          )}
+          <button
+            onClick={() => {
+              setSearchOpen(false);
+              setSearchQuery("");
+            }}
+            className="shrink-0 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
       {/* ── Messages area ──────────────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto px-5 py-4 space-y-1 scroll-smooth">
         {loading && (
@@ -584,23 +800,32 @@ export default function GroupChat({
           </div>
         )}
 
-        {!loading && messages.length === 0 && (
+        {!loading && filteredMessages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full py-20 text-gray-400 gap-3 select-none">
             <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-sky-100 to-violet-100 dark:from-sky-900/20 dark:to-violet-900/20 flex items-center justify-center">
-              <Smile size={26} className="text-sky-400" />
+              {searchQuery ? (
+                <Search size={26} className="text-gray-300" />
+              ) : (
+                <Smile size={26} className="text-sky-400" />
+              )}
             </div>
-            <p className="text-sm font-medium">No messages yet</p>
+            <p className="text-sm font-medium">
+              {searchQuery ? "No results found" : "No messages yet"}
+            </p>
             <p className="text-xs text-gray-300 dark:text-gray-600">
-              Be the first to say something!
+              {searchQuery
+                ? "Try a different keyword"
+                : "Be the first to say something!"}
             </p>
           </div>
         )}
 
-        {messages.map((msg, i) => {
+        {filteredMessages.map((msg, i) => {
           const isMine = msg.memberId === myMemberId;
           const grouped = isGrouped(i);
           const showDate =
-            i === 0 || !sameDay(messages[i - 1].createdAt, msg.createdAt);
+            i === 0 ||
+            !sameDay(filteredMessages[i - 1].createdAt, msg.createdAt);
           const atts: ChatAttachment[] = Array.isArray(msg.attachments)
             ? (msg.attachments as ChatAttachment[])
             : [];
@@ -679,7 +904,7 @@ export default function GroupChat({
                           : "bg-gray-100 dark:bg-gray-800/70 text-slate-800 dark:text-slate-200 rounded-bl-sm"
                       }`}
                     >
-                      {msg.content}
+                      <RichContent text={msg.content} isMine={isMine} />
                     </div>
                   )}
 
@@ -701,6 +926,24 @@ export default function GroupChat({
                 >
                   <CornerUpLeft size={13} />
                 </button>
+
+                {/* Delete button — only for own messages */}
+                {isMine && (
+                  <button
+                    onClick={() => {
+                      if (!socketRef.current) return;
+                      socketRef.current.emit("group-chat:delete", {
+                        workspaceId,
+                        messageId: msg.id,
+                        memberId: myMemberId,
+                      });
+                    }}
+                    title="Unsend"
+                    className="shrink-0 self-center opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20 text-gray-400 hover:text-red-500 dark:hover:text-red-400"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                )}
               </div>
             </React.Fragment>
           );
@@ -823,20 +1066,82 @@ export default function GroupChat({
           </div>
         )}
 
-        <div className="flex items-end gap-2.5 bg-gray-50 dark:bg-gray-800/60 rounded-2xl border border-gray-200/80 dark:border-gray-700/60 px-3.5 py-2.5 focus-within:border-sky-400/60 dark:focus-within:border-sky-500/50 transition-colors">
+        <div className="relative flex items-end gap-2.5 bg-gray-50 dark:bg-gray-800/60 rounded-2xl border border-gray-200/80 dark:border-gray-700/60 px-3.5 py-2.5 focus-within:border-sky-400/60 dark:focus-within:border-sky-500/50 transition-colors">
+          {/* Mention popup */}
+          {mentionQuery !== null && mentionCandidates.length > 0 && (
+            <div className="absolute bottom-full left-0 mb-2 w-64 max-h-48 overflow-y-auto bg-white dark:bg-[#1c2128] rounded-xl border border-gray-200 dark:border-gray-700/60 shadow-xl z-20">
+              <div className="px-3 py-1.5 text-[10px] text-gray-400 font-semibold uppercase tracking-wider border-b border-gray-100 dark:border-gray-800/70">
+                Members
+              </div>
+              {mentionCandidates.map((m, idx) => (
+                <button
+                  key={m.id}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    insertMention(m);
+                  }}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors ${
+                    idx === mentionIdx
+                      ? "bg-sky-50 dark:bg-sky-900/20"
+                      : "hover:bg-gray-50 dark:hover:bg-gray-800/60"
+                  }`}
+                >
+                  <Avatar name={m.name} photo={m.photo} size={24} />
+                  <span className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate">
+                    {m.name}
+                  </span>
+                  {m.role && (
+                    <span className="text-[10px] text-gray-400 ml-auto shrink-0">
+                      {m.role}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+
           <Avatar name={myName} photo={myPhoto} size={28} />
 
           <textarea
             ref={textareaRef}
             rows={1}
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={handleInputChange}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
             placeholder={`Message #${workspaceName}…`}
             className="flex-1 bg-transparent resize-none outline-none text-sm text-slate-800 dark:text-slate-100 placeholder-gray-400 dark:placeholder-gray-600 leading-relaxed max-h-36 overflow-y-auto"
             style={{ fieldSizing: "content" } as any}
           />
+
+          {/* Mention button */}
+          <button
+            type="button"
+            onClick={() => {
+              const ta = textareaRef.current;
+              if (!ta) return;
+              const pos = ta.selectionStart;
+              const before = input.slice(0, pos);
+              const after = input.slice(pos);
+              const needSpace =
+                before.length > 0 &&
+                !before.endsWith(" ") &&
+                !before.endsWith("\n");
+              const newVal = before + (needSpace ? " @" : "@") + after;
+              setInput(newVal);
+              const newPos = before.length + (needSpace ? 2 : 1);
+              setMentionQuery("");
+              setMentionIdx(0);
+              requestAnimationFrame(() => {
+                ta.focus();
+                ta.setSelectionRange(newPos, newPos);
+              });
+            }}
+            title="Mention someone"
+            className="shrink-0 w-8 h-8 rounded-xl text-gray-400 hover:text-sky-500 hover:bg-sky-50 dark:hover:bg-sky-900/20 flex items-center justify-center transition-colors"
+          >
+            <AtSign size={16} />
+          </button>
 
           {/* Attach button */}
           <button
@@ -884,6 +1189,163 @@ export default function GroupChat({
         className="hidden"
         onChange={(e) => handleFilesPicked(e.target.files)}
       />
+
+      {/* ── File Manager Popup ─────────────────────────────────────────────── */}
+      {fileManagerOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-white dark:bg-[#161b22] rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700/60 w-full max-w-lg max-h-[80vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95">
+            {/* Popup header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-800/70">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-400 to-sky-500 flex items-center justify-center shadow-sm">
+                  <FolderOpen size={15} className="text-white" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                    Shared Files
+                  </p>
+                  <p className="text-[11px] text-gray-400">
+                    {sharedFiles.length} file
+                    {sharedFiles.length !== 1 ? "s" : ""} in this chat
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setFileManagerOpen(false)}
+                className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              >
+                <X size={15} />
+              </button>
+            </div>
+
+            {/* Tabs */}
+            <div className="flex px-5 pt-3 gap-1">
+              <button
+                onClick={() => setFileManagerTab("images")}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                  fileManagerTab === "images"
+                    ? "bg-sky-100 dark:bg-sky-900/30 text-sky-600 dark:text-sky-400"
+                    : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+                }`}
+              >
+                <span className="flex items-center gap-1.5">
+                  <Image size={13} />
+                  Images & Videos
+                  <span className="text-[10px] opacity-60">
+                    ({sharedImages.length})
+                  </span>
+                </span>
+              </button>
+              <button
+                onClick={() => setFileManagerTab("files")}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                  fileManagerTab === "files"
+                    ? "bg-sky-100 dark:bg-sky-900/30 text-sky-600 dark:text-sky-400"
+                    : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+                }`}
+              >
+                <span className="flex items-center gap-1.5">
+                  <FileText size={13} />
+                  Documents
+                  <span className="text-[10px] opacity-60">
+                    ({sharedDocs.length})
+                  </span>
+                </span>
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto px-5 py-4">
+              {fileManagerTab === "images" && (
+                <>
+                  {sharedImages.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-12 text-gray-400 gap-2 select-none">
+                      <Image size={28} className="text-gray-300" />
+                      <p className="text-xs">No images shared yet</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-3 gap-2">
+                      {sharedImages.map((img, idx) => (
+                        <a
+                          key={idx}
+                          href={img.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="group relative aspect-square rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700/60 hover:border-sky-400 transition-colors"
+                        >
+                          {isVideo(img.type) ? (
+                            <video
+                              src={img.url}
+                              className="w-full h-full object-cover"
+                              muted
+                            />
+                          ) : (
+                            <img
+                              src={img.url}
+                              alt={img.name}
+                              className="w-full h-full object-cover"
+                              loading="lazy"
+                            />
+                          )}
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-2">
+                            <p className="text-[10px] text-white font-semibold truncate">
+                              {img.name}
+                            </p>
+                            <p className="text-[9px] text-white/60">
+                              {img.senderName} · {formatDate(img.sentAt)}
+                            </p>
+                          </div>
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+
+              {fileManagerTab === "files" && (
+                <>
+                  {sharedDocs.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-12 text-gray-400 gap-2 select-none">
+                      <FileText size={28} className="text-gray-300" />
+                      <p className="text-xs">No documents shared yet</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {sharedDocs.map((doc, idx) => (
+                        <a
+                          key={idx}
+                          href={doc.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          download={doc.name}
+                          className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800/60 border border-transparent hover:border-gray-200 dark:hover:border-gray-700/60 transition-all group"
+                        >
+                          <div className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-500 shrink-0 group-hover:bg-sky-50 dark:group-hover:bg-sky-900/20 group-hover:text-sky-500 transition-colors">
+                            <AttachmentIcon type={doc.type} size={20} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate">
+                              {doc.name}
+                            </p>
+                            <p className="text-[11px] text-gray-400">
+                              {formatBytes(doc.size)} · {doc.senderName} ·{" "}
+                              {formatDate(doc.sentAt)}
+                            </p>
+                          </div>
+                          <Download
+                            size={14}
+                            className="text-gray-300 group-hover:text-sky-500 shrink-0 transition-colors"
+                          />
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

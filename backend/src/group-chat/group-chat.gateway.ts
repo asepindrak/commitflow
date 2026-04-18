@@ -104,4 +104,28 @@ export class GroupChatGateway
     // broadcast to everyone in the room (including sender)
     this.server.to(`ws:${data.workspaceId}`).emit("group-chat:message", saved);
   }
+
+  /** Client deletes their own message */
+  @SubscribeMessage("group-chat:delete")
+  async handleDelete(
+    @MessageBody()
+    data: {
+      workspaceId: string;
+      messageId: string;
+      memberId: string;
+    },
+    @ConnectedSocket() client: Socket,
+  ) {
+    if (!data?.workspaceId || !data?.messageId || !data?.memberId) return;
+
+    const deleted = await this.chatService.deleteMessage(
+      data.messageId,
+      data.memberId,
+    );
+    if (!deleted) return; // not found or not owner
+
+    this.server
+      .to(`ws:${data.workspaceId}`)
+      .emit("group-chat:deleted", { messageId: data.messageId });
+  }
 }
