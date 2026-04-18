@@ -105,14 +105,30 @@ function App() {
 
   if (!token) {
     return (
-      <div className="flex flex-col justify-center items-center min-h-screen p-4 text-white relative overflow-hidden">
+      <div className="flex flex-col justify-center items-center min-h-screen p-4 text-white relative overflow-hidden bg-[#050810]">
+        {/* decorative orbs */}
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div className="absolute -top-32 -left-32 w-96 h-96 rounded-full bg-sky-600/20 blur-[120px]" />
+          <div className="absolute -bottom-32 -right-32 w-96 h-96 rounded-full bg-violet-600/20 blur-[120px]" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 rounded-full bg-sky-900/20 blur-[80px]" />
+          {/* subtle grid */}
+          <div
+            className="absolute inset-0 opacity-[0.03]"
+            style={{
+              backgroundImage:
+                "linear-gradient(rgba(255,255,255,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.5) 1px, transparent 1px)",
+              backgroundSize: "40px 40px",
+            }}
+          />
+        </div>
+
         <AnimatePresence>
           <AuthCard onAuthSuccess={handleAuth} />
         </AnimatePresence>
 
         <ToastContainer
           position="top-right"
-          autoClose={3000} // durasi otomatis hilang (ms)
+          autoClose={3000}
           hideProgressBar={false}
           newestOnTop={false}
           closeOnClick
@@ -120,7 +136,7 @@ function App() {
           pauseOnFocusLoss={false}
           draggable
           pauseOnHover
-          theme="dark" // <- gunakan dark mode
+          theme="dark"
         />
       </div>
     );

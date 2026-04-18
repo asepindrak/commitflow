@@ -88,8 +88,6 @@ export const TaskCard = React.memo(
 
     const assignees = getTaskAssignees(task, team);
 
-
-
     // measure height to create a placeholder when dragging so layout doesn't jump
     const [measuredHeight, setMeasuredHeight] = useState<number | null>(null);
     const elRef = useRef<HTMLDivElement | null>(null);
@@ -98,7 +96,7 @@ export const TaskCard = React.memo(
       const measure = () => {
         try {
           const el = document.getElementById(
-            `taskcard-${task.id}`
+            `taskcard-${task.id}`,
           ) as HTMLElement | null;
           if (el) {
             const h = el.getBoundingClientRect().height;
@@ -142,7 +140,7 @@ export const TaskCard = React.memo(
       if (isBeingDragged) {
         try {
           const el = document.getElementById(
-            `taskcard-${task.id}`
+            `taskcard-${task.id}`,
           ) as HTMLElement | null;
           const rect = el?.getBoundingClientRect();
           if (rect)
@@ -160,12 +158,12 @@ export const TaskCard = React.memo(
 
     const transformStyle = isBeingDragged
       ? {
-        position: "fixed" as const,
-        left: 0,
-        top: 0,
-        transform: `translate3d(${dragPos.x}px, ${dragPos.y}px, 0)`,
-        width: `${dragPos.width}px`,
-      }
+          position: "fixed" as const,
+          left: 0,
+          top: 0,
+          transform: `translate3d(${dragPos.x}px, ${dragPos.y}px, 0)`,
+          width: `${dragPos.width}px`,
+        }
       : {};
 
     // pointer-drag helpers to avoid opening modal on click and avoid jumps
@@ -213,7 +211,7 @@ export const TaskCard = React.memo(
           // capture measured height BEFORE starting pointer drag so placeholder size is accurate
           try {
             const elNow = document.getElementById(
-              `taskcard-${task.id}`
+              `taskcard-${task.id}`,
             ) as HTMLElement | null;
             if (elNow) {
               // trigger measurement in TaskCard effect (or set via ref)
@@ -270,17 +268,17 @@ export const TaskCard = React.memo(
 
     const draggedStyles = isBeingDragged
       ? {
-        position: "fixed" as const,
-        left: 0,
-        top: 0,
-        transform: `translate3d(${dragPos.x}px, ${dragPos.y}px, 0)`,
-        width: `${dragPos.width}px`,
-        boxSizing: "border-box",
-        zIndex: 9999,
-        pointerEvents: "none" as const,
-        willChange: "transform" as const,
-        transition: "none",
-      }
+          position: "fixed" as const,
+          left: 0,
+          top: 0,
+          transform: `translate3d(${dragPos.x}px, ${dragPos.y}px, 0)`,
+          width: `${dragPos.width}px`,
+          boxSizing: "border-box",
+          zIndex: 9999,
+          pointerEvents: "none" as const,
+          willChange: "transform" as const,
+          transition: "none",
+        }
       : {};
 
     return (
@@ -318,17 +316,16 @@ export const TaskCard = React.memo(
           onPointerDown={onPointerDownLocal}
           onClick={handleClick}
           className={
-            "relative flex flex-col gap-3 p-2 rounded-xl cursor-pointer bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm hover:scale-[1.01] hover:shadow-lg " +
+            "relative flex flex-col gap-3 p-3 rounded-xl cursor-pointer bg-white dark:bg-gray-800/80 shadow-sm border border-gray-100 dark:border-gray-700/40 hover:shadow-md hover:border-sky-200/60 dark:hover:border-sky-700/40 hover:scale-[1.01] " +
             (isBeingDragged ? "" : "transform transition-all duration-150")
           }
           style={{
-            border: "1px solid rgba(15,23,42,0.04)",
             ...(draggedStyles as any),
           }}
         >
           <div
             className={`absolute left-0 top-0 bottom-0 w-1 rounded-l-xl ${priorityAccent(
-              task.priority
+              task.priority,
             )}`}
           />
 
@@ -354,107 +351,13 @@ export const TaskCard = React.memo(
             <div className="flex gap-2 flex-wrap mt-1">
               {task.startDate
                 ? (() => {
-                  const sd = parseDateOnlySafe(task.startDate);
-                  return sd ? (
-                    <div
-                      className="flex items-center gap-2 px-3 py-1 rounded-full bg-sky-700/10 dark:bg-sky-600/20 
+                    const sd = parseDateOnlySafe(task.startDate);
+                    return sd ? (
+                      <div
+                        className="flex items-center gap-2 px-3 py-1 rounded-full bg-sky-700/10 dark:bg-sky-600/20 
                    text-xs font-medium text-sky-500 dark:text-sky-300"
-                      title={`Start: ${task.startDate}`}
-                    >
-                      <svg
-                        className="w-3.5 h-3.5"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        aria-hidden
+                        title={`Start: ${task.startDate}`}
                       >
-                        <path
-                          d="M8 7V3M16 7V3M3 11h18M5 21h14a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2z"
-                          stroke="currentColor"
-                          strokeWidth="1.5"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                      <span>{formatDateShort(task.startDate)}</span>
-                    </div>
-                  ) : null;
-                })()
-                : null}
-
-              {task.dueDate
-                ? (() => {
-                  const due = parseDateOnlySafe(task.dueDate);
-                  if (!due) return null;
-
-                  const now = new Date();
-                  const today = new Date(
-                    now.getFullYear(),
-                    now.getMonth(),
-                    now.getDate()
-                  );
-
-                  const isOverdue = due.getTime() < today.getTime();
-                  const isToday = due.getTime() === today.getTime();
-                  const baseClasses =
-                    "flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium";
-                  const overdueClasses =
-                    "bg-red-700/10 dark:bg-red-600/20 text-red-500 dark:text-red-300";
-                  const todayClasses =
-                    "bg-amber-700/10 dark:bg-amber-600/20 text-amber-500 dark:text-amber-300";
-                  const okClasses =
-                    "bg-emerald-700/10 dark:bg-emerald-600/20 text-emerald-500 dark:text-emerald-300";
-
-                  const pillClasses = isOverdue
-                    ? overdueClasses
-                    : isToday
-                      ? todayClasses
-                      : okClasses;
-                  const statusLabel = isOverdue
-                    ? "overdue"
-                    : isToday
-                      ? "due today"
-                      : "";
-
-                  return (
-                    <div
-                      className={`${baseClasses} ${pillClasses}`}
-                      title={
-                        statusLabel
-                          ? `${statusLabel} • ${task.dueDate}`
-                          : `Due: ${task.dueDate}`
-                      }
-                      aria-live="polite"
-                    >
-                      {isOverdue || isToday ? (
-                        <svg
-                          className="w-3.5 h-3.5"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          aria-hidden
-                        >
-                          <path
-                            d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
-                            stroke="currentColor"
-                            strokeWidth="1.2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                          <path
-                            d="M12 9v4"
-                            stroke="currentColor"
-                            strokeWidth="1.6"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                          <path
-                            d="M12 17h.01"
-                            stroke="currentColor"
-                            strokeWidth="1.6"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
-                      ) : (
                         <svg
                           className="w-3.5 h-3.5"
                           viewBox="0 0 24 24"
@@ -469,24 +372,119 @@ export const TaskCard = React.memo(
                             strokeLinejoin="round"
                           />
                         </svg>
-                      )}
-
-                      <div className="flex flex-col leading-tight">
-                        <span className="text-xs text-slate-900 dark:text-slate-100">
-                          {formatDateShort(task.dueDate)}
-                        </span>
-                        {(isOverdue || isToday) && (
-                          <span
-                            className={`text-[11px] ${isOverdue ? "text-red-300" : "text-amber-300"
-                              }`}
-                          >
-                            {isOverdue ? "overdue" : "due today"}
-                          </span>
-                        )}
+                        <span>{formatDateShort(task.startDate)}</span>
                       </div>
-                    </div>
-                  );
-                })()
+                    ) : null;
+                  })()
+                : null}
+
+              {task.dueDate
+                ? (() => {
+                    const due = parseDateOnlySafe(task.dueDate);
+                    if (!due) return null;
+
+                    const now = new Date();
+                    const today = new Date(
+                      now.getFullYear(),
+                      now.getMonth(),
+                      now.getDate(),
+                    );
+
+                    const isOverdue = due.getTime() < today.getTime();
+                    const isToday = due.getTime() === today.getTime();
+                    const baseClasses =
+                      "flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium";
+                    const overdueClasses =
+                      "bg-red-700/10 dark:bg-red-600/20 text-red-500 dark:text-red-300";
+                    const todayClasses =
+                      "bg-amber-700/10 dark:bg-amber-600/20 text-amber-500 dark:text-amber-300";
+                    const okClasses =
+                      "bg-emerald-700/10 dark:bg-emerald-600/20 text-emerald-500 dark:text-emerald-300";
+
+                    const pillClasses = isOverdue
+                      ? overdueClasses
+                      : isToday
+                        ? todayClasses
+                        : okClasses;
+                    const statusLabel = isOverdue
+                      ? "overdue"
+                      : isToday
+                        ? "due today"
+                        : "";
+
+                    return (
+                      <div
+                        className={`${baseClasses} ${pillClasses}`}
+                        title={
+                          statusLabel
+                            ? `${statusLabel} • ${task.dueDate}`
+                            : `Due: ${task.dueDate}`
+                        }
+                        aria-live="polite"
+                      >
+                        {isOverdue || isToday ? (
+                          <svg
+                            className="w-3.5 h-3.5"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            aria-hidden
+                          >
+                            <path
+                              d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
+                              stroke="currentColor"
+                              strokeWidth="1.2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                            <path
+                              d="M12 9v4"
+                              stroke="currentColor"
+                              strokeWidth="1.6"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                            <path
+                              d="M12 17h.01"
+                              stroke="currentColor"
+                              strokeWidth="1.6"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        ) : (
+                          <svg
+                            className="w-3.5 h-3.5"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            aria-hidden
+                          >
+                            <path
+                              d="M8 7V3M16 7V3M3 11h18M5 21h14a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2z"
+                              stroke="currentColor"
+                              strokeWidth="1.5"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        )}
+
+                        <div className="flex flex-col leading-tight">
+                          <span className="text-xs text-slate-900 dark:text-slate-100">
+                            {formatDateShort(task.dueDate)}
+                          </span>
+                          {(isOverdue || isToday) && (
+                            <span
+                              className={`text-[11px] ${
+                                isOverdue ? "text-red-300" : "text-amber-300"
+                              }`}
+                            >
+                              {isOverdue ? "overdue" : "due today"}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()
                 : null}
             </div>
           </div>
@@ -502,13 +500,13 @@ export const TaskCard = React.memo(
                     const avatarBg = m.photo
                       ? undefined
                       : typeof window !== "undefined" &&
-                        document.documentElement.classList.contains("dark")
+                          document.documentElement.classList.contains("dark")
                         ? hslaStr(hue, 65, 50, 0.16)
                         : hslaStr(hue, 75, 85, 0.95);
                     const avatarText = m.photo
                       ? undefined
                       : typeof window !== "undefined" &&
-                        document.documentElement.classList.contains("dark")
+                          document.documentElement.classList.contains("dark")
                         ? hslStr(hue, 65, 80)
                         : hslStr(hue, 75, 25);
 
@@ -550,7 +548,6 @@ export const TaskCard = React.memo(
               </>
             )}
           </div>
-
         </div>
       </>
     );
@@ -570,7 +567,8 @@ export const TaskCard = React.memo(
     if (
       JSON.stringify(prev.task.taskAssignees) !==
       JSON.stringify(next.task.taskAssignees)
-    ) return false;
+    )
+      return false;
     // ✅ MULTI-ASSIGNEE SAFE COMPARISON
     const prevAssignees = getAssigneeIds(prev.task);
     const nextAssignees = getAssigneeIds(next.task);
@@ -594,13 +592,15 @@ export const TaskCard = React.memo(
       arr.length === 0
         ? null
         : arr
-          .map((c: any) => c?.createdAt ?? c?.created_at ?? null)
-          .filter(Boolean)
-          .sort()
-          .slice(-1)[0];
+            .map((c: any) => c?.createdAt ?? c?.created_at ?? null)
+            .filter(Boolean)
+            .sort()
+            .slice(-1)[0];
 
-    if (String(getLastCreatedAt(prevComments)) !==
-      String(getLastCreatedAt(nextComments)))
+    if (
+      String(getLastCreatedAt(prevComments)) !==
+      String(getLastCreatedAt(nextComments))
+    )
       return false;
 
     // dragging state
@@ -615,5 +615,5 @@ export const TaskCard = React.memo(
     }
 
     return true;
-  }
+  },
 );

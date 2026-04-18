@@ -26,7 +26,7 @@ export default function KanbanBoard({
   onDropTo: (
     s: Task["status"],
     draggedId?: string,
-    insertIndex?: number
+    insertIndex?: number,
   ) => void;
   onDragStart: (e: React.DragEvent, id: string) => void;
   onSelectTask: (t: Task) => void;
@@ -52,7 +52,7 @@ export default function KanbanBoard({
   const measureColumns = () => {
     // select inner wrappers that contain the cards
     const nodes = Array.from(
-      document.querySelectorAll<HTMLElement>("[data-drop-key] .kanban-inner")
+      document.querySelectorAll<HTMLElement>("[data-drop-key] .kanban-inner"),
     );
     if (!nodes.length) return 0;
     const heights = nodes.map((n) => Math.ceil(n.scrollHeight));
@@ -87,7 +87,7 @@ export default function KanbanBoard({
       return;
     }
     const nodes = Array.from(
-      document.querySelectorAll<HTMLElement>("[data-drop-key] .kanban-inner")
+      document.querySelectorAll<HTMLElement>("[data-drop-key] .kanban-inner"),
     );
     const ro = new ResizeObserver(() => {
       scheduleMeasureAndSet();
@@ -140,14 +140,14 @@ export default function KanbanBoard({
         c.items.map((it) => ({
           ...it,
           status: c.key,
-        }))
+        })),
       ),
-    [columns]
+    [columns],
   );
 
   const currentMember = useMemo(
     () => team.find((m) => String(m.id) === String(currentMemberId)),
-    [team, currentMemberId]
+    [team, currentMemberId],
   );
   const currentMemberName = currentMember?.name ?? null;
 
@@ -155,27 +155,21 @@ export default function KanbanBoard({
     if (!currentMemberId) return false;
 
     const assignees = getTaskAssignees(task, team);
-    return assignees.some(
-      (m) => String(m.id) === String(currentMemberId)
-    );
+    return assignees.some((m) => String(m.id) === String(currentMemberId));
   };
-
-
-
-
 
   const assignedCount = useMemo(
     () =>
       allTasks.reduce(
         (acc, t) => (isAssignedToCurrent(t as Task) ? acc + 1 : acc),
-        0
+        0,
       ),
-    [allTasks, currentMemberId, team]
+    [allTasks, currentMemberId, team],
   );
 
   const computeInsertIndex = (columnEl: HTMLElement, clientY: number) => {
     const cards = Array.from(
-      columnEl.querySelectorAll<HTMLElement>("[data-task-id]")
+      columnEl.querySelectorAll<HTMLElement>("[data-task-id]"),
     );
     if (!cards.length) return 0;
     for (let i = 0; i < cards.length; i++) {
@@ -197,13 +191,13 @@ export default function KanbanBoard({
   return (
     <div>
       {/* Toolbar */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-5">
         <div>
           <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100"></h3>
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="text-sm text-gray-600 dark:text-gray-300">
+          <div className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide">
             {columns.reduce((sum, c) => sum + c.items.length, 0)} tasks
           </div>
 
@@ -212,14 +206,16 @@ export default function KanbanBoard({
             onClick={() => setOnlyMine((v) => !v)}
             aria-pressed={onlyMine}
             title="Show only tasks assigned to you"
-            className={`inline-flex items-center gap-2 px-3 py-1 rounded-md text-sm font-medium transition-colors focus:outline-none ${onlyMine
-              ? "bg-sky-600 text-white border border-sky-600 shadow-sm"
-              : "bg-white text-slate-700 dark:bg-gray-800 dark:text-slate-100 border border-gray-200 dark:border-gray-700"
-              }`}
+            className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-sm font-semibold transition-all duration-150 focus:outline-none shadow-sm ${
+              onlyMine
+                ? "bg-sky-500 text-white border border-sky-500 shadow-sky-200/50 dark:shadow-sky-800/40"
+                : "bg-white text-slate-600 dark:bg-gray-800 dark:text-slate-300 border border-gray-200 dark:border-gray-700 hover:border-sky-300 dark:hover:border-sky-600"
+            }`}
           >
             <span
-              className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs ${onlyMine ? "bg-white/20" : "bg-sky-100 dark:bg-white/5"
-                }`}
+              className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs ${
+                onlyMine ? "bg-white/20" : "bg-sky-100 dark:bg-white/5"
+              }`}
               aria-hidden
             >
               👤
@@ -228,8 +224,9 @@ export default function KanbanBoard({
             <span className="whitespace-nowrap">Assigned to me</span>
 
             <span
-              className={`inline-flex items-center justify-center ml-1 px-2 py-0.5 rounded-full text-xs font-semibold ${onlyMine ? "bg-white/20" : "bg-gray-100 dark:bg-white/5"
-                }`}
+              className={`inline-flex items-center justify-center ml-1 px-2 py-0.5 rounded-full text-xs font-semibold ${
+                onlyMine ? "bg-white/20" : "bg-gray-100 dark:bg-white/5"
+              }`}
             >
               {assignedCount}
             </span>
@@ -238,7 +235,7 @@ export default function KanbanBoard({
       </div>
 
       <div className="overflow-x-auto">
-        <div className="flex gap-4 min-w-max pb-2">
+        <div className="flex gap-4 min-w-max pb-4">
           {columns.map((col) => {
             const visibleItems = onlyMine
               ? col.items.filter((task) => isAssignedToCurrent(task))
@@ -247,14 +244,14 @@ export default function KanbanBoard({
             return (
               <div
                 key={col.key}
-                className="rounded-lg flex-shrink-0 w-[320px] flex flex-col"
+                className="rounded-2xl flex-shrink-0 w-[320px] flex flex-col bg-white dark:bg-gray-800/40 border border-gray-100/80 dark:border-gray-700/40 overflow-hidden shadow-sm"
               >
-                <div className="flex items-center justify-between mb-3">
-                  <h4 className="font-semibold text-lg text-slate-900 dark:text-slate-100">
+                <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-gray-100/60 dark:border-gray-700/30">
+                  <h4 className="font-bold text-xs uppercase tracking-widest text-gray-500 dark:text-gray-400">
                     {col.title}
                   </h4>
-                  <span className="text-sm text-gray-500 dark:text-gray-400">
-                    total: {col.items.length}
+                  <span className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 rounded-full text-xs font-bold bg-gray-100 dark:bg-gray-700/60 text-gray-600 dark:text-gray-300">
+                    {col.items.length}
                   </span>
                 </div>
 
@@ -273,7 +270,7 @@ export default function KanbanBoard({
                   style={{
                     minHeight: Math.max(columnMinHeight || 0, 600),
                   }}
-                  className="p-2 rounded-lg bg-transparent flex-1"
+                  className="p-2 flex-1"
                 >
                   {/* inner wrapper: measure this (scrollHeight) to compute minHeight */}
                   <div className="kanban-inner space-y-3">

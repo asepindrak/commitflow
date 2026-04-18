@@ -50,7 +50,7 @@ export default function TaskModal({
   onAddComment: (
     author: string,
     body: string,
-    attachments?: Attachment[]
+    attachments?: Attachment[],
   ) => void;
   onDelete: (id: string) => void;
   team: TeamMember[];
@@ -63,26 +63,23 @@ export default function TaskModal({
   const [mediaViewerOpen, setMediaViewerOpen] = useState(false);
   const [mediaViewerUrl, setMediaViewerUrl] = useState<string>("");
   const [mediaViewerType, setMediaViewerType] = useState<"image" | "video">(
-    "image"
+    "image",
   );
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const assigneeMembers = useMemo(() => {
     return getTaskAssignees(task, team);
   }, [task, team]);
 
-
-
   const assigneePhones = assigneeMembers
-    .map(m => m.phone)
+    .map((m) => m.phone)
     .filter((p): p is string => Boolean(p));
-
 
   const user = useAuthStore((s) => s.user);
   const currentMemberName = user?.name ?? null;
 
   const currentProject = useMemo(
     () => projects.find((m) => String(m.id) === String(activeProjectId)),
-    [projects, activeProjectId]
+    [projects, activeProjectId],
   );
   const currentProjectName = currentProject?.name ?? null;
 
@@ -98,7 +95,6 @@ export default function TaskModal({
 
     setLocal(derived);
   }, [task]);
-
 
   function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const list = e.currentTarget.files;
@@ -133,7 +129,7 @@ export default function TaskModal({
       onAddComment(
         currentMemberName ?? "No Name",
         commentText.trim(),
-        attachments
+        attachments,
       );
 
       setLocal((s) => ({
@@ -243,7 +239,7 @@ export default function TaskModal({
           savedComment = await onAddComment(
             currentMemberName ?? "No Name",
             commentText.trim(),
-            attachments
+            attachments,
           );
         } catch (e) {
           // parent might throw or not return; we'll fallback to optimistic tmp comment
@@ -277,8 +273,9 @@ export default function TaskModal({
         console.error("[Save] upload/addComment failed:", err);
         await Swal.fire({
           title: "Upload/Add comment failed",
-          text: `Gagal upload atau menambahkan komentar: ${err?.message || err
-            }`,
+          text: `Gagal upload atau menambahkan komentar: ${
+            err?.message || err
+          }`,
           icon: "error",
           background: dark ? "#111827" : undefined,
           color: dark ? "#e5e7eb" : undefined,
@@ -344,114 +341,123 @@ export default function TaskModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-gradient-to-br from-black/40 via-black/30 to-black/20 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
         onClick={onClose}
       />
 
-      {/* Modal wrapper: rounded + overflow-hidden so corners stay rounded */}
+      {/* Modal Shell */}
       <div
-        className="relative z-10 w-[86%] h-[92%] rounded-xl shadow-2xl bg-slate-100 dark:bg-gray-900 text-slate-900 dark:text-slate-100 overflow-hidden"
+        className="relative z-10 w-[90%] h-[92%] max-w-7xl rounded-2xl shadow-2xl shadow-black/20 overflow-hidden flex flex-col bg-white dark:bg-[#0f1117] text-slate-900 dark:text-slate-100 border border-gray-100/80 dark:border-gray-800/80"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Layout: header (fixed inside modal) + scrollable content */}
-        <div className="h-full flex flex-col">
-          {/* Header: only title + action buttons (non-scrolling) */}
-          <div className="shrink-0 px-8 pt-8 pb-4 flex items-start justify-between bg-transparent">
-            <div className="w-full pr-6">
-              <input
-                className="text-3xl font-extrabold w-full bg-transparent outline-none mb-2 py-2"
-                placeholder="Task Name"
-                value={local.title}
-                onChange={(e) => setLocal({ ...local, title: e.target.value })}
-              />
-            </div>
+        {/* ─── Header Bar ─── */}
+        <div className="shrink-0 flex items-center justify-between gap-4 px-7 py-4 border-b border-gray-100 dark:border-gray-800/80 bg-white/80 dark:bg-[#0f1117]/90 backdrop-blur-sm">
+          {/* Title input */}
+          <input
+            className="flex-1 text-xl font-bold bg-transparent outline-none placeholder-gray-300 dark:placeholder-gray-600 truncate"
+            placeholder="Task name…"
+            value={local.title}
+            onChange={(e) => setLocal({ ...local, title: e.target.value })}
+          />
 
-            <div className="flex gap-3 ml-4">
-              <button
-                type="button"
-                onClick={() =>
-                  assigneePhones.forEach(phone => {
-                    if (!currentProjectName) return;
-                    handleWhatsappTask(phone, task, currentProjectName);
-                  })
-                }
-                title="Whatsapp assignee"
-                aria-label="Send Whatsapp to assignee"
-                className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium shadow-sm
-              bg-green-500/95 hover:bg-green-600/95 text-white
-              dark:bg-green-300/20 dark:text-white dark:hover:bg-green-400/30
-              transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-green-300"
-              >
-                <WhatsappIcon />
-              </button>
+          {/* Action buttons */}
+          <div className="flex items-center gap-2 shrink-0">
+            {/* WhatsApp */}
+            <button
+              type="button"
+              onClick={() =>
+                assigneePhones.forEach((phone) => {
+                  if (!currentProjectName) return;
+                  handleWhatsappTask(phone, task, currentProjectName);
+                })
+              }
+              title="Send via WhatsApp"
+              className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-800/30 transition-colors"
+            >
+              <WhatsappIcon />
+            </button>
 
-              <button
-                type="button"
-                disabled={isLoading || uploading}
-                onClick={handleSaveClick}
-                className="group inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold
-             bg-gradient-to-r from-sky-500 to-sky-600 text-white
-             hover:from-sky-600 hover:to-sky-700
-             active:scale-95 transition-all duration-300
-             dark:from-sky-600 dark:to-sky-700 dark:hover:from-sky-700 dark:hover:to-sky-800"
-              >
-                {isLoading ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <>
-                    <Save
-                      size={16}
-                      className="transition-transform duration-300 group-hover:-rotate-6"
-                    />
-                    <span>Save</span>
-                  </>
-                )}
-              </button>
+            {/* Delete */}
+            <button
+              type="button"
+              onClick={handleDeleteClick}
+              disabled={isLoading}
+              title="Delete task"
+              className="p-2 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-800/30 transition-colors"
+            >
+              {isLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Trash size={16} />
+              )}
+            </button>
 
-              <button
-                type="button"
-                onClick={onClose}
-                className="ml-2 flex items-center gap-2 px-2 py-2 rounded-lg text-sm font-medium
-                bg-slate-100 dark:bg-gray-900
-               text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800
-               transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-200"
-              >
-                <X size={24} />
-              </button>
-            </div>
+            {/* Save */}
+            <button
+              type="button"
+              disabled={isLoading || uploading}
+              onClick={handleSaveClick}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-gradient-to-r from-sky-500 to-sky-600 hover:from-sky-600 hover:to-sky-700 text-white shadow-sm shadow-sky-200/50 dark:shadow-sky-900/30 active:scale-95 transition-all duration-150 disabled:opacity-60"
+            >
+              {isLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <>
+                  <Save size={15} />
+                  <span>Save</span>
+                </>
+              )}
+            </button>
+
+            {/* Close */}
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-2 rounded-xl text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            >
+              <X size={20} />
+            </button>
           </div>
+        </div>
 
-          {/* Scrollable content */}
-          <div className="flex-1 overflow-auto px-8 pb-8">
-            {/* Assignee / Priority / Dates (moved to scrollable area) */}
-            <div className="grid grid-cols-2 gap-6 mb-6">
-              <div className="flex items-center gap-4 text-base">
-                <label className="w-28 text-sm font-medium">Assignee</label>
+        {/* ─── Body ─── */}
+        <div className="flex-1 overflow-hidden flex">
+          {/* ─── Left Panel: meta + description ─── */}
+          <div className="flex flex-col w-[55%] border-r border-gray-100 dark:border-gray-800/60 overflow-y-auto">
+            {/* Meta fields */}
+            <div className="px-7 py-5 space-y-4 border-b border-gray-100 dark:border-gray-800/60 bg-gray-50/60 dark:bg-white/[0.02]">
+              {/* Assignee */}
+              <div className="flex items-center gap-4">
+                <span className="w-24 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider shrink-0">
+                  Assignee
+                </span>
                 <div className="flex-1">
                   <AssigneeSelect
                     multiple
                     value={(local.taskAssignees ?? [])
-                      .map(a => a.id)
+                      .map((a) => a.id)
                       .filter(Boolean)}
                     team={team}
                     dark={dark}
                     onChange={(v) => {
                       const memberIds = Array.isArray(v) ? v : [];
-
                       setLocal((s: any) => ({
                         ...s,
-                        taskAssignees: memberIds.map(id => ({ id })),
+                        taskAssignees: memberIds.map((id) => ({ id })),
                       }));
                     }}
                   />
                 </div>
               </div>
 
-              <div className="flex items-center gap-4 text-base">
-                <label className="w-28 text-sm font-medium">Priority</label>
+              {/* Priority */}
+              <div className="flex items-center gap-4">
+                <span className="w-24 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider shrink-0">
+                  Priority
+                </span>
                 <div className="flex-1">
                   <PrioritySelect
                     value={local.priority}
@@ -461,269 +467,263 @@ export default function TaskModal({
                 </div>
               </div>
 
-              <div className="flex items-center gap-4 text-base">
-                <label className="w-28 text-sm font-medium">Start</label>
+              {/* Dates row */}
+              <div className="flex items-center gap-4">
+                <span className="w-24 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider shrink-0">
+                  Start
+                </span>
                 <input
                   type="date"
                   value={local.startDate || ""}
                   onChange={(e) =>
                     setLocal({ ...local, startDate: e.target.value })
                   }
-                  className="border px-3 py-2 rounded-lg bg-transparent border-gray-200 dark:border-gray-700 text-sm"
+                  className="px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/60 text-sm outline-none focus:border-sky-400 dark:focus:border-sky-500 transition-colors"
                 />
-              </div>
-
-              <div className="flex items-center gap-4 text-base">
-                <label className="w-28 text-sm font-medium">Due</label>
+                <span className="text-gray-300 dark:text-gray-600 text-xs mx-1">
+                  →
+                </span>
+                <span className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                  Due
+                </span>
                 <input
                   type="date"
                   value={local.dueDate || ""}
                   onChange={(e) =>
                     setLocal({ ...local, dueDate: e.target.value })
                   }
-                  className="border px-3 py-2 rounded-lg bg-transparent border-gray-200 dark:border-gray-700 text-sm"
+                  className="px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/60 text-sm outline-none focus:border-sky-400 dark:focus:border-sky-500 transition-colors"
                 />
               </div>
             </div>
 
-            <div className="mt-2 grid grid-cols-2 gap-8">
-              <div>
-                <h4 className="font-semibold text-lg mb-3">Description</h4>
-                <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-3 min-h-[220px] bg-transparent">
-                  <ReactQuill
-                    id="description"
-                    theme="snow"
-                    value={local?.description}
-                    onChange={(value: any) =>
-                      setLocal({ ...local, description: value })
-                    }
-                    placeholder="Description"
-                  />
-                </div>
-
-                {/* Delete button moved inside scrollable content (not fixed) */}
-                <div className="mt-25">
-                  <button
-                    onClick={handleDeleteClick}
-                    disabled={isLoading}
-                    className="px-4 py-2 bg-gray-800 hover:bg-red-400 text-white rounded-lg shadow-md text-sm flex gap-2"
-                    title="Delete task"
-                  >
-                    {isLoading ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <>
-                        <Trash size={16} /> Delete task
-                      </>
-                    )}
-                  </button>
-                </div>
+            {/* Description */}
+            <div className="flex-1 px-7 py-5 flex flex-col">
+              <h4 className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-3">
+                Description
+              </h4>
+              <div className="flex-1 rounded-xl border border-gray-100 dark:border-gray-700/60 overflow-hidden bg-white dark:bg-gray-800/30 min-h-[200px]">
+                <ReactQuill
+                  id="description"
+                  theme="snow"
+                  value={local?.description}
+                  onChange={(value: any) =>
+                    setLocal({ ...local, description: value })
+                  }
+                  placeholder="Add a description…"
+                />
               </div>
+            </div>
+          </div>
 
-              <div>
-                <h4 className="font-semibold text-lg mb-3">Comments</h4>
+          {/* ─── Right Panel: comments ─── */}
+          <div className="flex flex-col w-[45%] overflow-hidden">
+            {/* Comment list */}
+            <div className="flex-1 overflow-y-auto px-6 py-5">
+              <h4 className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-4">
+                Comments
+                {(local.comments || []).length > 0 && (
+                  <span className="ml-2 inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-sky-100 dark:bg-sky-900/40 text-sky-600 dark:text-sky-400 text-xs font-bold">
+                    {(local.comments || []).length}
+                  </span>
+                )}
+              </h4>
 
-                <div className="max-h-[40vh] overflow-y-auto border rounded-lg p-3 border-gray-200 dark:border-gray-700 bg-transparent">
-                  {(local.comments || []).length === 0 && (
-                    <div className="text-sm text-gray-500 dark:text-gray-400 py-4">
-                      No comments yet.
-                    </div>
-                  )}
-
-                  {(local.comments || []).map((c) => (
-                    <div
-                      key={c.id}
-                      className="p-4 border-b border-gray-100 dark:border-gray-800"
-                    >
-                      <div className="text-sm font-medium mb-2">
-                        {c.author}{" "}
-                        <span className="text-xs text-gray-400 dark:text-gray-500">
-                          {" "}
-                          {new Date(c.createdAt).toLocaleString()}
-                        </span>
-                      </div>
-                      <div className="text-sm mt-1 mb-3">{parse(c.body)}</div>
-
-                      {c.attachments && c.attachments.length > 0 && (
-                        <div className="mt-2">
-                          <div className="text-xs text-gray-400 mb-2">
-                            Attachments:
+              {(local.comments || []).length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-gray-300 dark:text-gray-600 gap-3">
+                  <FaComment size={32} />
+                  <p className="text-sm">No comments yet</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {(local.comments || []).map((c) => {
+                    const initials = (c.author ?? "?")
+                      .slice(0, 2)
+                      .toUpperCase();
+                    const hue = c.author
+                      ? c.author
+                          .split("")
+                          .reduce(
+                            (a: number, ch: string) => a + ch.charCodeAt(0),
+                            0,
+                          ) % 360
+                      : 200;
+                    return (
+                      <div key={c.id} className="flex gap-3 group">
+                        {/* Avatar */}
+                        <div
+                          className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 shadow-sm"
+                          style={{ background: `hsl(${hue},65%,52%)` }}
+                        >
+                          {initials}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-baseline gap-2 mb-1">
+                            <span className="text-sm font-semibold">
+                              {c.author}
+                            </span>
+                            <span className="text-xs text-gray-400 dark:text-gray-500">
+                              {new Date(c.createdAt).toLocaleString(undefined, {
+                                month: "short",
+                                day: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </span>
+                          </div>
+                          <div className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed bg-gray-50 dark:bg-gray-800/40 rounded-xl px-4 py-2.5 border border-gray-100 dark:border-gray-700/40">
+                            {parse(c.body)}
                           </div>
 
-                          <div className="flex flex-col gap-3">
-                            {c.attachments.map((a: any) => {
-                              const isImage =
-                                a.type?.startsWith("image/") ||
-                                /\.(png|jpg|jpeg|gif|webp)$/i.test(a.name);
+                          {/* Attachments */}
+                          {c.attachments && c.attachments.length > 0 && (
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {c.attachments.map((a: any) => {
+                                const isImage =
+                                  a.type?.startsWith("image/") ||
+                                  /\.(png|jpg|jpeg|gif|webp)$/i.test(a.name);
+                                const isVideo =
+                                  a.type?.startsWith("video/") ||
+                                  /\.(mp4|webm|mov)$/i.test(a.name);
 
-                              const isVideo =
-                                a.type?.startsWith("video/") ||
-                                /\.(mp4|webm|mov)$/i.test(a.name);
-
-                              return (
-                                <div
-                                  key={a.id}
-                                  className="flex flex-col p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-transparent gap-2"
-                                >
-                                  {/* PREVIEW */}
-                                  {a.url && (
-                                    <>
-                                      {isImage && (
-                                        <img
+                                return (
+                                  <div
+                                    key={a.id}
+                                    className="rounded-xl overflow-hidden border border-gray-100 dark:border-gray-700/50 bg-white dark:bg-gray-800/40 shadow-sm"
+                                  >
+                                    {a.url && isImage && (
+                                      <img
+                                        src={a.url}
+                                        alt={a.name}
+                                        onClick={() =>
+                                          openMediaViewer(a.url, "image")
+                                        }
+                                        className="max-h-44 max-w-[220px] object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                                        title="Click to expand"
+                                      />
+                                    )}
+                                    {a.url && isVideo && (
+                                      <div
+                                        className="relative cursor-pointer"
+                                        onClick={() =>
+                                          openMediaViewer(a.url, "video")
+                                        }
+                                      >
+                                        <video
                                           src={a.url}
-                                          alt={a.name}
-                                          onClick={() =>
-                                            openMediaViewer(a.url, "image")
-                                          }
-                                          className="max-h-60 rounded-lg object-cover cursor-pointer hover:opacity-80 transition-opacity"
-                                          title="Click to view full size"
+                                          className="max-h-44 max-w-[220px]"
                                         />
-                                      )}
-
-                                      {isVideo && (
-                                        <div className="relative">
-                                          <video
-                                            src={a.url}
-                                            className="max-h-60 rounded-lg cursor-pointer"
-                                            onClick={() =>
-                                              openMediaViewer(a.url, "video")
-                                            }
-                                            title="Click to view in modal"
-                                          />
-                                          <div
-                                            className="absolute inset-0 flex items-center justify-center pointer-events-none"
-                                            aria-hidden="true"
-                                          >
-                                            <div className="w-16 h-16 rounded-full bg-black/50 flex items-center justify-center">
-                                              <div className="w-0 h-0 border-t-8 border-t-transparent border-l-12 border-l-white border-b-8 border-b-transparent ml-1"></div>
-                                            </div>
+                                        <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                                          <div className="w-10 h-10 rounded-full bg-white/80 flex items-center justify-center">
+                                            <div className="w-0 h-0 border-t-[7px] border-t-transparent border-l-[12px] border-l-gray-800 border-b-[7px] border-b-transparent ml-1" />
                                           </div>
                                         </div>
-                                      )}
-                                    </>
-                                  )}
-
-                                  {/* INFO */}
-                                  <div className="flex items-center justify-between">
-                                    <div className="text-sm">
-                                      {a.name}{" "}
-                                      <span className="text-xs text-gray-400">
-                                        ({Math.round((a.size || 0) / 1024)} KB)
-                                      </span>
-                                    </div>
+                                      </div>
+                                    )}
+                                    {!isImage && !isVideo && (
+                                      <div className="flex items-center gap-2 px-3 py-2 text-sm">
+                                        <File
+                                          size={15}
+                                          className="text-gray-400"
+                                        />
+                                        <span className="max-w-[160px] truncate text-gray-600 dark:text-gray-300">
+                                          {a.name}
+                                        </span>
+                                        <span className="text-xs text-gray-400">
+                                          ({Math.round((a.size || 0) / 1024)}KB)
+                                        </span>
+                                      </div>
+                                    )}
                                   </div>
-                                </div>
-                              );
-                            })}
-                          </div>
+                                );
+                              })}
+                            </div>
+                          )}
                         </div>
-                      )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Comment composer */}
+            <div className="shrink-0 border-t border-gray-100 dark:border-gray-800/60 px-6 py-4 bg-gray-50/50 dark:bg-white/[0.02] space-y-3">
+              <div className="rounded-xl border border-gray-200 dark:border-gray-700/60 overflow-hidden bg-white dark:bg-gray-800/30">
+                <ReactQuill
+                  id="commentText"
+                  theme="snow"
+                  value={commentText}
+                  onChange={setCommentText}
+                  placeholder="Write a comment…"
+                />
+              </div>
+
+              {/* Pending files */}
+              {files.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {files.map((f, i) => (
+                    <div
+                      key={i}
+                      className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-sky-200 dark:border-sky-700/40 bg-sky-50 dark:bg-sky-900/20 text-xs text-sky-700 dark:text-sky-300"
+                    >
+                      <File size={13} />
+                      <span className="max-w-[120px] truncate">{f.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => removePendingFile(i)}
+                        className="text-sky-400 hover:text-red-500 transition-colors ml-1"
+                      >
+                        <X size={12} />
+                      </button>
                     </div>
                   ))}
                 </div>
+              )}
 
-                <div className="mt-4">
-                  <div className="gap-2">
-                    <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-3 bg-transparent">
-                      <ReactQuill
-                        id="commentText"
-                        theme="snow"
-                        value={commentText}
-                        onChange={setCommentText}
-                        placeholder="Write a comment"
-                      />
-                    </div>
+              <div className="flex items-center justify-between gap-2">
+                {/* Attach files */}
+                <label className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-800/50 text-sm text-gray-600 dark:text-gray-300 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                  <Paperclip size={15} className="text-gray-400" />
+                  <span>Attach</span>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    accept=".png,.jpg,.jpeg,.pdf,.docx,video/*"
+                    onChange={onFileChange}
+                    className="hidden"
+                  />
+                </label>
 
-                    <div className="flex gap-4 my-4 items-center">
-                      <label
-                        className="flex items-center gap-2 px-4 py-2 rounded-lg border 
-             border-gray-300 dark:border-gray-700 bg-slate-100 dark:bg-gray-900 
-             text-slate-700 dark:text-slate-200 cursor-pointer text-sm
-             hover:bg-gray-50 dark:hover:bg-gray-800 transition 
-             focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-300 shadow-sm"
-                      >
-                        <Paperclip
-                          size={18}
-                          className="text-slate-600 dark:text-slate-300"
-                        />
-                        <span>Attach files</span>
-
-                        <input
-                          ref={fileInputRef}
-                          type="file"
-                          multiple
-                          accept=".png,.jpg,.jpeg,.pdf,.docx,video/*"
-                          onChange={onFileChange}
-                          className="hidden"
-                        />
-                      </label>
-
-                      <button
-                        onClick={handleAddComment}
-                        disabled={uploading}
-                        className={`group inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold
-              bg-gradient-to-r from-sky-500 to-sky-600 text-white
-              hover:from-sky-600 hover:to-sky-700
-              active:scale-95 transition-all duration-300
-              ${uploading ? "opacity-60 cursor-not-allowed" : "cursor-pointer"
-                          }`}
-                      >
-                        {uploading ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <>
-                            <MessageSquare
-                              size={16}
-                              className="transition-transform duration-300 group-hover:-rotate-6"
-                            />
-                            <span>Comment</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </div>
-
-                  {files.length > 0 && (
-                    <div className="mt-2">
-                      <div className="text-sm text-gray-400 mb-2">
-                        Files to upload:
-                      </div>
-                      <div className="flex gap-3 flex-wrap mt-2">
-                        {files.map((f, i) => (
-                          <div
-                            key={i}
-                            className="px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 text-sm flex items-center gap-3 bg-transparent"
-                          >
-                            <div className="flex items-center gap-3">
-                              <File size={16} />
-                              <div className="max-w-xs truncate">{f.name}</div>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => removePendingFile(i)}
-                              className="text-sm text-red-500"
-                            >
-                              Remove
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
+                {/* Send comment */}
+                <button
+                  onClick={handleAddComment}
+                  disabled={uploading}
+                  className="inline-flex items-center gap-2 px-4 py-1.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-sky-500 to-sky-600 hover:from-sky-600 hover:to-sky-700 text-white active:scale-95 transition-all duration-150 disabled:opacity-60 shadow-sm shadow-sky-200/40 dark:shadow-sky-900/30"
+                >
+                  {uploading ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <>
+                      <Send size={14} />
+                      <span>Send</span>
+                    </>
                   )}
-                </div>
+                </button>
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Media Viewer Modal */}
+      {/* Media Viewer */}
       <MediaModal
         isOpen={mediaViewerOpen}
         url={mediaViewerUrl}
         type={mediaViewerType}
         onClose={closeMediaViewer}
       />
-    </div >
+    </div>
   );
 }
