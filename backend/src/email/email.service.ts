@@ -59,12 +59,12 @@ export class EmailService {
       .verify()
       .then(() => {
         this.logger.log(
-          `SMTP transporter connected: ${host}:${port} (secure=${secure})`
+          `SMTP transporter connected: ${host}:${port} (secure=${secure})`,
         );
       })
       .catch((err) => {
         this.logger.warn(
-          "SMTP transporter verification failed: " + err?.message
+          "SMTP transporter verification failed: " + err?.message,
         );
       });
   }
@@ -83,7 +83,7 @@ export class EmailService {
       this.logger.debug(
         `Email skipped (EMAIL_ENABLED=false): "${opts.subject}" → ${
           Array.isArray(opts.to) ? opts.to.join(",") : opts.to
-        }`
+        }`,
       );
       return { ok: true, skipped: true };
     }
@@ -106,7 +106,7 @@ export class EmailService {
       this.logger.log(
         `Email sent: ${info.messageId} to ${
           Array.isArray(opts.to) ? opts.to.join(",") : opts.to
-        }`
+        }`,
       );
       return { ok: true, info };
     } catch (error) {
