@@ -340,12 +340,23 @@ export const TaskCard = React.memo(
               </div>
             )}
 
-            <div className="mt-2">
+            <div className="mt-2 flex flex-wrap gap-1.5 items-center">
               <span
                 className={`inline-block px-3 py-1 rounded-full text-xs font-semibold tracking-wide ${pill.classes}`}
               >
                 {pill.label}
               </span>
+              {(
+                task.labels as { name: string; color: string }[] | undefined
+              )?.map((lb, i) => (
+                <span
+                  key={i}
+                  className="px-2 py-0.5 rounded-full text-[10px] font-semibold text-white"
+                  style={{ background: lb.color }}
+                >
+                  {lb.name}
+                </span>
+              ))}
             </div>
 
             <div className="flex gap-2 flex-wrap mt-1">

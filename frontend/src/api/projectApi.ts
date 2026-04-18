@@ -50,7 +50,7 @@ export async function getState(workspaceId: string) {
     `${BASE}/api/project-management/state/${workspaceId}`,
     {
       method: "GET",
-    }
+    },
   );
   const parsed = await parseJson(res);
   if (!res.ok) throw makeError(res, parsed);
@@ -103,23 +103,45 @@ export async function deleteProjectApi(id: string) {
 /**
  * Tasks
  */
-export async function getTasks(projectId?: string, startDate?: string, endDate?: string) {
-  const q = projectId ? `?projectId=${encodeURIComponent(projectId)}&startDate=${startDate}&endDate=${endDate}` : "";
+export async function getTasks(
+  projectId?: string,
+  startDate?: string,
+  endDate?: string,
+) {
+  const q = projectId
+    ? `?projectId=${encodeURIComponent(projectId)}&startDate=${startDate}&endDate=${endDate}`
+    : "";
   const res = await apiFetch(`${BASE}/api/tasks${q}`, { method: "GET" });
   const parsed = await parseJson(res);
   if (!res.ok) throw makeError(res, parsed);
   return parsed;
 }
 
-export async function getMyTasks(memberId?: string, workspaceId?: string, startDate?: string, endDate?: string) {
-  const res = await apiFetch(`${BASE}/api/tasks/me/${memberId}?workspaceId=${workspaceId}&startDate=${startDate}&endDate=${endDate}`, { method: "GET" });
+export async function getMyTasks(
+  memberId?: string,
+  workspaceId?: string,
+  startDate?: string,
+  endDate?: string,
+) {
+  const res = await apiFetch(
+    `${BASE}/api/tasks/me/${memberId}?workspaceId=${workspaceId}&startDate=${startDate}&endDate=${endDate}`,
+    { method: "GET" },
+  );
   const parsed = await parseJson(res);
   if (!res.ok) throw makeError(res, parsed);
   return parsed;
 }
 
-export async function getReportTasks(workspaceId?: string, memberId?: string, startDate?: string, endDate?: string) {
-  const res = await apiFetch(`${BASE}/api/tasks/workspace/${workspaceId}?memberId=${memberId}&startDate=${startDate}&endDate=${endDate}`, { method: "GET" });
+export async function getReportTasks(
+  workspaceId?: string,
+  memberId?: string,
+  startDate?: string,
+  endDate?: string,
+) {
+  const res = await apiFetch(
+    `${BASE}/api/tasks/workspace/${workspaceId}?memberId=${memberId}&startDate=${startDate}&endDate=${endDate}`,
+    { method: "GET" },
+  );
   const parsed = await parseJson(res);
   if (!res.ok) throw makeError(res, parsed);
   return parsed;
@@ -180,7 +202,12 @@ export async function getTaskComments(taskId: string) {
 
 export async function createComment(
   taskId: string,
-  payload: { author: string; body: string; memberId: string; attachments?: any[] }
+  payload: {
+    author: string;
+    body: string;
+    memberId: string;
+    attachments?: any[];
+  },
 ) {
   const res = await apiFetch(`${BASE}/api/tasks/${taskId}/comments`, {
     method: "POST",
@@ -195,7 +222,7 @@ export async function createComment(
 export async function deleteComment(taskId: string, commentId: string) {
   const res = await apiFetch(
     `${BASE}/api/tasks/${taskId}/comments/${commentId}`,
-    { method: "DELETE" }
+    { method: "DELETE" },
   );
   const parsed = await parseJson(res);
   if (!res.ok) throw makeError(res, parsed);
@@ -205,7 +232,7 @@ export async function deleteComment(taskId: string, commentId: string) {
 export async function updateComment(
   taskId: string,
   commentId: string,
-  patch: { body?: string; attachments?: any[] }
+  patch: { body?: string; attachments?: any[] },
 ) {
   const res = await apiFetch(
     `${BASE}/api/tasks/${taskId}/comments/${commentId}`,
@@ -213,7 +240,7 @@ export async function updateComment(
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(patch),
-    }
+    },
   );
   const parsed = await parseJson(res);
   if (!res.ok) throw makeError(res, parsed);
@@ -319,6 +346,134 @@ export async function uploadFileApi(file: File, folder = "") {
   form.append("file", file);
   if (folder) form.append("folder", folder);
   const res = await apiFetch(`${BASE}/upload`, { method: "POST", body: form });
+  const parsed = await parseJson(res);
+  if (!res.ok) throw makeError(res, parsed);
+  return parsed;
+}
+
+/**
+ * Activity Log
+ */
+export async function getActivityLog(
+  workspaceId: string,
+  limit = 100,
+  cursor?: string,
+) {
+  const params = new URLSearchParams({ workspaceId, limit: String(limit) });
+  if (cursor) params.set("cursor", cursor);
+  const res = await apiFetch(`${BASE}/api/activity-log?${params}`, {
+    method: "GET",
+  });
+  const parsed = await parseJson(res);
+  if (!res.ok) throw makeError(res, parsed);
+  return parsed;
+}
+
+/**
+ * Dashboard
+ */
+export async function getDashboardStats(workspaceId: string) {
+  const res = await apiFetch(
+    `${BASE}/api/dashboard?workspaceId=${workspaceId}`,
+    { method: "GET" },
+  );
+  const parsed = await parseJson(res);
+  if (!res.ok) throw makeError(res, parsed);
+  return parsed;
+}
+
+/**
+ * Sprints
+ */
+export async function getSprints(workspaceId: string) {
+  const res = await apiFetch(`${BASE}/api/sprints?workspaceId=${workspaceId}`, {
+    method: "GET",
+  });
+  const parsed = await parseJson(res);
+  if (!res.ok) throw makeError(res, parsed);
+  return parsed;
+}
+
+export async function createSprint(payload: {
+  workspaceId: string;
+  name: string;
+  description?: string;
+  startDate?: string;
+  endDate?: string;
+}) {
+  const res = await apiFetch(`${BASE}/api/sprints`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const parsed = await parseJson(res);
+  if (!res.ok) throw makeError(res, parsed);
+  return parsed;
+}
+
+export async function updateSprint(
+  id: string,
+  payload: {
+    name?: string;
+    description?: string;
+    status?: string;
+    startDate?: string;
+    endDate?: string;
+  },
+) {
+  const res = await apiFetch(`${BASE}/api/sprints/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const parsed = await parseJson(res);
+  if (!res.ok) throw makeError(res, parsed);
+  return parsed;
+}
+
+export async function deleteSprint(id: string) {
+  const res = await apiFetch(`${BASE}/api/sprints/${id}`, {
+    method: "DELETE",
+  });
+  const parsed = await parseJson(res);
+  if (!res.ok) throw makeError(res, parsed);
+  return parsed;
+}
+
+export async function assignTaskToSprint(sprintId: string, taskId: string) {
+  const res = await apiFetch(`${BASE}/api/sprints/${sprintId}/assign-task`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ taskId }),
+  });
+  const parsed = await parseJson(res);
+  if (!res.ok) throw makeError(res, parsed);
+  return parsed;
+}
+
+/**
+ * Direct Messages
+ */
+export async function getDmConversation(
+  workspaceId: string,
+  memberA: string,
+  memberB: string,
+  limit = 60,
+) {
+  const res = await apiFetch(
+    `${BASE}/api/dm/conversation?workspaceId=${workspaceId}&memberA=${memberA}&memberB=${memberB}&limit=${limit}`,
+    { method: "GET" },
+  );
+  const parsed = await parseJson(res);
+  if (!res.ok) throw makeError(res, parsed);
+  return parsed;
+}
+
+export async function getDmUnread(workspaceId: string, memberId: string) {
+  const res = await apiFetch(
+    `${BASE}/api/dm/unread?workspaceId=${workspaceId}&memberId=${memberId}`,
+    { method: "GET" },
+  );
   const parsed = await parseJson(res);
   if (!res.ok) throw makeError(res, parsed);
   return parsed;

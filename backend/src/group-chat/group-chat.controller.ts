@@ -19,4 +19,10 @@ export class GroupChatController {
   ) {
     return this.chatService.getMessages(workspaceId, Math.min(limit, 200));
   }
+
+  /** GET /api/group-chat/pinned?workspaceId=xxx */
+  @Get("pinned")
+  getPinned(@Query("workspaceId") workspaceId: string) {
+    return this.chatService.getPinnedMessages(workspaceId);
+  }
 }

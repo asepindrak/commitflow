@@ -17,6 +17,10 @@ import { UploadModule } from "./upload/upload.module";
 import { ProjectManagementModule } from "./project-management/project-management.module";
 import { EmailModule } from "./email/email.module";
 import { GroupChatModule } from "./group-chat/group-chat.module";
+import { ActivityLogModule } from "./activity-log/activity-log.module";
+import { DashboardModule } from "./dashboard/dashboard.module";
+import { SprintModule } from "./sprint/sprint.module";
+import { DirectMessageModule } from "./direct-message/direct-message.module";
 import { APP_GUARD } from "@nestjs/core";
 
 @Module({
@@ -37,6 +41,10 @@ import { APP_GUARD } from "@nestjs/core";
     ProjectManagementModule,
     EmailModule,
     GroupChatModule,
+    ActivityLogModule,
+    DashboardModule,
+    SprintModule,
+    DirectMessageModule,
   ],
   controllers: [AppController, AskController],
   providers: [

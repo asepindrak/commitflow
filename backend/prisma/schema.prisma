@@ -136,6 +136,11 @@ model Task {
   dueDate    String?
   finishDate DateTime?
   priority   String?
+  labels     Json?     // Array of { name: string, color: string }
+  sprintId   String?
+  dependencies Json?   // Array of { taskId: string, type: "blocked_by" | "blocks" }
+  timeEntries  Json?   // Array of { memberId, memberName, start, end?, duration? }
+  recurrence   Json?   // { pattern: "daily"|"weekly"|"monthly"|"custom", interval?: number, daysOfWeek?: number[], nextDue?: string }
 
   comments Comment[] @relation("TaskComments")
 
@@ -196,10 +201,59 @@ model GroupChatMessage {
   content     String   @db.Text
   attachments Json?
   replyTo     Json?
+  isPinned    Boolean  @default(false)
   createdAt   DateTime @default(now())
 
   @@index([workspaceId, createdAt])
   @@map("group_chat_message")
+}
+
+model ActivityLog {
+  id          String   @id @default(cuid())
+  workspaceId String
+  memberId    String?
+  memberName  String?
+  action      String   // e.g. "task.created", "task.status_changed", "project.created", "member.added"
+  entity      String?  // e.g. "task", "project", "member", "comment"
+  entityId    String?
+  entityName  String?  // human-readable, e.g. task title or project name
+  meta        Json?    // extra details, e.g. { from: "todo", to: "done" }
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId, createdAt])
+  @@map("activity_log")
+}
+
+model Sprint {
+  id          String    @id @default(uuid())
+  workspaceId String
+  name        String
+  description String?
+  status      String    @default("planning") // planning, active, completed
+  startDate   String?
+  endDate     String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime?
+
+  @@index([workspaceId])
+  @@map("sprint")
+}
+
+model DirectMessage {
+  id          String   @id @default(cuid())
+  workspaceId String
+  senderId    String
+  senderName  String
+  senderPhoto String?
+  receiverId  String
+  content     String   @db.Text
+  attachments Json?
+  isRead      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId, senderId, receiverId])
+  @@index([workspaceId, receiverId, isRead])
+  @@map("direct_message")
 }
 
 enum Role {

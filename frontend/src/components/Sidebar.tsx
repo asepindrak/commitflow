@@ -10,8 +10,16 @@ import {
   ListTodo,
   Table,
   MessageSquare,
+  MessagesSquare,
+  Activity,
+  LayoutDashboard,
+  Calendar,
+  Target,
+  MessageCircle,
+  Webhook,
 } from "lucide-react";
 import type { Project, TeamMember, Workspace } from "../types";
+import { usePresenceStore } from "../utils/usePresenceStore";
 import { motion, AnimatePresence } from "framer-motion";
 import packageJson from "../../package.json";
 import Swal from "sweetalert2";
@@ -72,6 +80,18 @@ function nameToHue(name = "") {
   return name.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0) % 360;
 }
 
+function timeAgo(dateStr?: string): string {
+  if (!dateStr) return "";
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d ago`;
+}
+
 function handleKeyActivate(e: any, fn: any) {
   if (e.key === "Enter" || e.key === " ") {
     e.preventDefault();
@@ -114,6 +134,8 @@ export default function Sidebar({
   isAdmin: boolean;
   onOpenViewMode: (view: any) => void;
 }) {
+  const presenceMembers = usePresenceStore((s) => s.members);
+
   const [isDark, setIsDark] = useState<boolean>(() => {
     try {
       return (
@@ -443,6 +465,25 @@ export default function Sidebar({
               )}
             </AnimatePresence>
           </div>
+          {/* Dashboard Menu */}
+          <div className="mb-2 px-2">
+            <button
+              onClick={() => onOpenViewMode("DASHBOARD")}
+              className={`
+                w-full flex items-center gap-3 px-3 py-2 rounded-xl
+                transition-all duration-150
+                hover:bg-emerald-50 dark:hover:bg-emerald-900/20
+                text-emerald-600 dark:text-emerald-300
+                ${collapsed ? "justify-center" : ""}
+              `}
+            >
+              <LayoutDashboard size={17} />
+              {!collapsed && (
+                <span className="font-semibold text-sm">Dashboard</span>
+              )}
+            </button>
+          </div>
+
           {/* Report Menu */}
           <div className="mb-2 px-2">
             <button
@@ -486,16 +527,124 @@ export default function Sidebar({
             <button
               onClick={() => onOpenViewMode("GROUP_CHAT")}
               className={`
-              w-full flex items-center gap-3 px-3 py-2 rounded-xl
-              transition-all duration-150
-              hover:bg-violet-50 dark:hover:bg-violet-900/20
-              text-violet-600 dark:text-violet-300
-              ${collapsed ? "justify-center" : ""}
-            `}
+                w-full flex items-center gap-3 px-3 py-2.5 rounded-xl
+                transition-all duration-200 group
+                bg-gradient-to-r from-violet-500/10 via-fuchsia-500/10 to-pink-500/10
+                dark:from-violet-500/15 dark:via-fuchsia-500/15 dark:to-pink-500/15
+                hover:from-violet-500/20 hover:via-fuchsia-500/20 hover:to-pink-500/20
+                dark:hover:from-violet-500/25 dark:hover:via-fuchsia-500/25 dark:hover:to-pink-500/25
+                border border-violet-200/60 dark:border-violet-700/40
+                hover:border-violet-300 dark:hover:border-violet-600
+                hover:shadow-md hover:shadow-violet-200/30 dark:hover:shadow-violet-900/30
+                ${collapsed ? "justify-center" : ""}
+              `}
             >
-              <MessageSquare size={17} />
+              <div className="relative">
+                <MessagesSquare
+                  size={18}
+                  className="text-violet-500 dark:text-violet-400 group-hover:scale-110 transition-transform duration-200"
+                />
+                <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-400 ring-2 ring-white dark:ring-gray-900" />
+              </div>
               {!collapsed && (
-                <span className="font-semibold text-sm">Group Chat</span>
+                <span className="font-bold text-sm bg-gradient-to-r from-violet-600 via-fuchsia-500 to-pink-500 dark:from-violet-400 dark:via-fuchsia-400 dark:to-pink-400 bg-clip-text text-transparent">
+                  Group Chat
+                </span>
+              )}
+            </button>
+          </div>
+
+          {/* Activity Log Menu */}
+          <div className="mb-2 px-2">
+            <button
+              onClick={() => onOpenViewMode("ACTIVITY_LOG")}
+              className={`
+                w-full flex items-center gap-3 px-3 py-2 rounded-xl
+                transition-all duration-150
+                hover:bg-indigo-50 dark:hover:bg-indigo-900/20
+                text-indigo-600 dark:text-indigo-300
+                ${collapsed ? "justify-center" : ""}
+              `}
+            >
+              <Activity size={17} />
+              {!collapsed && (
+                <span className="font-semibold text-sm">Activity Log</span>
+              )}
+            </button>
+          </div>
+
+          {/* Calendar Menu */}
+          <div className="mb-2 px-2">
+            <button
+              onClick={() => onOpenViewMode("CALENDAR")}
+              className={`
+                w-full flex items-center gap-3 px-3 py-2 rounded-xl
+                transition-all duration-150
+                hover:bg-orange-50 dark:hover:bg-orange-900/20
+                text-orange-600 dark:text-orange-300
+                ${collapsed ? "justify-center" : ""}
+              `}
+            >
+              <Calendar size={17} />
+              {!collapsed && (
+                <span className="font-semibold text-sm">Calendar</span>
+              )}
+            </button>
+          </div>
+
+          {/* Sprints Menu */}
+          <div className="mb-2 px-2">
+            <button
+              onClick={() => onOpenViewMode("SPRINTS")}
+              className={`
+                w-full flex items-center gap-3 px-3 py-2 rounded-xl
+                transition-all duration-150
+                hover:bg-violet-50 dark:hover:bg-violet-900/20
+                text-violet-600 dark:text-violet-300
+                ${collapsed ? "justify-center" : ""}
+              `}
+            >
+              <Target size={17} />
+              {!collapsed && (
+                <span className="font-semibold text-sm">Sprints</span>
+              )}
+            </button>
+          </div>
+
+          {/* DM Menu */}
+          <div className="mb-2 px-2">
+            <button
+              onClick={() => onOpenViewMode("DM")}
+              className={`
+                w-full flex items-center gap-3 px-3 py-2 rounded-xl
+                transition-all duration-150
+                hover:bg-cyan-50 dark:hover:bg-cyan-900/20
+                text-cyan-600 dark:text-cyan-300
+                ${collapsed ? "justify-center" : ""}
+              `}
+            >
+              <MessageCircle size={17} />
+              {!collapsed && (
+                <span className="font-semibold text-sm">Messages</span>
+              )}
+            </button>
+          </div>
+
+          {/* Integrations Menu */}
+          <div className="mb-2 px-2">
+            <button
+              onClick={() => onOpenViewMode("INTEGRATIONS")}
+              className={`
+                w-full flex items-center gap-3 px-3 py-2 rounded-xl
+                transition-all duration-150
+                hover:bg-purple-50 dark:hover:bg-purple-900/20
+                text-purple-600 dark:text-purple-300
+                ${collapsed ? "justify-center" : ""}
+              `}
+            >
+              <Webhook size={17} />
+              {!collapsed && (
+                <span className="font-semibold text-sm">Integrations</span>
               )}
             </button>
           </div>
@@ -667,6 +816,8 @@ export default function Sidebar({
                 .toUpperCase();
 
               const onActivate = () => setDetailMember(member);
+              const presence = presenceMembers[member.id];
+              const isOnline = presence?.status === "online";
 
               return (
                 <div
@@ -697,22 +848,17 @@ export default function Sidebar({
                       <span className="select-none">{initials}</span>
                     )}
 
-                    {/* small presence/status dot (optional) */}
-                    {member?.status && (
-                      <span
-                        className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full ring-2 ring-white dark:ring-black`}
-                        style={{
-                          background:
-                            member?.status === "online"
-                              ? "rgb(34 197 94)"
-                              : member?.status === "away"
-                                ? "rgb(250 204 21)"
-                                : "rgb(148 163 184)",
-                        }}
-                        aria-hidden="true"
-                        title={member?.status}
-                      />
-                    )}
+                    {/* presence dot */}
+                    <span
+                      className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full ring-2 ring-white dark:ring-gray-900"
+                      style={{
+                        background: isOnline
+                          ? "rgb(34 197 94)"
+                          : "rgb(148 163 184)",
+                      }}
+                      aria-hidden="true"
+                      title={isOnline ? "Online" : "Offline"}
+                    />
                   </div>
 
                   {!collapsed && (
@@ -720,10 +866,15 @@ export default function Sidebar({
                       <div className="text-sm font-medium truncate">
                         {member.name}
                       </div>
-                      {/* optional subtitle: role / email */}
+                      {/* role + last seen */}
                       {member.role && (
                         <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
                           {member.role}
+                        </div>
+                      )}
+                      {!isOnline && presence?.lastSeen && (
+                        <div className="text-[10px] text-gray-400 dark:text-gray-500 truncate">
+                          Last seen {timeAgo(presence.lastSeen)}
                         </div>
                       )}
                     </div>

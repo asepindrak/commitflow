@@ -22,10 +22,14 @@ import {
   Download,
   Trash2,
   AtSign,
+  Pin,
 } from "lucide-react";
 import type { TeamMember } from "../types";
 import { useAuthStore } from "../utils/store";
 import { apiFetch } from "../utils/apiFetch";
+import { useChatNotifStore } from "../utils/useChatNotifStore";
+import { usePresenceStore } from "../utils/usePresenceStore";
+import { playSound } from "../utils/playSound";
 
 const BASE = (import.meta.env.VITE_API_URL ?? "").replace(/\/$/, "");
 
@@ -54,6 +58,7 @@ type ChatMessage = {
     content: string;
     attachments?: ChatAttachment[] | null;
   } | null;
+  isPinned?: boolean;
   createdAt: string;
 };
 
@@ -242,26 +247,56 @@ function AttachmentBubble({
     );
   }
 
-  // Doc / other file
+  // Doc / other file — card with large icon
+  const ext = att.name.split(".").pop()?.toUpperCase() ?? "";
+  const iconColor = att.type.includes("pdf")
+    ? "text-red-500 bg-red-50 dark:bg-red-900/20"
+    : att.type.includes("word") || att.type.includes("document")
+      ? "text-blue-500 bg-blue-50 dark:bg-blue-900/20"
+      : att.type.includes("sheet") ||
+          att.type.includes("excel") ||
+          att.type.includes("csv")
+        ? "text-emerald-500 bg-emerald-50 dark:bg-emerald-900/20"
+        : att.type.includes("presentation") || att.type.includes("powerpoint")
+          ? "text-orange-500 bg-orange-50 dark:bg-orange-900/20"
+          : "text-gray-500 bg-gray-100 dark:bg-gray-800";
+
   return (
     <a
       href={att.url}
       target="_blank"
       rel="noopener noreferrer"
       download={att.name}
-      className={`inline-flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-colors ${
+      className={`flex items-center gap-3 px-3.5 py-3 rounded-xl transition-colors border ${
         isMine
-          ? "bg-white/20 hover:bg-white/30 text-white"
-          : "bg-gray-200/80 dark:bg-gray-700/60 hover:bg-gray-300/80 dark:hover:bg-gray-700 text-slate-700 dark:text-slate-200"
+          ? "bg-white/15 hover:bg-white/25 text-white border-white/20"
+          : "bg-white dark:bg-gray-800/80 hover:bg-gray-50 dark:hover:bg-gray-800 text-slate-700 dark:text-slate-200 border-gray-200 dark:border-gray-700/60"
       }`}
+      style={{ minWidth: 220 }}
     >
-      <AttachmentIcon type={att.type} size={18} />
-      <div className="min-w-0">
-        <div className="truncate max-w-[180px] text-xs font-semibold">
+      <div
+        className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${
+          isMine ? "bg-white/20 text-white" : iconColor
+        }`}
+      >
+        <AttachmentIcon type={att.type} size={22} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="truncate text-xs font-semibold leading-tight">
           {att.name}
         </div>
-        <div className="text-[10px] opacity-60">{formatBytes(att.size)}</div>
+        <div
+          className={`text-[10px] mt-0.5 flex items-center gap-1.5 ${isMine ? "text-white/60" : "text-gray-400"}`}
+        >
+          <span>{ext}</span>
+          <span>·</span>
+          <span>{formatBytes(att.size)}</span>
+        </div>
       </div>
+      <Download
+        size={14}
+        className={`shrink-0 ${isMine ? "text-white/50" : "text-gray-300"}`}
+      />
     </a>
   );
 }
@@ -271,13 +306,16 @@ export default function GroupChat({
   workspaceId,
   workspaceName,
   team,
+  isPlaySound = true,
 }: {
   workspaceId: string;
   workspaceName: string;
   team: TeamMember[];
+  isPlaySound?: boolean;
 }) {
   const userId = useAuthStore((s) => s.userId);
   const user = useAuthStore((s) => s.user);
+  const pushChatNotif = useChatNotifStore((s) => s.push);
 
   const me = team.find(
     (m) => m.userId === userId && m.workspaceId === workspaceId,
@@ -302,12 +340,21 @@ export default function GroupChat({
   );
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [mentionIdx, setMentionIdx] = useState(0);
+  const [pinnedOpen, setPinnedOpen] = useState(false);
 
   const socketRef = useRef<Socket | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Stable refs for values used inside socket callbacks
+  const myMemberIdRef = useRef(myMemberId);
+  myMemberIdRef.current = myMemberId;
+  const myNameRef = useRef(myName);
+  myNameRef.current = myName;
+  const isPlaySoundRef = useRef(isPlaySound);
+  isPlaySoundRef.current = isPlaySound;
 
   // ── Load history ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -337,21 +384,70 @@ export default function GroupChat({
 
     socket.on("connect", () => {
       setConnected(true);
-      socket.emit("group-chat:join", { workspaceId });
+      socket.emit("group-chat:join", {
+        workspaceId,
+        memberId: myMemberIdRef.current,
+        memberName: myNameRef.current,
+      });
     });
 
     socket.on("disconnect", () => setConnected(false));
+
+    // ── Presence ──────────────────────────────────────────────────────────
+    socket.on(
+      "presence:list",
+      (data: { online: string[]; lastSeen: Record<string, string> }) => {
+        usePresenceStore.getState().setList(data.online, data.lastSeen);
+      },
+    );
+    socket.on(
+      "presence:update",
+      (data: {
+        memberId: string;
+        status: "online" | "offline";
+        lastSeen?: string;
+      }) => {
+        usePresenceStore
+          .getState()
+          .setPresence(data.memberId, data.status, data.lastSeen);
+      },
+    );
 
     socket.on("group-chat:message", (msg: ChatMessage) => {
       setMessages((prev) => {
         if (prev.some((m) => m.id === msg.id)) return prev;
         return [...prev, msg];
       });
+
+      // Push notification for messages from others
+      if (msg.memberId !== myMemberIdRef.current) {
+        const isMention = msg.content
+          ?.toLowerCase()
+          .includes(`@${myNameRef.current.toLowerCase()}`);
+        pushChatNotif({
+          id: msg.id,
+          type: isMention ? "mention" : "message",
+          senderName: msg.memberName,
+          content: msg.content,
+          workspaceName,
+          createdAt: msg.createdAt,
+        });
+        playSound("/sounds/incoming.mp3", isPlaySoundRef.current);
+      }
     });
 
     socket.on("group-chat:deleted", ({ messageId }: { messageId: string }) => {
       setMessages((prev) => prev.filter((m) => m.id !== messageId));
     });
+
+    socket.on(
+      "group-chat:pinned",
+      ({ messageId, isPinned }: { messageId: string; isPinned: boolean }) => {
+        setMessages((prev) =>
+          prev.map((m) => (m.id === messageId ? { ...m, isPinned } : m)),
+        );
+      },
+    );
 
     return () => {
       socket.emit("group-chat:leave", { workspaceId });
@@ -732,6 +828,24 @@ export default function GroupChat({
             <FolderOpen size={15} />
           </button>
 
+          {/* Pinned messages toggle */}
+          <button
+            onClick={() => setPinnedOpen((v) => !v)}
+            title="Pinned messages"
+            className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors relative ${
+              pinnedOpen
+                ? "bg-amber-100 dark:bg-amber-900/30 text-amber-500"
+                : "text-gray-400 hover:text-amber-500 hover:bg-gray-100 dark:hover:bg-gray-800"
+            }`}
+          >
+            <Pin size={15} />
+            {messages.filter((m) => m.isPinned).length > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-amber-500 text-white text-[9px] font-bold flex items-center justify-center">
+                {messages.filter((m) => m.isPinned).length}
+              </span>
+            )}
+          </button>
+
           <span
             className={`w-2 h-2 rounded-full ${connected ? "bg-emerald-400" : "bg-red-400"}`}
             title={connected ? "Connected" : "Disconnected"}
@@ -789,6 +903,66 @@ export default function GroupChat({
           >
             <X size={14} />
           </button>
+        </div>
+      )}
+
+      {/* ── Pinned messages panel ──────────────────────────────────────────── */}
+      {pinnedOpen && (
+        <div className="shrink-0 max-h-56 overflow-y-auto border-b border-gray-100 dark:border-gray-800/70 bg-amber-50/40 dark:bg-amber-900/10">
+          <div className="px-4 py-2 flex items-center justify-between">
+            <span className="text-xs font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
+              <Pin size={12} />
+              Pinned Messages ({messages.filter((m) => m.isPinned).length})
+            </span>
+            <button
+              onClick={() => setPinnedOpen(false)}
+              className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+            >
+              <X size={14} />
+            </button>
+          </div>
+          {messages.filter((m) => m.isPinned).length === 0 ? (
+            <p className="px-4 pb-3 text-xs text-gray-400">
+              No pinned messages yet
+            </p>
+          ) : (
+            <div className="space-y-1 px-4 pb-3">
+              {messages
+                .filter((m) => m.isPinned)
+                .map((m) => (
+                  <div
+                    key={m.id}
+                    className="flex items-start gap-2 p-2 rounded-lg bg-white/60 dark:bg-gray-800/60 border border-amber-200/50 dark:border-amber-700/30"
+                  >
+                    <Pin size={12} className="text-amber-400 shrink-0 mt-0.5" />
+                    <div className="min-w-0 flex-1">
+                      <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                        {m.memberName}
+                      </span>
+                      <p className="text-xs text-gray-600 dark:text-gray-400 truncate">
+                        {m.content ||
+                          (m.attachments?.length
+                            ? `${m.attachments.length} file(s)`
+                            : "")}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        if (!socketRef.current) return;
+                        socketRef.current.emit("group-chat:pin", {
+                          workspaceId,
+                          messageId: m.id,
+                        });
+                      }}
+                      title="Unpin"
+                      className="shrink-0 text-gray-400 hover:text-red-500 p-1"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -895,6 +1069,16 @@ export default function GroupChat({
                     </div>
                   )}
 
+                  {/* Pinned indicator */}
+                  {msg.isPinned && (
+                    <div
+                      className={`flex items-center gap-1 text-[10px] text-amber-500 ${isMine ? "justify-end" : ""}`}
+                    >
+                      <Pin size={10} />
+                      <span>Pinned</span>
+                    </div>
+                  )}
+
                   {/* Text bubble */}
                   {msg.content && (
                     <div
@@ -925,6 +1109,25 @@ export default function GroupChat({
                   className="shrink-0 self-center opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-400 hover:text-sky-500 dark:hover:text-sky-400"
                 >
                   <CornerUpLeft size={13} />
+                </button>
+
+                {/* Pin button — appears on hover */}
+                <button
+                  onClick={() => {
+                    if (!socketRef.current) return;
+                    socketRef.current.emit("group-chat:pin", {
+                      workspaceId,
+                      messageId: msg.id,
+                    });
+                  }}
+                  title={msg.isPinned ? "Unpin" : "Pin"}
+                  className={`shrink-0 self-center opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-full hover:bg-amber-50 dark:hover:bg-amber-900/20 ${
+                    msg.isPinned
+                      ? "text-amber-500"
+                      : "text-gray-400 hover:text-amber-500 dark:hover:text-amber-400"
+                  }`}
+                >
+                  <Pin size={13} />
                 </button>
 
                 {/* Delete button — only for own messages */}

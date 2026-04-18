@@ -40,6 +40,10 @@ export default function KanbanBoard({
 }) {
   const [onlyMine, setOnlyMine] = useState(false);
   const [columnMinHeight, setColumnMinHeight] = useState<number>(0);
+  const [dropTarget, setDropTarget] = useState<{
+    colKey: string;
+    insertIdx: number;
+  } | null>(null);
 
   // measurement params
   const THRESHOLD = 6; // px
@@ -258,7 +262,16 @@ export default function KanbanBoard({
                 {/* outer drop container gets minHeight; inner wrapper holds cards */}
                 <div
                   data-drop-key={col.key}
-                  onDragOver={(e) => e.preventDefault()}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    const colEl = e.currentTarget as HTMLElement;
+                    const idx = computeInsertIndex(colEl, e.clientY);
+                    setDropTarget({
+                      colKey: col.key as string,
+                      insertIdx: idx,
+                    });
+                  }}
+                  onDragLeave={() => setDropTarget(null)}
                   onDrop={(e) => {
                     e.preventDefault();
                     const dtId =
@@ -266,32 +279,45 @@ export default function KanbanBoard({
                     const colEl = e.currentTarget as HTMLElement;
                     const idx = computeInsertIndex(colEl, e.clientY);
                     onDropTo(col.key, dtId, idx);
+                    setDropTarget(null);
                   }}
                   style={{
                     minHeight: Math.max(columnMinHeight || 0, 600),
                   }}
-                  className="p-2 flex-1"
+                  className={`p-2 flex-1 rounded-xl transition-colors duration-150 ${
+                    dragTaskId && dropTarget?.colKey === col.key
+                      ? "bg-sky-50/60 dark:bg-sky-900/10 ring-2 ring-sky-300/40 ring-inset"
+                      : ""
+                  }`}
                 >
                   {/* inner wrapper: measure this (scrollHeight) to compute minHeight */}
                   <div className="kanban-inner space-y-3">
-                    {visibleItems.map((task: Task) => {
+                    {visibleItems.map((task: Task, taskIdx: number) => {
                       const isBeingDragged =
                         dragTaskId !== null && task.id === dragTaskId;
+                      const showIndicator =
+                        dropTarget?.colKey === col.key &&
+                        dropTarget?.insertIdx === taskIdx &&
+                        dragTaskId !== null;
                       return (
-                        <TaskCard
-                          key={task.id}
-                          task={task}
-                          isBeingDragged={isBeingDragged}
-                          dragPos={dragPos}
-                          team={team}
-                          onDragStart={onDragStart}
-                          onDrag={onDrag}
-                          onDragEnd={onDragEnd}
-                          onSelectTask={onSelectTask}
-                          startPointerDrag={startPointerDrag}
-                          priorityAccent={priorityAccent}
-                          priorityPill={priorityPill}
-                        />
+                        <React.Fragment key={task.id}>
+                          {showIndicator && (
+                            <div className="h-1 rounded-full bg-sky-400 mx-2 transition-all duration-150 animate-pulse" />
+                          )}
+                          <TaskCard
+                            task={task}
+                            isBeingDragged={isBeingDragged}
+                            dragPos={dragPos}
+                            team={team}
+                            onDragStart={onDragStart}
+                            onDrag={onDrag}
+                            onDragEnd={onDragEnd}
+                            onSelectTask={onSelectTask}
+                            startPointerDrag={startPointerDrag}
+                            priorityAccent={priorityAccent}
+                            priorityPill={priorityPill}
+                          />
+                        </React.Fragment>
                       );
                     })}
 
@@ -300,6 +326,11 @@ export default function KanbanBoard({
                         No tasks
                       </div>
                     )}
+                    {dropTarget?.colKey === col.key &&
+                      dropTarget?.insertIdx >= visibleItems.length &&
+                      dragTaskId !== null && (
+                        <div className="h-1 rounded-full bg-sky-400 mx-2 transition-all duration-150 animate-pulse" />
+                      )}
                   </div>
                 </div>
               </div>

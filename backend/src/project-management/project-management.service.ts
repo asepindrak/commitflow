@@ -12,6 +12,7 @@ import * as fs from "fs";
 import { Prisma } from "@prisma/client";
 import { hashPassword } from "src/auth/utils";
 import { EmailService } from "src/email/email.service";
+import { ActivityLogService } from "src/activity-log/activity-log.service";
 import logger from "vico-logger";
 import {
   endOfDay,
@@ -26,7 +27,10 @@ const FE_URL = process.env?.FE_URL ?? "";
 
 @Injectable()
 export class ProjectManagementService {
-  constructor(private email: EmailService) {}
+  constructor(
+    private email: EmailService,
+    private activityLog: ActivityLogService,
+  ) {}
   async getWorkspaces(userId) {
     const members = await prisma.teamMember.findMany({
       where: { isTrash: false, userId },
@@ -278,6 +282,16 @@ export class ProjectManagementService {
       await new Promise((r) => setTimeout(r, 200));
     }
 
+    this.activityLog
+      .log({
+        workspaceId: payload.workspaceId,
+        action: "project.created",
+        entity: "project",
+        entityId: p.id,
+        entityName: p.name,
+      })
+      .catch(() => {});
+
     return p;
   }
 
@@ -313,6 +327,18 @@ export class ProjectManagementService {
         data: { isTrash: true },
       }),
     ]);
+
+    if (project.workspaceId) {
+      this.activityLog
+        .log({
+          workspaceId: project.workspaceId,
+          action: "project.deleted",
+          entity: "project",
+          entityId: id,
+          entityName: project.name,
+        })
+        .catch(() => {});
+    }
 
     return { success: true, deleted: true };
   }
@@ -719,6 +745,24 @@ export class ProjectManagementService {
     // --------------------------------
     // RETURN SERIALIZED TASK
     // --------------------------------
+    if (task.projectId) {
+      const proj = await prisma.project.findUnique({
+        where: { id: task.projectId },
+      });
+      if (proj?.workspaceId) {
+        this.activityLog
+          .log({
+            workspaceId: proj.workspaceId,
+            memberId: payload.createdById ?? undefined,
+            action: "task.created",
+            entity: "task",
+            entityId: task.id,
+            entityName: task.title,
+          })
+          .catch(() => {});
+      }
+    }
+
     return {
       ...task,
       createdAt: task.createdAt?.toISOString(),
@@ -934,6 +978,38 @@ Due Date: ${format(updated.dueDate)}
       },
     });
 
+    // Activity log for task updates
+    if (updated.projectId) {
+      const proj = await prisma.project.findUnique({
+        where: { id: updated.projectId },
+      });
+      if (proj?.workspaceId) {
+        const changes: Record<string, any> = {};
+        if (payload.status && payload.status !== existing.status) {
+          changes.from = existing.status;
+          changes.to = payload.status;
+        }
+        if (payload.title && payload.title !== existing.title) {
+          changes.oldTitle = existing.title;
+          changes.newTitle = payload.title;
+        }
+        this.activityLog
+          .log({
+            workspaceId: proj.workspaceId,
+            memberId: payload.updatedById ?? userId ?? undefined,
+            action:
+              payload.status && payload.status !== existing.status
+                ? "task.status_changed"
+                : "task.updated",
+            entity: "task",
+            entityId: id,
+            entityName: updated.title,
+            meta: Object.keys(changes).length ? changes : undefined,
+          })
+          .catch(() => {});
+      }
+    }
+
     return {
       ...withComments,
       createdAt: withComments?.createdAt?.toISOString(),
@@ -976,6 +1052,23 @@ Due Date: ${format(updated.dueDate)}
         data: { isTrash: true },
       }),
     ]);
+
+    if (task.projectId) {
+      const proj = await prisma.project.findUnique({
+        where: { id: task.projectId },
+      });
+      if (proj?.workspaceId) {
+        this.activityLog
+          .log({
+            workspaceId: proj.workspaceId,
+            action: "task.deleted",
+            entity: "task",
+            entityId: id,
+            entityName: task.title,
+          })
+          .catch(() => {});
+      }
+    }
 
     return { success: true, deleted: true };
   }
@@ -1262,7 +1355,7 @@ ${body}
             name: user.name ?? "Unnamed",
             role: role ?? null,
             email: user.email ?? null,
-            photo: user.photo ? user.photo : photo ?? null,
+            photo: user.photo ? user.photo : (photo ?? null),
             phone: phone ?? null,
             clientId: clientId ?? null,
             isAdmin: isAdmin ?? false,
@@ -1274,6 +1367,16 @@ ${body}
 
         return { tm, user };
       });
+
+      this.activityLog
+        .log({
+          workspaceId,
+          action: "member.added",
+          entity: "member",
+          entityId: result.tm.id,
+          entityName: result.tm.name,
+        })
+        .catch(() => {});
 
       return { teamMember: result.tm, user: result.user };
     } catch (err: any) {

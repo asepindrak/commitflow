@@ -53,6 +53,12 @@ import { safeString } from "../utils/safeString";
 import MyTasksList from "./MyTasksList";
 import TasksReportTable from "./TasksReportTable";
 import GroupChat from "./GroupChat";
+import ActivityLog from "./ActivityLog";
+import Dashboard from "./Dashboard";
+import CalendarView from "./CalendarView";
+import SprintBoard from "./SprintBoard";
+import DirectMessages from "./DirectMessages";
+import IntegrationsPanel from "./IntegrationsPanel";
 import NotificationBell from "./NotificationBell";
 import { useTaskReadStore } from "../utils/useTaskReadStore";
 
@@ -63,7 +69,17 @@ const queryClient = new QueryClient();
 const nid = (x: any) =>
   typeof x === "undefined" || x === null ? "" : String(x);
 
-type ViewMode = "PROJECT" | "MY_TASKS" | "REPORT" | "GROUP_CHAT";
+type ViewMode =
+  | "PROJECT"
+  | "MY_TASKS"
+  | "REPORT"
+  | "GROUP_CHAT"
+  | "ACTIVITY_LOG"
+  | "DASHBOARD"
+  | "CALENDAR"
+  | "SPRINTS"
+  | "DM"
+  | "INTEGRATIONS";
 
 type NotificationItem = {
   taskId: string;
@@ -98,7 +114,7 @@ export default function ProjectManagement({
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [inviteLink, setInviteLink] = useState<string>("");
-  const [viewMode, setViewMode] = useState<ViewMode>("PROJECT");
+  const [viewMode, setViewMode] = useState<ViewMode>("DASHBOARD");
   // 🗓️ GLOBAL DATE RANGE (for TaskBoard)
   const [showDateFilter, setShowDateFilter] = useState(false);
   const [tasksStartDate, setTasksStartDate] = useState<string | undefined>(
@@ -214,7 +230,12 @@ export default function ProjectManagement({
     if (
       viewMode === "MY_TASKS" ||
       viewMode === "REPORT" ||
-      viewMode === "GROUP_CHAT"
+      viewMode === "GROUP_CHAT" ||
+      viewMode === "ACTIVITY_LOG" ||
+      viewMode === "DASHBOARD" ||
+      viewMode === "CALENDAR" ||
+      viewMode === "SPRINTS" ||
+      viewMode === "DM"
     ) {
       if (isLoaded) {
         playSound("/sounds/close.mp3", isPlaySound);
@@ -846,6 +867,43 @@ export default function ProjectManagement({
       return true;
     }
   });
+
+  // Dark mode schedule
+  const [darkSchedule, setDarkSchedule] = useState<{
+    enabled: boolean;
+    from: string;
+    to: string;
+  }>(() => {
+    try {
+      const s = localStorage.getItem("commitflow_dark_schedule");
+      return s ? JSON.parse(s) : { enabled: false, from: "18:00", to: "06:00" };
+    } catch {
+      return { enabled: false, from: "18:00", to: "06:00" };
+    }
+  });
+  const [showDarkSchedule, setShowDarkSchedule] = useState(false);
+
+  useEffect(() => {
+    localStorage.setItem(
+      "commitflow_dark_schedule",
+      JSON.stringify(darkSchedule),
+    );
+    if (!darkSchedule.enabled) return;
+    const check = () => {
+      const now = new Date();
+      const mins = now.getHours() * 60 + now.getMinutes();
+      const [fh, fm] = darkSchedule.from.split(":").map(Number);
+      const [th, tm] = darkSchedule.to.split(":").map(Number);
+      const from = fh * 60 + fm;
+      const to = th * 60 + tm;
+      const shouldDark =
+        from <= to ? mins >= from && mins < to : mins >= from || mins < to;
+      setDark(shouldDark);
+    };
+    check();
+    const id = setInterval(check, 60000);
+    return () => clearInterval(id);
+  }, [darkSchedule]);
 
   const [creatingTask, setCreatingTask] = useState(false);
   const qcRef = useRef(queryClient);
@@ -2642,7 +2700,19 @@ export default function ProjectManagement({
                       ? "My Tasks"
                       : viewMode === "GROUP_CHAT"
                         ? "Group Chat"
-                        : "Report"}
+                        : viewMode === "ACTIVITY_LOG"
+                          ? "Activity Log"
+                          : viewMode === "DASHBOARD"
+                            ? "Dashboard"
+                            : viewMode === "CALENDAR"
+                              ? "Calendar"
+                              : viewMode === "SPRINTS"
+                                ? "Sprints"
+                                : viewMode === "DM"
+                                  ? "Messages"
+                                  : viewMode === "INTEGRATIONS"
+                                    ? "Integrations"
+                                    : "Report"}
                 </h2>
               )}
               {viewMode === "PROJECT" && (
@@ -2795,86 +2865,170 @@ export default function ProjectManagement({
                       onImport={(payload: any) => handleImport(payload)}
                     />
                   )}
+                </div>
+              )}
 
+              {/* ── Always-visible controls ─────────────────────────────── */}
+              <div className="flex items-center gap-2">
+                <div className="relative">
                   <button
-                    onClick={() => setDark(!dark)}
+                    onClick={() => {
+                      if (!darkSchedule.enabled) setDark(!dark);
+                    }}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      setShowDarkSchedule((v) => !v);
+                    }}
                     className="p-2 rounded-full border border-gray-300 dark:border-gray-700 bg-slate-100 dark:bg-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all duration-200"
+                    title={
+                      darkSchedule.enabled
+                        ? `Auto: ${darkSchedule.from}–${darkSchedule.to} (right-click to configure)`
+                        : "Toggle dark mode (right-click for schedule)"
+                    }
                   >
                     {dark ? (
                       <Moon className="w-4 h-4 text-sky-400" />
                     ) : (
                       <Sun className="w-4 h-4 text-amber-500" />
                     )}
-                  </button>
-                  <button
-                    onClick={onOffSound}
-                    className="p-2 rounded-xl border border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-800/60 hover:bg-gray-50 dark:hover:bg-gray-700/80 transition-all duration-200"
-                  >
-                    {!isPlaySound ? (
-                      <VolumeX className="w-5 h-5 text-gray-300" />
-                    ) : (
-                      <Volume2 className="w-5 h-5 text-cyan-400" />
+                    {darkSchedule.enabled && (
+                      <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-green-500 border-2 border-white dark:border-gray-900" />
                     )}
                   </button>
-
-                  <NotificationBell
-                    tasks={data ?? []}
-                    memberId={authTeamMemberId!}
-                    onOpenTask={(taskId, projectId) => {
-                      setActiveProjectId(projectId);
-
-                      const t = data.find(
-                        (x: any) => String(x.id) === String(taskId),
-                      );
-
-                      if (t) {
-                        setSelectedTask(t);
-                        markOpened(t.id);
-                      }
-                    }}
-                  />
-
-                  <div className="relative profile-menu-area">
-                    <button
-                      onClick={() => setShowProfileMenu((v) => !v)}
-                      className="relative w-10 h-10 rounded-full overflow-hidden border border-white/20 shadow hover:opacity-90 transition"
-                    >
-                      {userPhoto ? (
-                        <img
-                          src={userPhoto}
-                          alt="User"
-                          className="w-full h-full object-cover"
+                  {showDarkSchedule && (
+                    <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl z-50 p-4">
+                      <h4 className="text-xs font-bold text-gray-700 dark:text-gray-200 mb-3">
+                        Dark Mode Schedule
+                      </h4>
+                      <label className="flex items-center gap-2 mb-3 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={darkSchedule.enabled}
+                          onChange={(e) =>
+                            setDarkSchedule((s) => ({
+                              ...s,
+                              enabled: e.target.checked,
+                            }))
+                          }
+                          className="accent-sky-500"
                         />
-                      ) : (
-                        <div className="w-full h-full bg-gradient-to-r from-purple-500 to-indigo-500 flex items-center justify-center">
-                          <span className="font-semibold text-white text-sm">
-                            {userInitial.toUpperCase()}
-                          </span>
+                        <span className="text-xs text-gray-600 dark:text-gray-300">
+                          Auto-switch by time
+                        </span>
+                      </label>
+                      {darkSchedule.enabled && (
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <label className="text-[10px] text-gray-400 w-16">
+                              Dark from
+                            </label>
+                            <input
+                              type="time"
+                              value={darkSchedule.from}
+                              onChange={(e) =>
+                                setDarkSchedule((s) => ({
+                                  ...s,
+                                  from: e.target.value,
+                                }))
+                              }
+                              className="flex-1 px-2 py-1 text-xs rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800"
+                            />
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <label className="text-[10px] text-gray-400 w-16">
+                              Light from
+                            </label>
+                            <input
+                              type="time"
+                              value={darkSchedule.to}
+                              onChange={(e) =>
+                                setDarkSchedule((s) => ({
+                                  ...s,
+                                  to: e.target.value,
+                                }))
+                              }
+                              className="flex-1 px-2 py-1 text-xs rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800"
+                            />
+                          </div>
                         </div>
                       )}
-                    </button>
+                      <button
+                        onClick={() => setShowDarkSchedule(false)}
+                        className="mt-3 w-full text-center text-[10px] text-sky-500 hover:text-sky-600 font-semibold"
+                      >
+                        Close
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <button
+                  onClick={onOffSound}
+                  className="p-2 rounded-xl border border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-800/60 hover:bg-gray-50 dark:hover:bg-gray-700/80 transition-all duration-200"
+                >
+                  {!isPlaySound ? (
+                    <VolumeX className="w-5 h-5 text-gray-300" />
+                  ) : (
+                    <Volume2 className="w-5 h-5 text-cyan-400" />
+                  )}
+                </button>
 
-                    {showProfileMenu && (
-                      <div className="absolute right-0 mt-2 w-44 rounded-2xl bg-white dark:bg-gray-900/95 border border-gray-100 dark:border-gray-700/60 shadow-xl shadow-gray-200/60 dark:shadow-black/40 py-1.5 z-50 overflow-hidden backdrop-blur-md">
-                        <button
-                          onClick={() => {
-                            openEditProfile();
-                          }}
-                          className="w-full text-left px-4 py-2.5 text-sm font-medium hover:bg-sky-50 dark:hover:bg-sky-900/20 hover:text-sky-700 dark:hover:text-sky-300 text-slate-700 dark:text-slate-200 transition-colors duration-150"
-                        >
-                          Edit Profile
-                        </button>
-                        <button
-                          onClick={handleLogout}
-                          className="w-full text-left px-4 py-2.5 text-sm font-medium hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 dark:hover:text-red-400 text-slate-700 dark:text-slate-200 transition-colors duration-150"
-                        >
-                          Logout
-                        </button>
+                <NotificationBell
+                  tasks={data ?? []}
+                  memberId={authTeamMemberId!}
+                  onOpenTask={(taskId, projectId) => {
+                    setActiveProjectId(projectId);
+
+                    const t = data.find(
+                      (x: any) => String(x.id) === String(taskId),
+                    );
+
+                    if (t) {
+                      setSelectedTask(t);
+                      markOpened(t.id);
+                    }
+                  }}
+                />
+
+                <div className="relative profile-menu-area">
+                  <button
+                    onClick={() => setShowProfileMenu((v) => !v)}
+                    className="relative w-10 h-10 rounded-full overflow-hidden border border-white/20 shadow hover:opacity-90 transition"
+                  >
+                    {userPhoto ? (
+                      <img
+                        src={userPhoto}
+                        alt="User"
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-gradient-to-r from-purple-500 to-indigo-500 flex items-center justify-center">
+                        <span className="font-semibold text-white text-sm">
+                          {userInitial.toUpperCase()}
+                        </span>
                       </div>
                     )}
-                  </div>
+                  </button>
+
+                  {showProfileMenu && (
+                    <div className="absolute right-0 mt-2 w-44 rounded-2xl bg-white dark:bg-gray-900/95 border border-gray-100 dark:border-gray-700/60 shadow-xl shadow-gray-200/60 dark:shadow-black/40 py-1.5 z-50 overflow-hidden backdrop-blur-md">
+                      <button
+                        onClick={() => {
+                          openEditProfile();
+                        }}
+                        className="w-full text-left px-4 py-2.5 text-sm font-medium hover:bg-sky-50 dark:hover:bg-sky-900/20 hover:text-sky-700 dark:hover:text-sky-300 text-slate-700 dark:text-slate-200 transition-colors duration-150"
+                      >
+                        Edit Profile
+                      </button>
+                      <button
+                        onClick={handleLogout}
+                        className="w-full text-left px-4 py-2.5 text-sm font-medium hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 dark:hover:text-red-400 text-slate-700 dark:text-slate-200 transition-colors duration-150"
+                      >
+                        Logout
+                      </button>
+                    </div>
+                  )}
                 </div>
-              )}
+              </div>
             </div>
             <div className="px-8 pt-6 pb-8">
               {viewMode === "GROUP_CHAT" && activeWorkspaceId && (
@@ -2885,6 +3039,7 @@ export default function ProjectManagement({
                     "Workspace"
                   }
                   team={team}
+                  isPlaySound={isPlaySound}
                 />
               )}
               {viewMode === "MY_TASKS" && memberId && (
@@ -2908,6 +3063,47 @@ export default function ProjectManagement({
                     team={team}
                   />
                 </>
+              )}
+              {viewMode === "ACTIVITY_LOG" && activeWorkspaceId && (
+                <ActivityLog workspaceId={activeWorkspaceId} />
+              )}
+              {viewMode === "DASHBOARD" && activeWorkspaceId && (
+                <Dashboard workspaceId={activeWorkspaceId} />
+              )}
+              {viewMode === "CALENDAR" && (
+                <CalendarView
+                  tasks={tasks}
+                  team={team}
+                  onSelectTask={(t) => {
+                    setActiveProjectId(t.projectId ?? "");
+                    setSelectedTask(t);
+                  }}
+                />
+              )}
+              {viewMode === "SPRINTS" && activeWorkspaceId && (
+                <SprintBoard
+                  workspaceId={activeWorkspaceId}
+                  tasks={tasks}
+                  team={team}
+                  onSelectTask={(t) => {
+                    setActiveProjectId(t.projectId ?? "");
+                    setSelectedTask(t);
+                  }}
+                  onRefreshTasks={() => setIsRequestSync(true)}
+                />
+              )}
+              {viewMode === "DM" && activeWorkspaceId && authTeamMemberId && (
+                <DirectMessages
+                  workspaceId={activeWorkspaceId}
+                  myMemberId={authTeamMemberId}
+                  myName={user?.name ?? "Unknown"}
+                  myPhoto={userPhoto ?? undefined}
+                  team={team}
+                  isPlaySound={isPlaySound}
+                />
+              )}
+              {viewMode === "INTEGRATIONS" && activeWorkspaceId && (
+                <IntegrationsPanel workspaceId={activeWorkspaceId} />
               )}
               {viewMode === "PROJECT" && (
                 <TaskView
@@ -3023,6 +3219,7 @@ export default function ProjectManagement({
                 activeProjectId={activeProjectId}
                 currentMemberId={authTeamMemberId}
                 task={selectedTask}
+                allTasks={tasks}
                 onClose={() => {
                   playSound("/sounds/close.mp3", isPlaySound);
                   setSelectedTask(null);

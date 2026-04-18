@@ -40,6 +40,23 @@ export type Task = {
 
   priority?: "urgent" | "medium" | "low" | string;
 
+  labels?: { name: string; color: string }[];
+  sprintId?: string | null;
+  dependencies?: { taskId: string; type: "blocked_by" | "blocks" }[];
+  timeEntries?: {
+    memberId: string;
+    memberName: string;
+    start: string;
+    end?: string;
+    duration?: number;
+  }[];
+  recurrence?: {
+    pattern: "daily" | "weekly" | "monthly" | "custom";
+    interval?: number;
+    daysOfWeek?: number[];
+    nextDue?: string;
+  } | null;
+
   // ✅ MULTI ASSIGNEE (WAJIB)
   taskAssignees?: TaskAssignee[];
 
@@ -93,4 +110,16 @@ export type Project = {
   updatedAt?: string;
   isTrash?: boolean;
   clientId?: string;
+};
+
+export type Sprint = {
+  id: string;
+  workspaceId: string;
+  name: string;
+  description?: string;
+  status: "planning" | "active" | "completed";
+  startDate?: string | null;
+  endDate?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
 };

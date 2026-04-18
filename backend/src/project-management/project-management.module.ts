@@ -3,6 +3,7 @@ import { ProjectManagementController } from "./project-management.controller";
 import { ProjectManagementService } from "./project-management.service";
 import { MulterModule } from "@nestjs/platform-express";
 import { EmailModule } from "src/email/email.module";
+import { ActivityLogModule } from "src/activity-log/activity-log.module";
 
 @Module({
   imports: [
@@ -10,6 +11,7 @@ import { EmailModule } from "src/email/email.module";
       dest: "./uploads",
     }),
     EmailModule,
+    ActivityLogModule,
   ],
   controllers: [ProjectManagementController],
   providers: [ProjectManagementService],

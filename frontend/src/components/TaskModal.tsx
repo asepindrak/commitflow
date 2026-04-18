@@ -33,6 +33,7 @@ export default function TaskModal({
   activeProjectId,
   currentMemberId,
   task,
+  allTasks = [],
   dark,
   onClose,
   onSave,
@@ -44,6 +45,7 @@ export default function TaskModal({
   activeProjectId: string;
   currentMemberId: any;
   task: Task;
+  allTasks?: Task[];
   dark: boolean;
   onClose: () => void;
   onSave: (t: Task) => void;
@@ -65,6 +67,8 @@ export default function TaskModal({
   const [mediaViewerType, setMediaViewerType] = useState<"image" | "video">(
     "image",
   );
+  const [mentionOpen, setMentionOpen] = useState(false);
+  const [mentionQuery, setMentionQuery] = useState("");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const assigneeMembers = useMemo(() => {
     return getTaskAssignees(task, team);
@@ -467,6 +471,128 @@ export default function TaskModal({
                 </div>
               </div>
 
+              {/* Labels */}
+              <div className="flex items-start gap-4">
+                <span className="w-24 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider shrink-0 pt-1.5">
+                  Labels
+                </span>
+                <div className="flex-1">
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {(local.labels ?? []).map(
+                      (lb: { name: string; color: string }, idx: number) => (
+                        <span
+                          key={idx}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold text-white"
+                          style={{ background: lb.color }}
+                        >
+                          {lb.name}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setLocal({
+                                ...local,
+                                labels: (local.labels ?? []).filter(
+                                  (_: any, i: number) => i !== idx,
+                                ),
+                              })
+                            }
+                            className="ml-0.5 opacity-70 hover:opacity-100"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ),
+                    )}
+                  </div>
+                  <LabelAdder
+                    onAdd={(lb) =>
+                      setLocal({
+                        ...local,
+                        labels: [...(local.labels ?? []), lb],
+                      })
+                    }
+                  />
+                </div>
+              </div>
+
+              {/* Dependencies */}
+              <div className="flex items-start gap-4">
+                <span className="w-24 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider shrink-0 pt-1.5">
+                  Depends
+                </span>
+                <div className="flex-1">
+                  <div className="space-y-1 mb-2">
+                    {(local.dependencies ?? []).map(
+                      (dep: { taskId: string; type: string }, idx: number) => {
+                        const depTask = allTasks.find(
+                          (t) => t.id === dep.taskId,
+                        );
+                        return (
+                          <div
+                            key={idx}
+                            className="flex items-center gap-2 text-xs bg-gray-50 dark:bg-gray-800 rounded-lg px-2.5 py-1.5"
+                          >
+                            <span
+                              className={`font-semibold ${dep.type === "blocked_by" ? "text-red-500" : "text-blue-500"}`}
+                            >
+                              {dep.type === "blocked_by"
+                                ? "Blocked by"
+                                : "Blocks"}
+                            </span>
+                            <span className="text-gray-700 dark:text-gray-200 truncate flex-1">
+                              {depTask?.title ?? dep.taskId}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setLocal({
+                                  ...local,
+                                  dependencies: (
+                                    local.dependencies ?? []
+                                  ).filter((_: any, i: number) => i !== idx),
+                                })
+                              }
+                              className="text-gray-400 hover:text-red-500"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        );
+                      },
+                    )}
+                  </div>
+                  <DependencyAdder
+                    allTasks={allTasks.filter(
+                      (t) => t.id !== local.id && !t.isTrash,
+                    )}
+                    existingDeps={local.dependencies ?? []}
+                    onAdd={(dep) =>
+                      setLocal({
+                        ...local,
+                        dependencies: [...(local.dependencies ?? []), dep],
+                      })
+                    }
+                  />
+                </div>
+              </div>
+
+              {/* Time Tracking */}
+              <div className="flex items-start gap-4">
+                <span className="w-24 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider shrink-0 pt-1.5">
+                  Time
+                </span>
+                <div className="flex-1">
+                  <TimeTracker
+                    entries={local.timeEntries ?? []}
+                    currentMemberId={currentMemberId}
+                    currentMemberName={currentMemberName ?? "Unknown"}
+                    onChange={(entries) =>
+                      setLocal({ ...local, timeEntries: entries })
+                    }
+                  />
+                </div>
+              </div>
+
               {/* Dates row */}
               <div className="flex items-center gap-4">
                 <span className="w-24 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider shrink-0">
@@ -494,6 +620,65 @@ export default function TaskModal({
                   }
                   className="px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/60 text-sm outline-none focus:border-sky-400 dark:focus:border-sky-500 transition-colors"
                 />
+              </div>
+
+              {/* Recurrence */}
+              <div className="flex items-center gap-4">
+                <span className="w-24 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider shrink-0">
+                  Repeat
+                </span>
+                <select
+                  value={local.recurrence?.pattern ?? ""}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (!val) {
+                      setLocal({ ...local, recurrence: null });
+                    } else {
+                      setLocal({
+                        ...local,
+                        recurrence: {
+                          ...(local.recurrence ?? {}),
+                          pattern: val as any,
+                          interval: local.recurrence?.interval ?? 1,
+                        },
+                      });
+                    }
+                  }}
+                  className="px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/60 text-sm outline-none focus:border-sky-400 dark:focus:border-sky-500 transition-colors text-gray-700 dark:text-gray-200"
+                >
+                  <option value="">No repeat</option>
+                  <option value="daily">Daily</option>
+                  <option value="weekly">Weekly</option>
+                  <option value="monthly">Monthly</option>
+                  <option value="custom">Custom</option>
+                </select>
+                {local.recurrence?.pattern === "custom" && (
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-gray-400">every</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={365}
+                      value={local.recurrence?.interval ?? 1}
+                      onChange={(e) =>
+                        setLocal({
+                          ...local,
+                          recurrence: {
+                            ...local.recurrence!,
+                            interval: parseInt(e.target.value) || 1,
+                          },
+                        })
+                      }
+                      className="w-14 px-2 py-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/60 text-sm outline-none text-center text-gray-700 dark:text-gray-200"
+                    />
+                    <span className="text-xs text-gray-400">days</span>
+                  </div>
+                )}
+                {local.recurrence && (
+                  <span className="text-[10px] text-emerald-500 font-semibold">
+                    ✓ Recurring
+                  </span>
+                )}
               </div>
             </div>
 
@@ -649,14 +834,78 @@ export default function TaskModal({
 
             {/* Comment composer */}
             <div className="shrink-0 border-t border-gray-100 dark:border-gray-800/60 px-6 py-4 bg-gray-50/50 dark:bg-white/[0.02] space-y-3">
-              <div className="rounded-xl border border-gray-200 dark:border-gray-700/60 overflow-hidden bg-white dark:bg-gray-800/30">
+              <div className="relative rounded-xl border border-gray-200 dark:border-gray-700/60 overflow-visible bg-white dark:bg-gray-800/30">
                 <ReactQuill
                   id="commentText"
                   theme="snow"
                   value={commentText}
-                  onChange={setCommentText}
-                  placeholder="Write a comment…"
+                  onChange={(val: string) => {
+                    setCommentText(val);
+                    // Check for @mention trigger
+                    const text = val.replace(/<[^>]*>/g, "");
+                    const atMatch = text.match(/@(\w*)$/);
+                    if (atMatch) {
+                      setMentionQuery(atMatch[1]);
+                      setMentionOpen(true);
+                    } else {
+                      setMentionOpen(false);
+                    }
+                  }}
+                  placeholder="Write a comment… (type @ to mention)"
                 />
+                {mentionOpen && (
+                  <div className="absolute bottom-full left-2 mb-1 w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl z-30 max-h-40 overflow-y-auto">
+                    {team
+                      .filter(
+                        (m) =>
+                          !m.isTrash &&
+                          m.name
+                            ?.toLowerCase()
+                            .includes(mentionQuery.toLowerCase()),
+                      )
+                      .slice(0, 8)
+                      .map((m) => (
+                        <button
+                          key={m.id}
+                          type="button"
+                          onClick={() => {
+                            const plain = commentText.replace(/<[^>]*>/g, "");
+                            const idx = plain.lastIndexOf("@");
+                            if (idx >= 0) {
+                              const before = commentText.substring(
+                                0,
+                                commentText.lastIndexOf("@"),
+                              );
+                              setCommentText(
+                                before +
+                                  `<strong class="text-sky-500">@${m.name}</strong>&nbsp;`,
+                              );
+                            }
+                            setMentionOpen(false);
+                          }}
+                          className="w-full flex items-center gap-2 px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 text-left transition-colors"
+                        >
+                          <div className="w-6 h-6 rounded-full bg-gradient-to-br from-sky-400 to-blue-500 flex items-center justify-center text-[10px] text-white font-bold shrink-0">
+                            {m.name?.[0]?.toUpperCase() ?? "?"}
+                          </div>
+                          <span className="text-xs font-medium text-gray-700 dark:text-gray-200 truncate">
+                            {m.name}
+                          </span>
+                        </button>
+                      ))}
+                    {team.filter(
+                      (m) =>
+                        !m.isTrash &&
+                        m.name
+                          ?.toLowerCase()
+                          .includes(mentionQuery.toLowerCase()),
+                    ).length === 0 && (
+                      <p className="text-xs text-gray-400 py-2 text-center">
+                        No matches
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Pending files */}
@@ -724,6 +973,316 @@ export default function TaskModal({
         type={mediaViewerType}
         onClose={closeMediaViewer}
       />
+    </div>
+  );
+}
+
+const LABEL_PRESETS = [
+  { name: "Bug", color: "#ef4444" },
+  { name: "Feature", color: "#3b82f6" },
+  { name: "Improvement", color: "#8b5cf6" },
+  { name: "Hotfix", color: "#f97316" },
+  { name: "Documentation", color: "#06b6d4" },
+  { name: "Design", color: "#ec4899" },
+  { name: "Backend", color: "#10b981" },
+  { name: "Frontend", color: "#6366f1" },
+];
+
+function LabelAdder({
+  onAdd,
+}: {
+  onAdd: (lb: { name: string; color: string }) => void;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const [custom, setCustom] = React.useState("");
+  const [customColor, setCustomColor] = React.useState("#6366f1");
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="text-xs text-gray-400 hover:text-sky-500 transition-colors"
+      >
+        + Add label
+      </button>
+      {open && (
+        <div className="absolute z-20 top-6 left-0 w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl p-2.5 space-y-2">
+          <div className="flex flex-wrap gap-1.5">
+            {LABEL_PRESETS.map((lb) => (
+              <button
+                key={lb.name}
+                type="button"
+                onClick={() => {
+                  onAdd(lb);
+                  setOpen(false);
+                }}
+                className="px-2 py-0.5 rounded-full text-[10px] font-semibold text-white hover:opacity-80 transition-opacity"
+                style={{ background: lb.color }}
+              >
+                {lb.name}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-1.5 pt-1 border-t border-gray-100 dark:border-gray-700">
+            <input
+              type="color"
+              value={customColor}
+              onChange={(e) => setCustomColor(e.target.value)}
+              className="w-6 h-6 rounded cursor-pointer border-0 p-0"
+            />
+            <input
+              type="text"
+              value={custom}
+              onChange={(e) => setCustom(e.target.value)}
+              placeholder="Custom label"
+              className="flex-1 text-xs bg-transparent outline-none text-gray-700 dark:text-gray-200 placeholder-gray-400"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && custom.trim()) {
+                  onAdd({ name: custom.trim(), color: customColor });
+                  setCustom("");
+                  setOpen(false);
+                }
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => {
+                if (custom.trim()) {
+                  onAdd({ name: custom.trim(), color: customColor });
+                  setCustom("");
+                  setOpen(false);
+                }
+              }}
+              className="text-xs text-sky-500 hover:text-sky-600 font-semibold"
+            >
+              Add
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DependencyAdder({
+  allTasks,
+  existingDeps,
+  onAdd,
+}: {
+  allTasks: Task[];
+  existingDeps: { taskId: string; type: string }[];
+  onAdd: (dep: { taskId: string; type: "blocked_by" | "blocks" }) => void;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const [search, setSearch] = React.useState("");
+  const [depType, setDepType] = React.useState<"blocked_by" | "blocks">(
+    "blocked_by",
+  );
+
+  const existingIds = new Set(existingDeps.map((d) => d.taskId));
+  const filtered = allTasks
+    .filter((t) => !existingIds.has(t.id))
+    .filter(
+      (t) => !search || t.title.toLowerCase().includes(search.toLowerCase()),
+    )
+    .slice(0, 10);
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="text-xs text-gray-400 hover:text-sky-500 transition-colors"
+      >
+        + Add dependency
+      </button>
+      {open && (
+        <div className="absolute z-20 top-6 left-0 w-72 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl p-3 space-y-2">
+          <div className="flex gap-1.5">
+            <button
+              type="button"
+              onClick={() => setDepType("blocked_by")}
+              className={`flex-1 text-[11px] py-1 rounded-lg font-semibold transition-colors ${
+                depType === "blocked_by"
+                  ? "bg-red-100 dark:bg-red-900/30 text-red-600"
+                  : "bg-gray-100 dark:bg-gray-700 text-gray-500"
+              }`}
+            >
+              Blocked by
+            </button>
+            <button
+              type="button"
+              onClick={() => setDepType("blocks")}
+              className={`flex-1 text-[11px] py-1 rounded-lg font-semibold transition-colors ${
+                depType === "blocks"
+                  ? "bg-blue-100 dark:bg-blue-900/30 text-blue-600"
+                  : "bg-gray-100 dark:bg-gray-700 text-gray-500"
+              }`}
+            >
+              Blocks
+            </button>
+          </div>
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search tasks..."
+            className="w-full text-xs bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-2.5 py-1.5 outline-none text-gray-700 dark:text-gray-200 placeholder-gray-400"
+          />
+          <div className="max-h-40 overflow-y-auto space-y-0.5">
+            {filtered.length === 0 && (
+              <p className="text-[11px] text-gray-400 py-2 text-center">
+                No tasks found
+              </p>
+            )}
+            {filtered.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => {
+                  onAdd({ taskId: t.id, type: depType });
+                  setSearch("");
+                  setOpen(false);
+                }}
+                className="w-full text-left text-xs px-2.5 py-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 truncate transition-colors"
+              >
+                {t.title}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function formatDuration(ms: number) {
+  const s = Math.floor(ms / 1000);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${sec}s`;
+  return `${sec}s`;
+}
+
+function TimeTracker({
+  entries,
+  currentMemberId,
+  currentMemberName,
+  onChange,
+}: {
+  entries: {
+    memberId: string;
+    memberName: string;
+    start: string;
+    end?: string;
+    duration?: number;
+  }[];
+  currentMemberId: string;
+  currentMemberName: string;
+  onChange: (entries: any[]) => void;
+}) {
+  const activeEntry = entries.find(
+    (e) => e.memberId === currentMemberId && !e.end,
+  );
+  const [elapsed, setElapsed] = React.useState(0);
+
+  React.useEffect(() => {
+    if (!activeEntry) {
+      setElapsed(0);
+      return;
+    }
+    const start = new Date(activeEntry.start).getTime();
+    const tick = () => setElapsed(Date.now() - start);
+    tick();
+    const iv = setInterval(tick, 1000);
+    return () => clearInterval(iv);
+  }, [activeEntry?.start]);
+
+  const handleStart = () => {
+    onChange([
+      ...entries,
+      {
+        memberId: currentMemberId,
+        memberName: currentMemberName,
+        start: new Date().toISOString(),
+      },
+    ]);
+  };
+
+  const handleStop = () => {
+    const now = new Date().toISOString();
+    onChange(
+      entries.map((e) => {
+        if (e.memberId === currentMemberId && !e.end) {
+          const dur = new Date(now).getTime() - new Date(e.start).getTime();
+          return { ...e, end: now, duration: dur };
+        }
+        return e;
+      }),
+    );
+  };
+
+  const totalTime = entries.reduce((sum, e) => sum + (e.duration ?? 0), 0);
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-3">
+        {activeEntry ? (
+          <>
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-xs font-bold">
+              <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+              {formatDuration(elapsed)}
+            </div>
+            <button
+              type="button"
+              onClick={handleStop}
+              className="text-xs px-3 py-1.5 rounded-lg bg-red-500 text-white hover:bg-red-600 font-semibold transition-colors"
+            >
+              Stop
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            onClick={handleStart}
+            className="text-xs px-3 py-1.5 rounded-lg bg-sky-500 text-white hover:bg-sky-600 font-semibold transition-colors"
+          >
+            Start Timer
+          </button>
+        )}
+        {totalTime > 0 && (
+          <span className="text-[11px] text-gray-400">
+            Total: {formatDuration(totalTime)}
+          </span>
+        )}
+      </div>
+      {entries.filter((e) => e.end).length > 0 && (
+        <div className="space-y-1 max-h-24 overflow-y-auto">
+          {entries
+            .filter((e) => e.end)
+            .slice(-5)
+            .map((e, i) => (
+              <div
+                key={i}
+                className="flex items-center gap-2 text-[11px] text-gray-500 dark:text-gray-400"
+              >
+                <span className="font-semibold">{e.memberName}</span>
+                <span>{formatDuration(e.duration ?? 0)}</span>
+                <span className="text-gray-300 dark:text-gray-600">
+                  {new Date(e.start).toLocaleString(undefined, {
+                    month: "short",
+                    day: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </span>
+              </div>
+            ))}
+        </div>
+      )}
     </div>
   );
 }
