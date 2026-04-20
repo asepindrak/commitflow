@@ -327,7 +327,8 @@ export default function KanbanBoard({
                       </div>
                     )}
                     {dropTarget?.colKey === col.key &&
-                      dropTarget?.insertIdx >= visibleItems.length &&
+                      dropTarget?.insertIdx !== undefined &&
+                      dropTarget.insertIdx >= visibleItems.length &&
                       dragTaskId !== null && (
                         <div className="h-1 rounded-full bg-sky-400 mx-2 transition-all duration-150 animate-pulse" />
                       )}

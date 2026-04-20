@@ -43,7 +43,10 @@ export default function DirectMessages({
   const [unread, setUnread] = useState<Record<string, number>>({});
   const socketRef = useRef<Socket | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const online = usePresenceStore((s) => s.online);
+  const presenceMembers = usePresenceStore((s) => s.members);
+  const online = Object.entries(presenceMembers)
+    .filter(([, v]) => v.status === "online")
+    .map(([id]) => id);
 
   // Fetch unread counts
   useEffect(() => {
