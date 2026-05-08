@@ -16,6 +16,9 @@ With CommitFlow, you can **plan, track, and analyze your projects** — all in o
 
 ## ![CommitFlow Preview](./images/commitflow.jpg)
 
+## New UI and Features
+## ![CommitFlow New UI Preview](./images/commitflow_new_ui.png)
+
 | Chat 1                             | Chat 2                             |
 | ---------------------------------- | ---------------------------------- |
 | ![](./images/commitflow-chat1.jpg) | ![](./images/commitflow-chat2.jpg) |
@@ -51,10 +54,13 @@ With CommitFlow, you can **plan, track, and analyze your projects** — all in o
 
 A beautiful, AI-assisted workspace for managing your projects and tasks:
 
+- 📊 **Dashboard** – Monitor workspace health, task progress, priorities, deadlines, and team activity from one overview.
 - 🗂 **Kanban Board** – Organize tasks visually using drag-and-drop.  
   Each task card shows **priority color accents**, **assignee avatars**, and **due dates**.
 - 📋 **List View** – See all tasks in a clean table layout; click any row to open task details.
 - 📆 **Timeline View** – A Gantt-style horizontal timeline to visualize progress and overlaps between tasks.
+- 🗓️ **Calendar View** – Plan tasks, due dates, milestones, and team schedules in a calendar-based workflow.
+- 🏃 **Sprint Planning** – Create and manage sprints, assign tasks to sprint cycles, and track sprint progress.
 - 💬 **Task Details Modal** –
   - **Rich text editor** (React Quill) for descriptions
   - **File attachments** (via AWS S3 integration)
@@ -71,6 +77,7 @@ A beautiful, AI-assisted workspace for managing your projects and tasks:
   - **Toast notifications** (`react-toastify`) for success actions (e.g., project or member added)
 - 🌙 **Dark/Light Mode Aware** –  
   Smooth color transitions and well-tuned contrast for both themes.
+- 🔔 **Task Notification Bell** – Surface unread task updates, assignment changes, mentions, and due-date reminders from a dedicated bell icon.
 - Due date labels: **Due Today** & **Overdue**
 - Filter **Assigned to Me**
 
@@ -78,13 +85,29 @@ A beautiful, AI-assisted workspace for managing your projects and tasks:
 
 ### 💬 Team Coordination
 
+- 💬 **Group Chat** – Discuss project updates with workspace members in shared team conversations.
+- ✉️ **Messages** – Send direct or contextual messages tied to project and task collaboration.
 - **Follow up tasks via WhatsApp**
   - Generates dynamic `wa.me` link (manual click — no API yet)
   - Pre-filled message with task title & status
 - Real-time collaboration coming soon
-- **Follow up tasks via WhatsApp**
 - **Automatic email notifications** sent to team members when tasks are updated
 - **Invite team members via email** with secure join links
+
+---
+
+### 🧾 Activity & Audit Trail
+
+- 🕒 **Activity Log** – Track workspace events such as task creation, status changes, comments, assignments, sprint updates, and member actions.
+- 🔍 **Change History** – Review recent project activity to understand what changed, when it changed, and who made the update.
+
+---
+
+### 🔌 Integrations & Webhooks
+
+- 🔗 **Outgoing Webhooks** – Manage webhook endpoints for workspace events.
+- 📣 **Workspace Event Delivery** – Send task, project, sprint, member, and activity updates to external tools.
+- 🛠️ **Integration Management** – Configure connected services and webhook destinations from a centralized workspace settings area.
 
 ---
 
