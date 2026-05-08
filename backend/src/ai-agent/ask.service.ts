@@ -94,7 +94,7 @@ export class AskService {
       } else if (fn === "getDeployTasks") {
         return await getDeployTasks(args?.projectId);
       } else if (fn === "getDoneTasks") {
-        return await getDoneTasks(args?.projectId);
+        return await getDoneTasks(args?.projectId, args?.dateType);
       } else if (fn === "getUnassignedTasks") {
         return await getUnassignedTasks(args?.projectId);
       } else if (fn === "getUrgentTasks") {

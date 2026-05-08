@@ -347,7 +347,7 @@ export const tools = [
   {
     name: "getDoneTasks",
     description:
-      "Retrieve tasks with the 'done' status. Include completion date, time-to-complete (days), who completed it, and link to PR or merge if applicable. Useful for trend analysis and velocity estimation. Can be filtered by projectId.",
+      "Retrieve tasks with the 'done' status. Include completion date, time-to-complete (days), who completed it. Supports filtering by date range to analyze completion trends and velocity. When user asks about 'today's completed tasks' or 'this week's completed tasks', use appropriate dateType. Useful for trend analysis and velocity estimation. Can be filtered by projectId and dateType.",
     type: "function",
     function: {
       name: "getDoneTasks",
@@ -358,8 +358,14 @@ export const tools = [
             type: "string",
             description: "The target projectId.",
           },
+          dateType: {
+            type: "string",
+            enum: ["today", "yesterday", "this_week", "this_month", "last_7_days", "last_30_days"],
+            description:
+              "Filter by completion date. Use 'today' for today's completed tasks, 'this_week' for this week's tasks, etc. If not provided, returns all done tasks.",
+          },
         },
-        required: ["projectId"],
+        required: [],
       },
     },
     outputFormat: {
@@ -367,15 +373,29 @@ export const tools = [
         {
           id: "string",
           title: "string",
+          description: "string",
+          status: "string",
+          finishDate: "ISO8601 string",
           completedAt: "ISO8601 string",
           completedBy: "string",
           timeToCompleteDays: "number",
-          linkedPR: "string | null",
+          taskAssignees: [
+            {
+              id: "string",
+              name: "string",
+              role: "string | null",
+            },
+          ],
+          project: {
+            id: "string",
+            name: "string",
+          },
         },
       ],
       summary: {
         doneCount: "number",
         averageTimeToCompleteDays: "number",
+        dateRange: "string (e.g., 'Today', 'This Week')",
       },
     },
   },

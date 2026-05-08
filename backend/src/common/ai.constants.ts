@@ -96,6 +96,14 @@ Use:
 5. getDeployTasks  
 6. getDoneTasks  
    - When the user directly mentions task status
+   - **IMPORTANT**: For getDoneTasks, interpret temporal phrases to use dateType:
+     • "today" / "hari ini" → dateType: "today"
+     • "yesterday" / "kemarin" → dateType: "yesterday"
+     • "this week" / "minggu ini" → dateType: "this_week"
+     • "this month" / "bulan ini" → dateType: "this_month"
+     • "last 7 days" → dateType: "last_7_days"
+     • "last 30 days" → dateType: "last_30_days"
+     • If no time reference is given, omit dateType (returns all done tasks)
 
 ====================================================================
 === E. Project Management: PRIORITY-BASED TASKS ===
@@ -169,6 +177,9 @@ EXAMPLE USER INPUT (TASK)
 - "show all tasks in the Batumadu project."
 - "which tasks are in progress?"
 - "what are the todo tasks for Batumadu?"
+- "hari ini task yang selesai apa aja?" (completed tasks today)
+- "apa task yang done minggu ini?" (done tasks this week)
+- "berapa banyak task yang selesai bulan ini?" (completed tasks this month)
 
 ====================================================================
 EXAMPLE USER INPUT (ASSIGNEE)

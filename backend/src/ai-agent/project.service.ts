@@ -65,6 +65,50 @@ export async function getProjects(workspaceId: string) {
 
 /**
  * =====================================
+ * DATE HELPERS
+ * =====================================
+ */
+function getDateRange(dateType?: string) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  
+  const startOfWeek = new Date(today);
+  startOfWeek.setDate(today.getDate() - today.getDay());
+  
+  const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+  
+  switch (dateType) {
+    case "today":
+      return { gte: today, lt: tomorrow };
+    case "yesterday": {
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+      return { gte: yesterday, lt: today };
+    }
+    case "this_week":
+      return { gte: startOfWeek, lt: tomorrow };
+    case "this_month":
+      return { gte: startOfMonth, lt: tomorrow };
+    case "last_7_days": {
+      const sevenDaysAgo = new Date(today);
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      return { gte: sevenDaysAgo, lt: tomorrow };
+    }
+    case "last_30_days": {
+      const thirtyDaysAgo = new Date(today);
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      return { gte: thirtyDaysAgo, lt: tomorrow };
+    }
+    default:
+      return null;
+  }
+}
+
+/**
+ * =====================================
  * TASK HELPERS
  * =====================================
  */
@@ -94,8 +138,21 @@ function baseTaskInclude() {
   };
 }
 
+/**
+ * Special include for done tasks (includes finishDate for AI analysis)
+ */
+function doneTaskInclude() {
+  return {
+    ...baseTaskInclude(),
+    // finishDate will be included at the select level if needed
+  };
+}
 
-function buildTaskWhere(projectId?: string, status?: string) {
+function buildTaskWhere(
+  projectId?: string,
+  status?: string,
+  finishDateType?: string,
+) {
   // Only filter by project (no cross-workspace lookup)
   const where: any = { isTrash: false };
 
@@ -106,6 +163,14 @@ function buildTaskWhere(projectId?: string, status?: string) {
 
   if (status) {
     where.status = status;
+  }
+
+  // Add date range filter for finishDate if provided
+  if (finishDateType && status === "done") {
+    const dateRange = getDateRange(finishDateType);
+    if (dateRange) {
+      where.finishDate = dateRange;
+    }
   }
 
   return where;
@@ -225,18 +290,43 @@ export async function getDeployTasks(projectId = "") {
  * =====================================
  * DONE TASKS
  * =====================================
+ * Retrieve done tasks with optional date filtering
+ * dateType options: "today", "yesterday", "this_week", "this_month", "last_7_days", "last_30_days"
  */
-export async function getDoneTasks(projectId = "") {
+export async function getDoneTasks(
+  projectId = "",
+  dateType?: string,
+) {
   try {
-    console.log("getDoneTasks");
+    console.log("getDoneTasks", { projectId, dateType });
+
+    const where = buildTaskWhere(projectId, "done", dateType);
 
     const results = await prisma.task.findMany({
-      where: await buildTaskWhere(projectId, "done"),
-      include: baseTaskInclude(),
-      orderBy: { createdAt: "desc" },
+      where,
+      include: doneTaskInclude(),
+      orderBy: {
+        finishDate: "desc",
+      },
     });
 
-    return results;
+    // Enrich results with finishDate info for AI processing
+    const enriched = results.map((task: any) => ({
+      ...task,
+      finishDate: task.finishDate ? task.finishDate.toISOString() : null,
+      completedAt: task.finishDate ? task.finishDate.toISOString() : null,
+      completedBy:
+        task.taskAssignees?.[0]?.member?.name || "Unassigned",
+      timeToCompleteDays: task.createdAt && task.finishDate
+        ? Math.round(
+            (new Date(task.finishDate).getTime() -
+              new Date(task.createdAt).getTime()) /
+              (1000 * 60 * 60 * 24),
+          )
+        : null,
+    }));
+
+    return enriched;
   } catch (error) {
     logger.error("error fetching getDoneTasks", error);
     return [];
