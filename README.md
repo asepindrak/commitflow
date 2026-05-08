@@ -58,6 +58,7 @@ A beautiful, AI-assisted workspace for managing your projects and tasks:
 - 🗂 **Kanban Board** – Organize tasks visually using drag-and-drop.  
   Each task card shows **priority color accents**, **assignee avatars**, and **due dates**.
 - 📋 **List View** – See all tasks in a clean table layout; click any row to open task details.
+- ✅ **My Tasks** – Focus on tasks assigned to the current user, including upcoming, overdue, and in-progress work.
 - 📆 **Timeline View** – A Gantt-style horizontal timeline to visualize progress and overlaps between tasks.
 - 🗓️ **Calendar View** – Plan tasks, due dates, milestones, and team schedules in a calendar-based workflow.
 - 🏃 **Sprint Planning** – Create and manage sprints, assign tasks to sprint cycles, and track sprint progress.
@@ -121,6 +122,7 @@ A beautiful, AI-assisted workspace for managing your projects and tasks:
 
 ### 📊 Developer Insights
 
+- 📑 **Reports** – Review project and workspace reports for task progress, completion trends, workload, and team performance.
 - 📈 **GitHub Analytics** – Fetch organization repositories, commits, and contributor stats.
 - 🔍 **Contribution Breakdown** – Understand who contributes what and when.
 - 📆 **Activity Timeline** – Visualize commit frequency and collaboration trends.
