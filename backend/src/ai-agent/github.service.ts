@@ -8,6 +8,25 @@ const headers = {
   Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
 };
 
+const MAX_AI_REPOS = 100;
+const MAX_AI_CONTRIBUTORS = 100;
+
+function sanitizeText(value?: string | null, maxLength = 240) {
+  if (!value) return null;
+  const sanitized = value
+    .replace(
+      /data:[^"'()\s>]+;base64,[A-Za-z0-9+/=\r\n]+/g,
+      "[inline base64 omitted]"
+    )
+    .replace(/<img\b[^>]*>/gi, "[image omitted]")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return sanitized.length > maxLength
+    ? `${sanitized.slice(0, maxLength)}...`
+    : sanitized;
+}
+
 export async function getContributors(repo: string, retries = 3) {
   const owner = process.env.GITHUB_OWNER;
   const url = `https://api.github.com/repos/${owner}/${repo}/stats/contributors`;
@@ -19,14 +38,22 @@ export async function getContributors(repo: string, retries = 3) {
       const res = await axios.get(url, { headers });
 
       if (res.status === 200 && Array.isArray(res.data)) {
-        return res.data.map((c: any) => ({
-          username: c.author.login,
-          avatarUrl: c.author.avatar_url,
-          profileUrl: c.author.html_url,
-          totalCommits: c.total,
-          linesAdded: c.weeks.reduce((a: number, w: any) => a + w.a, 0),
-          linesDeleted: c.weeks.reduce((a: number, w: any) => a + w.d, 0),
-        }));
+        const contributors = res.data
+          .slice(0, MAX_AI_CONTRIBUTORS)
+          .map((c: any) => ({
+            username: c.author.login,
+            profileUrl: c.author.html_url,
+            totalCommits: c.total,
+            linesAdded: c.weeks.reduce((a: number, w: any) => a + w.a, 0),
+            linesDeleted: c.weeks.reduce((a: number, w: any) => a + w.d, 0),
+          }));
+
+        return {
+          total: res.data.length,
+          returned: contributors.length,
+          truncated: res.data.length > contributors.length,
+          contributors,
+        };
       }
 
       if (res.status === 202) {
@@ -108,16 +135,22 @@ export async function getRepos(retries = 3) {
     page++;
   }
 
-  const repos = allRepos.map((r: any) => ({
+  const limitedRepos = allRepos.slice(0, MAX_AI_REPOS);
+  const repos = limitedRepos.map((r: any) => ({
     owner: owner,
     name: r.name,
     fullName: r.full_name,
-    description: r.description,
+    description: sanitizeText(r.description),
     stars: r.stargazers_count,
     forks: r.forks_count,
     updatedAt: r.updated_at,
   }));
 
   console.log(`Fetched ${repos.length} repos from GitHub`);
-  return repos;
+  return {
+    total: allRepos.length,
+    returned: repos.length,
+    truncated: allRepos.length > repos.length,
+    repos,
+  };
 }

@@ -3,6 +3,10 @@ import logger from "vico-logger";
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
+const MAX_AI_TASKS = 100;
+const MAX_AI_PROJECTS = 100;
+const MAX_AI_MEMBERS = 100;
+const MAX_AI_MEMBER_TASKS = 30;
 
 /**
  * =====================================
@@ -18,7 +22,13 @@ export async function getProjects(workspaceId: string) {
         isTrash: false,
         workspaceId,
       },
-      include: {
+      select: {
+        id: true,
+        clientId: true,
+        name: true,
+        description: true,
+        createdAt: true,
+        updatedAt: true,
         tasks: {
           where: { isTrash: false },
           select: {
@@ -34,17 +44,17 @@ export async function getProjects(workspaceId: string) {
       },
     });
 
-
-    const enriched = results.map((project) => {
+    const limitedResults = results.slice(0, MAX_AI_PROJECTS);
+    const enriched = limitedResults.map((project) => {
       const tasks = project.tasks;
 
       return {
         id: project.id,
         clientId: project.clientId,
         name: project.name,
-        description: project.description,
-        createdAt: project.createdAt,
-        updatedAt: project.updatedAt,
+        description: truncateText(project.description),
+        createdAt: toIso(project.createdAt),
+        updatedAt: toIso(project.updatedAt),
         stats: {
           total: tasks.length,
           todo: tasks.filter((t) => t.status === "todo").length,
@@ -56,7 +66,12 @@ export async function getProjects(workspaceId: string) {
       };
     });
 
-    return enriched;
+    return {
+      total: results.length,
+      returned: enriched.length,
+      truncated: results.length > enriched.length,
+      projects: enriched,
+    };
   } catch (error) {
     logger.error("error fetching projects", error);
     return [];
@@ -68,12 +83,18 @@ export async function getProjects(workspaceId: string) {
  * DATE HELPERS
  * =====================================
  */
-function getDateRange(dateType?: string) {
+function getDateRange(dateType?: string, daysBack?: number) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   
   const tomorrow = new Date(today);
   tomorrow.setDate(tomorrow.getDate() + 1);
+
+  if (Number.isFinite(daysBack) && Number(daysBack) > 0) {
+    const start = new Date(today);
+    start.setDate(start.getDate() - Math.floor(Number(daysBack)));
+    return { gte: start, lt: tomorrow };
+  }
   
   const startOfWeek = new Date(today);
   startOfWeek.setDate(today.getDate() - today.getDay());
@@ -97,6 +118,11 @@ function getDateRange(dateType?: string) {
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
       return { gte: sevenDaysAgo, lt: tomorrow };
     }
+    case "last_3_days": {
+      const threeDaysAgo = new Date(today);
+      threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+      return { gte: threeDaysAgo, lt: tomorrow };
+    }
     case "last_30_days": {
       const thirtyDaysAgo = new Date(today);
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -112,18 +138,32 @@ function getDateRange(dateType?: string) {
  * TASK HELPERS
  * =====================================
  */
-function baseTaskInclude() {
+function baseTaskSelect() {
   return {
+    id: true,
+    clientId: true,
+    title: true,
+    description: true,
+    status: true,
+    priority: true,
+    projectId: true,
+    startDate: true,
+    dueDate: true,
+    finishDate: true,
+    labels: true,
+    sprintId: true,
+    dependencies: true,
+    createdAt: true,
+    updatedAt: true,
     taskAssignees: {
-      include: {
+      select: {
+        memberId: true,
         member: {
           select: {
             id: true,
             name: true,
             role: true,
             email: true,
-            photo: true,
-            phone: true,
           },
         },
       },
@@ -134,17 +174,77 @@ function baseTaskInclude() {
         name: true,
       },
     },
-    comments: true,
+    _count: {
+      select: {
+        comments: true,
+      },
+    },
   };
 }
 
-/**
- * Special include for done tasks (includes finishDate for AI analysis)
- */
-function doneTaskInclude() {
+function toIso(value?: Date | string | null) {
+  if (!value) return null;
+  return value instanceof Date ? value.toISOString() : value;
+}
+
+function truncateText(value?: string | null, maxLength = 240) {
+  if (!value) return null;
+  const sanitized = value
+    .replace(
+      /data:[^"'()\s>]+;base64,[A-Za-z0-9+/=\r\n]+/g,
+      "[inline base64 image omitted]"
+    )
+    .replace(/<img\b[^>]*>/gi, "[image omitted]")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return sanitized.length > maxLength
+    ? `${sanitized.slice(0, maxLength)}...`
+    : sanitized;
+}
+
+function compactTask(task: any) {
   return {
-    ...baseTaskInclude(),
-    // finishDate will be included at the select level if needed
+    id: task.id,
+    clientId: task.clientId,
+    title: task.title,
+    description: truncateText(task.description),
+    status: task.status,
+    priority: task.priority,
+    projectId: task.projectId,
+    project: task.project,
+    startDate: task.startDate,
+    dueDate: task.dueDate,
+    finishDate: toIso(task.finishDate),
+    labels: task.labels,
+    sprintId: task.sprintId,
+    dependencies: task.dependencies,
+    createdAt: toIso(task.createdAt),
+    updatedAt: toIso(task.updatedAt),
+    commentsCount: task._count?.comments ?? 0,
+    taskAssignees:
+      task.taskAssignees?.map((assignee: any) => ({
+        memberId: assignee.memberId,
+        member: assignee.member
+          ? {
+              id: assignee.member.id,
+              name: assignee.member.name,
+              role: assignee.member.role,
+              email: assignee.member.email,
+            }
+          : null,
+      })) ?? [],
+  };
+}
+
+function buildTaskResult(tasks: any[]) {
+  const limitedTasks = tasks.slice(0, MAX_AI_TASKS);
+
+  return {
+    total: tasks.length,
+    returned: limitedTasks.length,
+    truncated: tasks.length > limitedTasks.length,
+    tasks: limitedTasks.map(compactTask),
   };
 }
 
@@ -152,6 +252,7 @@ function buildTaskWhere(
   projectId?: string,
   status?: string,
   finishDateType?: string,
+  daysBack?: number,
 ) {
   // Only filter by project (no cross-workspace lookup)
   const where: any = { isTrash: false };
@@ -166,8 +267,8 @@ function buildTaskWhere(
   }
 
   // Add date range filter for finishDate if provided
-  if (finishDateType && status === "done") {
-    const dateRange = getDateRange(finishDateType);
+  if (status === "done" && (finishDateType || daysBack)) {
+    const dateRange = getDateRange(finishDateType, daysBack);
     if (dateRange) {
       where.finishDate = dateRange;
     }
@@ -187,11 +288,11 @@ export async function getAllTasks(projectId = "") {
 
     const results = await prisma.task.findMany({
       where: await buildTaskWhere(projectId),
-      include: baseTaskInclude(),
+      select: baseTaskSelect(),
       orderBy: { createdAt: "desc" },
     });
 
-    return results;
+    return buildTaskResult(results);
   } catch (error) {
     logger.error("error fetching getAllTasks", error);
     return [];
@@ -209,11 +310,11 @@ export async function getTodoTasks(projectId = "") {
 
     const results = await prisma.task.findMany({
       where: await buildTaskWhere(projectId, "todo"),
-      include: baseTaskInclude(),
+      select: baseTaskSelect(),
       orderBy: { createdAt: "desc" },
     });
 
-    return results;
+    return buildTaskResult(results);
   } catch (error) {
     logger.error("error fetching getTodoTasks", error);
     return [];
@@ -231,11 +332,11 @@ export async function getInProgressTasks(projectId = "") {
 
     const results = await prisma.task.findMany({
       where: await buildTaskWhere(projectId, "inprogress"),
-      include: baseTaskInclude(),
+      select: baseTaskSelect(),
       orderBy: { createdAt: "desc" },
     });
 
-    return results;
+    return buildTaskResult(results);
   } catch (error) {
     logger.error("error fetching getInProgressTasks", error);
     return [];
@@ -253,11 +354,11 @@ export async function getQaTasks(projectId = "") {
 
     const results = await prisma.task.findMany({
       where: await buildTaskWhere(projectId, "qa"),
-      include: baseTaskInclude(),
+      select: baseTaskSelect(),
       orderBy: { createdAt: "desc" },
     });
 
-    return results;
+    return buildTaskResult(results);
   } catch (error) {
     logger.error("error fetching getQaTasks", error);
     return [];
@@ -275,11 +376,11 @@ export async function getDeployTasks(projectId = "") {
 
     const results = await prisma.task.findMany({
       where: await buildTaskWhere(projectId, "deploy"),
-      include: baseTaskInclude(),
+      select: baseTaskSelect(),
       orderBy: { createdAt: "desc" },
     });
 
-    return results;
+    return buildTaskResult(results);
   } catch (error) {
     logger.error("error fetching getDeployTasks", error);
     return [];
@@ -291,29 +392,30 @@ export async function getDeployTasks(projectId = "") {
  * DONE TASKS
  * =====================================
  * Retrieve done tasks with optional date filtering
- * dateType options: "today", "yesterday", "this_week", "this_month", "last_7_days", "last_30_days"
+ * dateType options: "today", "yesterday", "this_week", "this_month", "last_3_days", "last_7_days", "last_30_days"
  */
 export async function getDoneTasks(
   projectId = "",
   dateType?: string,
+  daysBack?: number,
 ) {
   try {
-    console.log("getDoneTasks", { projectId, dateType });
+    console.log("getDoneTasks", { projectId, dateType, daysBack });
 
-    const where = buildTaskWhere(projectId, "done", dateType);
+    const where = buildTaskWhere(projectId, "done", dateType, daysBack);
 
     const results = await prisma.task.findMany({
       where,
-      include: doneTaskInclude(),
+      select: baseTaskSelect(),
       orderBy: {
         finishDate: "desc",
       },
     });
 
     // Enrich results with finishDate info for AI processing
-    const enriched = results.map((task: any) => ({
-      ...task,
-      finishDate: task.finishDate ? task.finishDate.toISOString() : null,
+    const limitedResults = results.slice(0, MAX_AI_TASKS);
+    const enriched = limitedResults.map((task: any) => ({
+      ...compactTask(task),
       completedAt: task.finishDate ? task.finishDate.toISOString() : null,
       completedBy:
         task.taskAssignees?.[0]?.member?.name || "Unassigned",
@@ -326,7 +428,14 @@ export async function getDoneTasks(
         : null,
     }));
 
-    return enriched;
+    return {
+      total: results.length,
+      returned: enriched.length,
+      truncated: results.length > enriched.length,
+      dateType: dateType ?? null,
+      daysBack: daysBack ?? null,
+      tasks: enriched,
+    };
   } catch (error) {
     logger.error("error fetching getDoneTasks", error);
     return [];
@@ -344,12 +453,17 @@ export async function getMembers(workspaceId: string) {
 
     const results = await prisma.teamMember.findMany({
       where: { isTrash: false, workspaceId },
-      include: {
+      select: {
+        id: true,
+        clientId: true,
+        name: true,
+        role: true,
+        email: true,
         taskAssignees: {
           where: {
             task: { isTrash: false }
           },
-          include: {
+          select: {
             task: {
               select: {
                 id: true,
@@ -371,11 +485,13 @@ export async function getMembers(workspaceId: string) {
     });
 
 
-    const enriched = results.map((member) => {
+    const limitedResults = results.slice(0, MAX_AI_MEMBERS);
+    const enriched = limitedResults.map((member) => {
       // ambil task dari pivot
       const tasks = member.taskAssignees
         .map((ta) => ta.task)
         .filter(Boolean); // safety
+      const limitedTasks = tasks.slice(0, MAX_AI_MEMBER_TASKS);
 
       return {
         id: member.id,
@@ -383,8 +499,6 @@ export async function getMembers(workspaceId: string) {
         name: member.name,
         role: member.role,
         email: member.email,
-        phone: member.phone,
-        photo: member.photo,
 
         stats: {
           total: tasks.length,
@@ -395,12 +509,19 @@ export async function getMembers(workspaceId: string) {
           done: tasks.filter((t) => t.status === "done").length,
         },
 
-        tasks,
+        tasksReturned: limitedTasks.length,
+        tasksTruncated: tasks.length > limitedTasks.length,
+        tasks: limitedTasks,
       };
     });
 
 
-    return enriched;
+    return {
+      total: results.length,
+      returned: enriched.length,
+      truncated: results.length > enriched.length,
+      members: enriched,
+    };
   } catch (error) {
     logger.error("error fetching getMembers", error);
     return [];
@@ -424,11 +545,11 @@ export async function getUnassignedTasks(projectId: string = "") {
 
     const results = await prisma.task.findMany({
       where,
-      include: baseTaskInclude(),
+      select: baseTaskSelect(),
       orderBy: { createdAt: "desc" },
     });
 
-    return results;
+    return buildTaskResult(results);
   } catch (error) {
     logger.error("error fetching getUnassignedTasks", error);
     return [];
@@ -449,11 +570,11 @@ export async function getUrgentTasks(projectId: string = "") {
 
     const results = await prisma.task.findMany({
       where,
-      include: baseTaskInclude(),
+      select: baseTaskSelect(),
       orderBy: { createdAt: "desc" },
     });
 
-    return results;
+    return buildTaskResult(results);
   } catch (error) {
     logger.error("error fetching getUrgentTasks", error);
     return [];
@@ -473,11 +594,11 @@ export async function getLowTasks(projectId: string = "") {
 
     const results = await prisma.task.findMany({
       where,
-      include: baseTaskInclude(),
+      select: baseTaskSelect(),
       orderBy: { createdAt: "desc" },
     });
 
-    return results;
+    return buildTaskResult(results);
   } catch (error) {
     logger.error("error fetching getLowTasks", error);
     return [];
@@ -497,11 +618,11 @@ export async function getMediumTasks(projectId: string = "") {
 
     const results = await prisma.task.findMany({
       where,
-      include: baseTaskInclude(),
+      select: baseTaskSelect(),
       orderBy: { createdAt: "desc" },
     });
 
-    return results;
+    return buildTaskResult(results);
   } catch (error) {
     logger.error("error fetching getMediumTasks", error);
     return [];

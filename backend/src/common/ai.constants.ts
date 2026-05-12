@@ -96,13 +96,18 @@ Use:
 5. getDeployTasks  
 6. getDoneTasks  
    - When the user directly mentions task status
-   - **IMPORTANT**: For getDoneTasks, interpret temporal phrases to use dateType:
+   - **IMPORTANT**: For getDoneTasks, interpret temporal phrases into either dateType or daysBack:
      • "today" / "hari ini" → dateType: "today"
      • "yesterday" / "kemarin" → dateType: "yesterday"
      • "this week" / "minggu ini" → dateType: "this_week"
      • "this month" / "bulan ini" → dateType: "this_month"
-     • "last 7 days" → dateType: "last_7_days"
-     • "last 30 days" → dateType: "last_30_days"
+     • "last 3 days" / "3 hari ke belakang" / "3 hari kebelakang" / "3 hari terakhir" / "tiga hari terakhir" → daysBack: 3
+     • "last 5 days" / "5 hari ke belakang" / "5 hari terakhir" → daysBack: 5
+     • "last 6 days" / "6 hari ke belakang" / "6 hari terakhir" → daysBack: 6
+     • "last 7 days" / "1 minggu ke belakang" / "seminggu terakhir" → daysBack: 7
+     • "last 30 days" / "30 hari terakhir" → daysBack: 30
+     • For any "N days back" / "N hari ke belakang" / "N hari terakhir" phrase, extract N and call getDoneTasks with daysBack: N.
+     • Prefer daysBack for rolling ranges; prefer dateType for calendar ranges like today, yesterday, this_week, this_month.
      • If no time reference is given, omit dateType (returns all done tasks)
 
 ====================================================================

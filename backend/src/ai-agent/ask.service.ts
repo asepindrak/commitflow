@@ -28,6 +28,47 @@ dotenv.config();
 
 @Injectable()
 export class AskService {
+  private sanitizeToolText(value: string, maxLength = 1000) {
+    const sanitized = value
+      .replace(
+        /data:[^"'()\s>]+;base64,[A-Za-z0-9+/=\r\n]+/g,
+        "[inline base64 omitted]"
+      )
+      .replace(/<img\b[^>]*>/gi, "[image omitted]")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    return sanitized.length > maxLength
+      ? `${sanitized.slice(0, maxLength)}...`
+      : sanitized;
+  }
+
+  private compactToolPayload(value: any, depth = 0): any {
+    if (value === null || value === undefined) return value;
+    if (typeof value === "string") return this.sanitizeToolText(value);
+    if (typeof value !== "object") return value;
+    if (value instanceof Date) return value.toISOString();
+    if (depth >= 6) return "[nested data omitted]";
+
+    if (Array.isArray(value)) {
+      const limited = value.slice(0, 100);
+      return limited.map((item) => this.compactToolPayload(item, depth + 1));
+    }
+
+    const omittedKeys = new Set([
+      "attachments",
+      "avatarUrl",
+      "comments",
+      "phone",
+      "photo",
+    ]);
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([key]) => !omittedKeys.has(key))
+        .map(([key, item]) => [key, this.compactToolPayload(item, depth + 1)])
+    );
+  }
+
   private emitThinking(socket: Socket | undefined, message: string) {
     if (socket) {
       socket.emit("ai_thinking", { type: "thinking", message });
@@ -94,7 +135,11 @@ export class AskService {
       } else if (fn === "getDeployTasks") {
         return await getDeployTasks(args?.projectId);
       } else if (fn === "getDoneTasks") {
-        return await getDoneTasks(args?.projectId, args?.dateType);
+        return await getDoneTasks(
+          args?.projectId,
+          args?.dateType,
+          args?.daysBack
+        );
       } else if (fn === "getUnassignedTasks") {
         return await getUnassignedTasks(args?.projectId);
       } else if (fn === "getUrgentTasks") {
@@ -126,7 +171,7 @@ export class AskService {
     const getMessages = await prisma.chatMessage.findMany({
       where: { userId: userId || "" },
       orderBy: { createdAt: "desc" },
-      take: 10,
+      take: 6,
     });
 
     const userMessages = getMessages.reverse();
@@ -146,7 +191,6 @@ export class AskService {
         role: "system",
         content: `User Selected Project ID: ${data.projectId}`,
       },
-      ...data.messages,
     ];
 
     this.emitThinking(socket, "🧠 Thinking...");
@@ -205,6 +249,7 @@ export class AskService {
           // inject cacheDate for certain read-only tools to improve cache key uniqueness
           if (fn === "getRepos" || fn === "getContributors") {
             args.cacheDate = new Date().toISOString().split("T")[0];
+            args.resultShapeVersion = 2;
           }
 
           // Try cache lookup (aiToolCache stores raw result in 'result' column)
@@ -224,7 +269,7 @@ export class AskService {
           let toolResult: any = null;
 
           if (cached && cached.result !== null && cached.result !== undefined) {
-            toolResult = cached.result;
+            toolResult = this.compactToolPayload(cached.result);
             this.emitToolCall(socket, fn, args);
             this.emitToolResult(socket, fn, toolResult);
 
@@ -237,7 +282,9 @@ export class AskService {
           } else {
             // Execute actual tool
             this.emitToolCall(socket, fn, args);
-            toolResult = await this.execToolByName(fn, args);
+            toolResult = this.compactToolPayload(
+              await this.execToolByName(fn, args)
+            );
             this.emitToolResult(socket, fn, toolResult);
 
             // push tool result into conversation

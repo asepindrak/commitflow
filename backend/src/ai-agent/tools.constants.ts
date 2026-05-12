@@ -360,9 +360,16 @@ export const tools = [
           },
           dateType: {
             type: "string",
-            enum: ["today", "yesterday", "this_week", "this_month", "last_7_days", "last_30_days"],
+            enum: ["today", "yesterday", "this_week", "this_month", "last_3_days", "last_7_days", "last_30_days"],
             description:
-              "Filter by completion date. Use 'today' for today's completed tasks, 'this_week' for this week's tasks, etc. If not provided, returns all done tasks.",
+              "Filter by completion date. Use this for named ranges such as today, yesterday, this_week, this_month. For dynamic phrases like last 5 days or 6 hari terakhir, use daysBack instead.",
+          },
+          daysBack: {
+            type: "number",
+            minimum: 1,
+            maximum: 365,
+            description:
+              "Dynamic number of days to look back from today, inclusive through today. Use this when the user asks for N days back / N hari ke belakang / N hari terakhir, for example 5, 6, 14.",
           },
         },
         required: [],
