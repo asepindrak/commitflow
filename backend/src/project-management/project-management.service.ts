@@ -1237,6 +1237,22 @@ ${body}
       await new Promise((r) => setTimeout(r, 200));
     }
 
+    // -----------------------------
+    // LOG ACTIVITY
+    // -----------------------------
+    this.activityLog
+      .log({
+        workspaceId: project.workspaceId,
+        memberId: payload.memberId,
+        memberName: payload.author,
+        action: "comment.added",
+        entity: "comment",
+        entityId: c.id,
+        entityName: task.title,
+        meta: { body: payload.body },
+      })
+      .catch(() => {});
+
     return {
       ...c,
       createdAt: c.createdAt?.toISOString(),

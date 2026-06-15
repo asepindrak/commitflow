@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaClient } from "@prisma/client";
+import { IntegrationsService } from "src/integrations/integrations.service";
 
 const prisma = new PrismaClient();
 
@@ -16,8 +17,10 @@ export interface LogActivityDto {
 
 @Injectable()
 export class ActivityLogService {
+  constructor(private readonly integrations: IntegrationsService) {}
+
   async log(dto: LogActivityDto) {
-    return prisma.activityLog.create({
+    const createdLog = await prisma.activityLog.create({
       data: {
         workspaceId: dto.workspaceId,
         memberId: dto.memberId ?? null,
@@ -29,6 +32,23 @@ export class ActivityLogService {
         meta: dto.meta ?? undefined,
       },
     });
+
+    // Dispatch integrations notifications in background
+    this.integrations
+      .triggerNotifications(
+        dto.workspaceId,
+        dto.action,
+        dto.entity ?? null,
+        dto.entityId ?? null,
+        dto.entityName ?? null,
+        dto.memberName ?? null,
+        dto.meta ?? null,
+      )
+      .catch((err) => {
+        console.error("Error triggering notifications inside ActivityLogService", err);
+      });
+
+    return createdLog;
   }
 
   async getByWorkspace(workspaceId: string, limit = 100, cursor?: string) {

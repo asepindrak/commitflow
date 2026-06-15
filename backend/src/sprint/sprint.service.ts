@@ -1,9 +1,13 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaClient } from "@prisma/client";
+import { ActivityLogService } from "src/activity-log/activity-log.service";
 
 @Injectable()
 export class SprintService {
-  constructor(private prisma: PrismaClient) {}
+  constructor(
+    private prisma: PrismaClient,
+    private activityLog: ActivityLogService,
+  ) {}
 
   async create(data: {
     workspaceId: string;
@@ -12,7 +16,17 @@ export class SprintService {
     startDate?: string;
     endDate?: string;
   }) {
-    return this.prisma.sprint.create({ data });
+    const sprint = await this.prisma.sprint.create({ data });
+    this.activityLog
+      .log({
+        workspaceId: data.workspaceId,
+        action: "sprint.changed",
+        entity: "sprint",
+        entityId: sprint.id,
+        entityName: `Sprint "${sprint.name}" created`,
+      })
+      .catch(() => {});
+    return sprint;
   }
 
   async findAll(workspaceId: string) {
@@ -32,19 +46,42 @@ export class SprintService {
       endDate?: string;
     },
   ) {
-    return this.prisma.sprint.update({
+    const sprint = await this.prisma.sprint.update({
       where: { id },
       data: { ...data, updatedAt: new Date() },
     });
+    this.activityLog
+      .log({
+        workspaceId: sprint.workspaceId,
+        action: "sprint.changed",
+        entity: "sprint",
+        entityId: sprint.id,
+        entityName: `Sprint "${sprint.name}" updated`,
+      })
+      .catch(() => {});
+    return sprint;
   }
 
   async remove(id: string) {
-    // Unlink tasks first
-    await this.prisma.task.updateMany({
-      where: { sprintId: id },
-      data: { sprintId: null },
-    });
-    return this.prisma.sprint.delete({ where: { id } });
+    const sprint = await this.prisma.sprint.findUnique({ where: { id } });
+    if (sprint) {
+      await this.prisma.task.updateMany({
+        where: { sprintId: id },
+        data: { sprintId: null },
+      });
+      const res = await this.prisma.sprint.delete({ where: { id } });
+      this.activityLog
+        .log({
+          workspaceId: sprint.workspaceId,
+          action: "sprint.changed",
+          entity: "sprint",
+          entityId: id,
+          entityName: `Sprint "${sprint.name}" deleted`,
+        })
+        .catch(() => {});
+      return res;
+    }
+    return null;
   }
 
   async getSprintTasks(sprintId: string) {
@@ -56,9 +93,31 @@ export class SprintService {
   }
 
   async assignTask(taskId: string, sprintId: string | null) {
-    return this.prisma.task.update({
+    const task = await this.prisma.task.findUnique({
+      where: { id: taskId },
+      include: { project: true },
+    });
+    const updated = await this.prisma.task.update({
       where: { id: taskId },
       data: { sprintId },
     });
+
+    if (task && task.project && task.project.workspaceId) {
+      let sprintName = "Backlog";
+      if (sprintId) {
+        const s = await this.prisma.sprint.findUnique({ where: { id: sprintId } });
+        if (s) sprintName = s.name;
+      }
+      this.activityLog
+        .log({
+          workspaceId: task.project.workspaceId,
+          action: "sprint.changed",
+          entity: "sprint",
+          entityId: sprintId ?? "backlog",
+          entityName: `Task "${task.title}" assigned to Sprint "${sprintName}"`,
+        })
+        .catch(() => {});
+    }
+    return updated;
   }
 }

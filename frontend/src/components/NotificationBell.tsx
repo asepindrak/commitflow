@@ -165,10 +165,11 @@ export default function NotificationBell({
                 key={`${n.taskId}-${n.type}`}
                 onClick={() => {
                   setOpen(false);
-                  markBellSeen();
                   onOpenTask(n.taskId, n.projectId);
                 }}
-                className="w-full flex items-start gap-3 px-5 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 border-b border-gray-50 dark:border-gray-800/30 transition-colors text-left"
+                className={`w-full flex items-start gap-3 px-5 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 border-b border-gray-50 dark:border-gray-800/30 transition-colors text-left ${
+                  n.isRead ? "opacity-55 bg-gray-50/20 dark:bg-gray-900/10" : ""
+                }`}
               >
                 <div
                   className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${

@@ -21,6 +21,7 @@ import { ActivityLogModule } from "./activity-log/activity-log.module";
 import { DashboardModule } from "./dashboard/dashboard.module";
 import { SprintModule } from "./sprint/sprint.module";
 import { DirectMessageModule } from "./direct-message/direct-message.module";
+import { IntegrationsModule } from "./integrations/integrations.module";
 import { APP_GUARD } from "@nestjs/core";
 
 @Module({
@@ -45,6 +46,7 @@ import { APP_GUARD } from "@nestjs/core";
     DashboardModule,
     SprintModule,
     DirectMessageModule,
+    IntegrationsModule,
   ],
   controllers: [AppController, AskController],
   providers: [
