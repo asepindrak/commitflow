@@ -40,6 +40,7 @@ export default function TaskModal({
   onAddComment,
   onDelete,
   team,
+  onDeleteComment,
 }: {
   projects: any[];
   activeProjectId: string;
@@ -56,6 +57,7 @@ export default function TaskModal({
   ) => void;
   onDelete: (id: string) => void;
   team: TeamMember[];
+  onDeleteComment?: (commentId: string) => Promise<void>;
 }) {
   const [local, setLocal] = useState<Task>(task);
   const [commentText, setCommentText] = useState("");
@@ -82,8 +84,8 @@ export default function TaskModal({
   const currentMemberName = user?.name ?? null;
 
   const currentProject = useMemo(
-    () => projects.find((m) => String(m.id) === String(activeProjectId)),
-    [projects, activeProjectId],
+    () => projects.find((m) => String(m.id) === String(task.projectId || activeProjectId)),
+    [projects, task.projectId, activeProjectId],
   );
   const currentProjectName = currentProject?.name ?? null;
 
@@ -159,11 +161,56 @@ export default function TaskModal({
         title: "Upload failed",
         text: `Gagal upload file: ${err?.message || err}`,
         icon: "error",
-        background: dark ? "#111827" : undefined,
-        color: dark ? "#e5e7eb" : undefined,
+        background: "#111827",
+        color: "#e5e7eb",
       });
     } finally {
       setUploading(false);
+    }
+  }
+
+  async function handleDeleteComment(commentId: string) {
+    if (!onDeleteComment) return;
+
+    const result = await Swal.fire({
+      title: "Delete comment?",
+      text: "This comment will be permanently deleted.",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Delete",
+      cancelButtonText: "Cancel",
+      confirmButtonColor: "#ef4444",
+      background: "#111827",
+      color: "#e5e7eb",
+    });
+
+    if (result.isConfirmed) {
+      try {
+        await onDeleteComment(commentId);
+        setLocal((prev) => ({
+          ...prev,
+          comments: (prev.comments || []).filter((c: any) => c.id !== commentId),
+        }));
+
+        Swal.fire({
+          title: "Deleted!",
+          text: "Comment has been deleted.",
+          icon: "success",
+          timer: 1200,
+          showConfirmButton: false,
+          background: "#111827",
+          color: "#e5e7eb",
+        });
+      } catch (err: any) {
+        console.error("delete comment error", err);
+        Swal.fire({
+          title: "Failed",
+          text: err.message || "Failed to delete comment",
+          icon: "error",
+          background: "#111827",
+          color: "#e5e7eb",
+        });
+      }
     }
   }
 
@@ -743,18 +790,30 @@ export default function TaskModal({
                           {initials}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-baseline gap-2 mb-1">
-                            <span className="text-sm font-semibold">
-                              {c.author}
-                            </span>
-                            <span className="text-xs text-gray-400 dark:text-gray-500">
-                              {new Date(c.createdAt).toLocaleString(undefined, {
-                                month: "short",
-                                day: "numeric",
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })}
-                            </span>
+                          <div className="flex items-baseline justify-between gap-2 mb-1">
+                            <div className="flex items-baseline gap-2">
+                              <span className="text-sm font-semibold">
+                                {c.author}
+                              </span>
+                              <span className="text-xs text-gray-400 dark:text-gray-500">
+                                {new Date(c.createdAt).toLocaleString(undefined, {
+                                  month: "short",
+                                  day: "numeric",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
+                              </span>
+                            </div>
+
+                            {onDeleteComment && (
+                              <button
+                                onClick={() => handleDeleteComment(c.id)}
+                                className="opacity-0 group-hover:opacity-100 p-1 rounded-md text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all cursor-pointer border-0 bg-transparent outline-none"
+                                title="Delete comment"
+                              >
+                                <Trash size={12} />
+                              </button>
+                            )}
                           </div>
                           <div className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed bg-gray-50 dark:bg-gray-800/40 rounded-xl px-4 py-2.5 border border-gray-100 dark:border-gray-700/40">
                             {parse(c.body)}

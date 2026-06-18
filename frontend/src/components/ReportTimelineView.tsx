@@ -35,7 +35,7 @@ export default function ReportTimelineView({
     onSelectTask,
 }: {
     rows: any[];
-    onSelectTask: (projectId: string) => void;
+    onSelectTask: (task: any) => void;
 }) {
     const tasks = rows;
 
@@ -154,8 +154,8 @@ export default function ReportTimelineView({
                                 {/* bar */}
                                 <div
                                     onClick={() =>
-                                        onSelectTask(t.projectId)
-                                    }
+                                         onSelectTask(t)
+                                     }
                                     title={`${t.title}`}
                                     className={`
                                         absolute top-2 h-10 rounded-lg px-3

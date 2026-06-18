@@ -20,11 +20,32 @@ export class ActivityLogService {
   constructor(private readonly integrations: IntegrationsService) {}
 
   async log(dto: LogActivityDto) {
+    let resolvedMemberName = dto.memberName;
+
+    if (!resolvedMemberName && dto.memberId) {
+      try {
+        const member = await prisma.teamMember.findFirst({
+          where: {
+            workspaceId: dto.workspaceId,
+            OR: [
+              { id: dto.memberId },
+              { userId: dto.memberId },
+            ],
+          },
+        });
+        if (member) {
+          resolvedMemberName = member.name;
+        }
+      } catch (err) {
+        console.error("Error resolving member name in ActivityLogService", err);
+      }
+    }
+
     const createdLog = await prisma.activityLog.create({
       data: {
         workspaceId: dto.workspaceId,
         memberId: dto.memberId ?? null,
-        memberName: dto.memberName ?? null,
+        memberName: resolvedMemberName ?? null,
         action: dto.action,
         entity: dto.entity ?? null,
         entityId: dto.entityId ?? null,
@@ -41,7 +62,7 @@ export class ActivityLogService {
         dto.entity ?? null,
         dto.entityId ?? null,
         dto.entityName ?? null,
-        dto.memberName ?? null,
+        resolvedMemberName ?? null,
         dto.meta ?? null,
       )
       .catch((err) => {

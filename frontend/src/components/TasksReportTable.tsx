@@ -102,7 +102,7 @@ function groupByWeekForTimeline(tasks: any[]) {
 /* ================= types ================= */
 type Props = {
     workspaceId: string;
-    onSelectTask: (projectId: string) => void;
+    onSelectTask: (task: any) => void;
     team: TeamMember[];
 };
 
@@ -117,6 +117,7 @@ export default function TasksReportTable({
     const [endDate, setEndDate] = useState<string | undefined>();
     const [selectedMemberId, setSelectedMemberId] = useState<string | undefined>();
     const [statusFilter, setStatusFilter] = useState<string>("all");
+    const [searchQuery, setSearchQuery] = useState<string>("");
     type ViewMode = "table" | "timeline";
 
     const [viewMode, setViewMode] = useState<ViewMode>("table");
@@ -145,9 +146,13 @@ export default function TasksReportTable({
 
         return data.filter((t: any) => {
             if (statusFilter !== "all" && t.status !== statusFilter) return false;
+            if (searchQuery.trim() !== "") {
+                const titleMatch = t.title?.toLowerCase().includes(searchQuery.toLowerCase());
+                if (!titleMatch) return false;
+            }
             return true;
         });
-    }, [data, statusFilter]);
+    }, [data, statusFilter, searchQuery]);
 
     const timelineGroups = useMemo(() => {
         return groupByWeekForTimeline(rows);
@@ -495,6 +500,24 @@ export default function TasksReportTable({
                     Report
                 </span>
 
+                {/* Search query */}
+                <div className="relative">
+                    <input
+                        type="text"
+                        placeholder="Search task..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="
+                            w-48 px-3 py-1.5 text-xs rounded-lg border
+                            bg-white/60 dark:bg-gray-900/60
+                            border-gray-300 dark:border-gray-700
+                            text-slate-900 dark:text-slate-100
+                            placeholder-gray-400 dark:placeholder-gray-500
+                            focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500
+                        "
+                    />
+                </div>
+
                 {/* Member filter */}
                 <div className="w-48">
                     {memberOptions.length > 0 && (
@@ -555,12 +578,13 @@ export default function TasksReportTable({
                 </div>
 
                 {/* Reset */}
-                {(startDate || endDate || normalizedMemberId) && (
+                {(startDate || endDate || normalizedMemberId || searchQuery) && (
                     <button
                         onClick={() => {
                             setStartDate(undefined);
                             setEndDate(undefined);
                             setSelectedMemberId(undefined);
+                            setSearchQuery("");
                         }}
                         className="
                             flex items-center gap-1 text-xs
@@ -689,7 +713,7 @@ export default function TasksReportTable({
                             {rows.map((t: any) => (
                                 <tr
                                     key={t.id}
-                                    onClick={() => onSelectTask(t.projectId)}
+                                    onClick={() => onSelectTask(t)}
                                     className="hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer"
                                 >
                                     <td className="px-3 py-2 border">

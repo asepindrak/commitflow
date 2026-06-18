@@ -116,6 +116,7 @@ export default function Sidebar({
   openEditProfileTeam,
   isAdmin,
   onOpenViewMode,
+  activeViewMode,
 }: {
   workspaces: Workspace[];
   activeWorkspaceId: string;
@@ -133,6 +134,7 @@ export default function Sidebar({
   openEditProfileTeam: (member: any) => void;
   isAdmin: boolean;
   onOpenViewMode: (view: any) => void;
+  activeViewMode: string;
 }) {
   const presenceMembers = usePresenceStore((s) => s.members);
 
@@ -472,8 +474,11 @@ export default function Sidebar({
               className={`
                 w-full flex items-center gap-3 px-3 py-2 rounded-xl
                 transition-all duration-150
-                hover:bg-emerald-50 dark:hover:bg-emerald-900/20
-                text-emerald-600 dark:text-emerald-300
+                ${
+                  activeViewMode === "DASHBOARD"
+                    ? "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-300"
+                    : "text-gray-500 dark:text-gray-400 hover:bg-emerald-50/50 dark:hover:bg-emerald-900/10 hover:text-emerald-600 dark:hover:text-emerald-300"
+                }
                 ${collapsed ? "justify-center" : ""}
               `}
             >
@@ -491,8 +496,11 @@ export default function Sidebar({
               className={`
               w-full flex items-center gap-3 px-3 py-2 rounded-xl
               transition-all duration-150
-              hover:bg-sky-50 dark:hover:bg-sky-900/20
-              text-sky-600 dark:text-sky-300
+              ${
+                activeViewMode === "REPORT"
+                  ? "bg-sky-50 dark:bg-sky-900/20 text-sky-600 dark:text-sky-300"
+                  : "text-gray-500 dark:text-gray-400 hover:bg-sky-50/50 dark:hover:bg-sky-900/10 hover:text-sky-600 dark:hover:text-sky-300"
+              }
               ${collapsed ? "justify-center" : ""}
             `}
             >
@@ -510,8 +518,11 @@ export default function Sidebar({
               className={`
               w-full flex items-center gap-3 px-3 py-2 rounded-xl
               transition-all duration-150
-              hover:bg-sky-50 dark:hover:bg-sky-900/20
-              text-sky-600 dark:text-sky-300
+              ${
+                activeViewMode === "MY_TASKS"
+                  ? "bg-sky-50 dark:bg-sky-900/20 text-sky-600 dark:text-sky-300"
+                  : "text-gray-500 dark:text-gray-400 hover:bg-sky-50/50 dark:hover:bg-sky-900/10 hover:text-sky-600 dark:hover:text-sky-300"
+              }
               ${collapsed ? "justify-center" : ""}
             `}
             >
@@ -529,25 +540,31 @@ export default function Sidebar({
               className={`
                 w-full flex items-center gap-3 px-3 py-2.5 rounded-xl
                 transition-all duration-200 group
-                bg-gradient-to-r from-violet-500/10 via-fuchsia-500/10 to-pink-500/10
-                dark:from-violet-500/15 dark:via-fuchsia-500/15 dark:to-pink-500/15
-                hover:from-violet-500/20 hover:via-fuchsia-500/20 hover:to-pink-500/20
-                dark:hover:from-violet-500/25 dark:hover:via-fuchsia-500/25 dark:hover:to-pink-500/25
-                border border-violet-200/60 dark:border-violet-700/40
-                hover:border-violet-300 dark:hover:border-violet-600
-                hover:shadow-md hover:shadow-violet-200/30 dark:hover:shadow-violet-900/30
+                ${
+                  activeViewMode === "GROUP_CHAT"
+                    ? "bg-gradient-to-r from-violet-500/10 via-fuchsia-500/10 to-pink-500/10 dark:from-violet-500/15 dark:via-fuchsia-500/15 dark:to-pink-500/15 border border-violet-200/60 dark:border-violet-700/40 shadow-md shadow-violet-200/30 dark:shadow-violet-900/30"
+                    : "border border-transparent text-gray-500 dark:text-gray-400 hover:bg-violet-50/30 dark:hover:bg-violet-900/5 hover:border-violet-200/30 dark:hover:border-violet-700/20"
+                }
                 ${collapsed ? "justify-center" : ""}
               `}
             >
               <div className="relative">
                 <MessagesSquare
                   size={18}
-                  className="text-violet-500 dark:text-violet-400 group-hover:scale-110 transition-transform duration-200"
+                  className={`group-hover:scale-110 transition-transform duration-200 ${
+                    activeViewMode === "GROUP_CHAT"
+                      ? "text-violet-500 dark:text-violet-400"
+                      : "text-gray-500 dark:text-gray-400 group-hover:text-violet-500 dark:group-hover:text-violet-400"
+                  }`}
                 />
                 <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-400 ring-2 ring-white dark:ring-gray-900" />
               </div>
               {!collapsed && (
-                <span className="font-bold text-sm bg-gradient-to-r from-violet-600 via-fuchsia-500 to-pink-500 dark:from-violet-400 dark:via-fuchsia-400 dark:to-pink-400 bg-clip-text text-transparent">
+                <span className={`font-bold text-sm transition-all duration-200 ${
+                  activeViewMode === "GROUP_CHAT"
+                    ? "bg-gradient-to-r from-violet-600 via-fuchsia-500 to-pink-500 dark:from-violet-400 dark:via-fuchsia-400 dark:to-pink-400 bg-clip-text text-transparent"
+                    : "text-gray-500 dark:text-gray-400 group-hover:bg-gradient-to-r group-hover:from-violet-600 group-hover:via-fuchsia-500 group-hover:to-pink-500 dark:group-hover:from-violet-400 dark:group-hover:via-fuchsia-400 dark:group-hover:to-pink-400 group-hover:bg-clip-text group-hover:text-transparent"
+                }`}>
                   Group Chat
                 </span>
               )}
@@ -561,8 +578,11 @@ export default function Sidebar({
               className={`
                 w-full flex items-center gap-3 px-3 py-2 rounded-xl
                 transition-all duration-150
-                hover:bg-indigo-50 dark:hover:bg-indigo-900/20
-                text-indigo-600 dark:text-indigo-300
+                ${
+                  activeViewMode === "ACTIVITY_LOG"
+                    ? "bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-300"
+                    : "text-gray-500 dark:text-gray-400 hover:bg-indigo-50/50 dark:hover:bg-indigo-900/10 hover:text-indigo-600 dark:hover:text-indigo-300"
+                }
                 ${collapsed ? "justify-center" : ""}
               `}
             >
@@ -580,8 +600,11 @@ export default function Sidebar({
               className={`
                 w-full flex items-center gap-3 px-3 py-2 rounded-xl
                 transition-all duration-150
-                hover:bg-orange-50 dark:hover:bg-orange-900/20
-                text-orange-600 dark:text-orange-300
+                ${
+                  activeViewMode === "CALENDAR"
+                    ? "bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-300"
+                    : "text-gray-500 dark:text-gray-400 hover:bg-orange-50/50 dark:hover:bg-orange-900/10 hover:text-orange-600 dark:hover:text-orange-300"
+                }
                 ${collapsed ? "justify-center" : ""}
               `}
             >
@@ -599,8 +622,11 @@ export default function Sidebar({
               className={`
                 w-full flex items-center gap-3 px-3 py-2 rounded-xl
                 transition-all duration-150
-                hover:bg-violet-50 dark:hover:bg-violet-900/20
-                text-violet-600 dark:text-violet-300
+                ${
+                  activeViewMode === "SPRINTS"
+                    ? "bg-violet-50 dark:bg-violet-900/20 text-violet-600 dark:text-violet-300"
+                    : "text-gray-500 dark:text-gray-400 hover:bg-violet-50/50 dark:hover:bg-violet-900/10 hover:text-violet-600 dark:hover:text-violet-300"
+                }
                 ${collapsed ? "justify-center" : ""}
               `}
             >
@@ -618,8 +644,11 @@ export default function Sidebar({
               className={`
                 w-full flex items-center gap-3 px-3 py-2 rounded-xl
                 transition-all duration-150
-                hover:bg-cyan-50 dark:hover:bg-cyan-900/20
-                text-cyan-600 dark:text-cyan-300
+                ${
+                  activeViewMode === "DM"
+                    ? "bg-cyan-50 dark:bg-cyan-900/20 text-cyan-600 dark:text-cyan-300"
+                    : "text-gray-500 dark:text-gray-400 hover:bg-cyan-50/50 dark:hover:bg-cyan-900/10 hover:text-cyan-600 dark:hover:text-cyan-300"
+                }
                 ${collapsed ? "justify-center" : ""}
               `}
             >
@@ -637,8 +666,11 @@ export default function Sidebar({
               className={`
                 w-full flex items-center gap-3 px-3 py-2 rounded-xl
                 transition-all duration-150
-                hover:bg-purple-50 dark:hover:bg-purple-900/20
-                text-purple-600 dark:text-purple-300
+                ${
+                  activeViewMode === "INTEGRATIONS"
+                    ? "bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-300"
+                    : "text-gray-500 dark:text-gray-400 hover:bg-purple-50/50 dark:hover:bg-purple-900/10 hover:text-purple-600 dark:hover:text-purple-300"
+                }
                 ${collapsed ? "justify-center" : ""}
               `}
             >

@@ -357,19 +357,24 @@ export class ProjectManagementService {
     const defaultEnd = new Date();
     defaultEnd.setDate(now.getDate() + 1);
 
-    const start = startDate
-      ? startOfDay(safeDate(startDate)!)
-      : startOfDay(defaultStart);
-
-    const end = endDate ? endOfDay(safeDate(endDate)!) : endOfDay(defaultEnd);
-
     const where: any = {
       isTrash: false,
-      createdAt: {
+    };
+
+    if (startDate !== "all") {
+      const start = startDate && startDate !== "undefined"
+        ? startOfDay(safeDate(startDate)!)
+        : startOfDay(defaultStart);
+
+      const end = endDate && endDate !== "undefined"
+        ? endOfDay(safeDate(endDate)!)
+        : endOfDay(defaultEnd);
+
+      where.createdAt = {
         gte: start,
         lte: end,
-      },
-    };
+      };
+    }
 
     if (projectId) {
       where.projectId = projectId;

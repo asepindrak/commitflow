@@ -75,6 +75,8 @@ export default function TaskView({
   onSelectTask,
   team,
   startPointerDrag,
+  filterKeyword,
+  setFilterKeyword,
 }: {
   currentMemberId: any;
   columns: { key: Task["status"]; title: string; items: Task[] }[];
@@ -91,6 +93,8 @@ export default function TaskView({
   onSelectTask: (t: Task) => void;
   team: TeamMember[];
   startPointerDrag: (id: string, x: number, y: number, target: any) => void;
+  filterKeyword: string;
+  setFilterKeyword: (kw: string) => void;
 }) {
   const STORAGE_KEY = "taskview_mode_v1";
   const [view, setView] = useState<"kanban" | "list" | "timeline">(() => {
@@ -102,7 +106,6 @@ export default function TaskView({
   });
 
   // ─── Filter state ───
-  const [filterKeyword, setFilterKeyword] = useState("");
   const [filterStatuses, setFilterStatuses] = useState<string[]>([]);
   const [filterPriorities, setFilterPriorities] = useState<string[]>([]);
   const [filterDateFrom, setFilterDateFrom] = useState("");

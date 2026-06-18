@@ -115,8 +115,8 @@ export default function ProjectManagement({
   const [tasks, setTasks] = useState<Task[]>([]);
   const [inviteLink, setInviteLink] = useState<string>("");
   const [viewMode, setViewMode] = useState<ViewMode>("DASHBOARD");
+  const [tasksSearchQuery, setTasksSearchQuery] = useState("");
   // 🗓️ GLOBAL DATE RANGE (for TaskBoard)
-  const [showDateFilter, setShowDateFilter] = useState(false);
   const [tasksStartDate, setTasksStartDate] = useState<string | undefined>(
     () => {
       const d = new Date();
@@ -908,11 +908,14 @@ export default function ProjectManagement({
   const [creatingTask, setCreatingTask] = useState(false);
   const qcRef = useRef(queryClient);
 
+  const queryStartDate = tasksSearchQuery.trim() !== "" ? "all" : tasksStartDate;
+  const queryEndDate = tasksSearchQuery.trim() !== "" ? "all" : tasksEndDate;
+
   const tasksQuery = useTasksQuery(
     activeProjectId ?? "",
     activeWorkspaceId ?? "",
-    tasksStartDate,
-    tasksEndDate,
+    queryStartDate,
+    queryEndDate,
   );
 
   const createTaskMutation = useCreateTask();
@@ -2653,12 +2656,12 @@ export default function ProjectManagement({
               })
               .then((created) => {
                 setProjects((prev) =>
-                  prev.map((pp) => (pp.id === p.id ? created : pp)),
+                    prev.map((pp) => (pp.id === p.id ? created : pp)),
                 );
                 setTasks((prev) =>
-                  prev.map((t) =>
-                    t.projectId === p.id ? { ...t, projectId: created.id } : t,
-                  ),
+                    prev.map((t) =>
+                        t.projectId === p.id ? { ...t, projectId: created.id } : t,
+                    ),
                 );
                 setActiveProjectId((cur) => (cur === p.id ? created.id : cur));
               })
@@ -2686,113 +2689,36 @@ export default function ProjectManagement({
           openEditProfileTeam={openEditProfileTeam}
           isAdmin={isAdmin}
           onOpenViewMode={(view: ViewMode) => setViewMode(view)}
+          activeViewMode={viewMode}
         />
 
         <main className="flex-1 h-full overflow-auto">
           <div className="cf-main-container min-h-full">
             <div className="flex items-center justify-between sticky top-0 z-10 px-8 py-4 mb-0 bg-[#f4f7ff]/90 dark:bg-[#0d1117]/95 backdrop-blur-xl border-b border-gray-200/60 dark:border-gray-800/80">
-              {!showDateFilter && (
-                <h2 className="text-3xl font-extrabold bg-gradient-to-r from-blue-600 via-sky-500 to-cyan-400 bg-clip-text text-transparent">
-                  {viewMode === "PROJECT"
-                    ? projects.find((x) => x.id === activeProjectId)?.name ||
-                      "—"
-                    : viewMode === "MY_TASKS"
-                      ? "My Tasks"
-                      : viewMode === "GROUP_CHAT"
-                        ? "Group Chat"
-                        : viewMode === "ACTIVITY_LOG"
-                          ? "Activity Log"
-                          : viewMode === "DASHBOARD"
-                            ? "Dashboard"
-                            : viewMode === "CALENDAR"
-                              ? "Calendar"
-                              : viewMode === "SPRINTS"
-                                ? "Sprints"
-                                : viewMode === "DM"
-                                  ? "Messages"
-                                  : viewMode === "INTEGRATIONS"
-                                    ? "Integrations"
-                                    : "Report"}
-                </h2>
-              )}
+              <h2 className="text-3xl font-extrabold bg-gradient-to-r from-blue-600 via-sky-500 to-cyan-400 bg-clip-text text-transparent">
+                {viewMode === "PROJECT"
+                  ? projects.find((x) => x.id === activeProjectId)?.name ||
+                    "—"
+                  : viewMode === "MY_TASKS"
+                    ? "My Tasks"
+                    : viewMode === "GROUP_CHAT"
+                      ? "Group Chat"
+                      : viewMode === "ACTIVITY_LOG"
+                        ? "Activity Log"
+                        : viewMode === "DASHBOARD"
+                          ? "Dashboard"
+                          : viewMode === "CALENDAR"
+                            ? "Calendar"
+                            : viewMode === "SPRINTS"
+                              ? "Sprints"
+                              : viewMode === "DM"
+                                ? "Messages"
+                                : viewMode === "INTEGRATIONS"
+                                  ? "Integrations"
+                                  : "Report"}
+              </h2>
               {viewMode === "PROJECT" && (
                 <div className="flex items-center gap-5">
-                  {!showDateFilter && (
-                    <button
-                      onClick={() => setShowDateFilter(!showDateFilter)}
-                      className="group inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold
-                      bg-white border border-gray-200 text-gray-700 cursor-pointer
-                      hover:bg-gray-50 active:scale-95 transition-all duration-300
-                      dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-700"
-                    >
-                      <Calendar
-                        size={18}
-                        className={`transition-transform ${
-                          syncing
-                            ? "animate-spin text-emerald-400"
-                            : "group-hover:rotate-15 text-gray-700 dark:text-white/80"
-                        }`}
-                      />
-                      Date
-                    </button>
-                  )}
-                  {showDateFilter && (
-                    <>
-                      <div
-                        className="
-                        flex items-center gap-2 px-3 py-2 rounded-lg border
-                        bg-white/60 dark:bg-gray-800/60
-                        border-gray-300 dark:border-gray-700
-                        text-sm
-                      "
-                      >
-                        <input
-                          type="date"
-                          value={tasksStartDate ?? ""}
-                          onChange={(e) =>
-                            setTasksStartDate(e.target.value || undefined)
-                          }
-                          className="bg-transparent outline-none text-sm"
-                        />
-                        <span className="text-gray-400">→</span>
-                        <input
-                          type="date"
-                          value={tasksEndDate ?? ""}
-                          onChange={(e) =>
-                            setTasksEndDate(e.target.value || undefined)
-                          }
-                          className="bg-transparent outline-none text-sm"
-                        />
-                      </div>
-
-                      {(tasksStartDate || tasksEndDate) && (
-                        <button
-                          onClick={() => {
-                            const now = new Date();
-                            const past = new Date();
-                            past.setDate(now.getDate() - 60);
-                            setTasksStartDate(past.toISOString().slice(0, 10));
-                            setTasksEndDate(now.toISOString().slice(0, 10));
-                            setShowDateFilter(!showDateFilter);
-                          }}
-                          className="group inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold
-                      bg-white border border-gray-200 text-gray-700 cursor-pointer
-                      hover:bg-gray-50 active:scale-95 transition-all duration-300
-                      dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-700"
-                        >
-                          <CalendarX
-                            size={18}
-                            className={`transition-transform ${
-                              syncing
-                                ? "animate-spin text-emerald-400"
-                                : "group-hover:rotate-15 text-gray-700 dark:text-white/80"
-                            }`}
-                          />
-                          Reset
-                        </button>
-                      )}
-                    </>
-                  )}
                   <button
                     onClick={handleSync}
                     disabled={syncing}
@@ -3057,9 +2983,9 @@ export default function ProjectManagement({
                 <>
                   <TasksReportTable
                     workspaceId={activeWorkspaceId}
-                    onSelectTask={(projectId: string) =>
-                      setActiveProjectId(projectId)
-                    }
+                    onSelectTask={(task: any) => {
+                      setSelectedTask(task);
+                    }}
                     team={team}
                   />
                 </>
@@ -3176,26 +3102,33 @@ export default function ProjectManagement({
                       return result;
                     });
 
-                    // call server to persist status (and optionally order/position if backend supports it)
+                    // trigger update task mutation
+                    const taskToUpdate = tasks.find(
+                      (t) => nid(t.id) === nid(draggedId),
+                    );
+                    if (!taskToUpdate) return;
+
                     updateTaskMutation.mutate(
                       {
                         id: draggedId,
                         patch: {
-                          status /* optionally include order/index if supported */,
+                          status,
+                          // optionally send order updates if the backend supports it
                         },
                       },
                       {
-                        onError: (err) => {
-                          console.error("update task failed", err);
-                          // fallback: enqueue op for eventual sync
-                          try {
-                            enqueueOp({
-                              op: "update_task",
-                              payload: { id: draggedId, patch: { status } },
-                              createdAt: new Date().toISOString(),
-                            });
-                          } catch (e) {
-                            console.log("enqueue failed", e);
+                        onError: () => {
+                          toast.dark("Failed to update status");
+                          // rollback manually if needed
+                        },
+                        onSuccess: (updated: any) => {
+                          // replace optimistic client item with server-updated details
+                          if (updated && updated.id) {
+                            setTasks((prev) =>
+                              prev.map((t) =>
+                                nid(t.id) === nid(draggedId) ? updated : t,
+                              ),
+                            );
                           }
                         },
                         onSettled: () => {
@@ -3218,6 +3151,8 @@ export default function ProjectManagement({
                     setSelectedTask(t);
                   }}
                   team={team}
+                  filterKeyword={tasksSearchQuery}
+                  setFilterKeyword={setTasksSearchQuery}
                 />
               )}
             </div>
@@ -3352,6 +3287,54 @@ export default function ProjectManagement({
                 dark={dark}
                 onDelete={async (id: string) => {
                   await handleDeleteTask(id);
+                }}
+                onDeleteComment={async (commentId: string) => {
+                  const taskId = selectedTask?.id;
+                  if (!taskId) return;
+
+                  await api.deleteComment(taskId, commentId);
+
+                  setTasks((prev) => {
+                    const next = prev.map((t) =>
+                      nid(t.id) === nid(taskId)
+                        ? {
+                            ...t,
+                            comments: (t.comments || []).filter(
+                              (c: any) => nid(c.id) !== nid(commentId),
+                            ),
+                          }
+                        : t,
+                    );
+                    setSelectedTask((curr) =>
+                      curr && nid(curr.id) === nid(taskId)
+                        ? {
+                            ...curr,
+                            comments: (curr.comments || []).filter(
+                              (c: any) => nid(c.id) !== nid(commentId),
+                            ),
+                          }
+                        : curr,
+                    );
+
+                    // persist updated snapshot to localStorage
+                    try {
+                      const snapshotRaw = localStorage.getItem(
+                        "commitflow_local_snapshot",
+                      );
+                      const snap = snapshotRaw ? JSON.parse(snapshotRaw) : {};
+                      snap.tasks = next;
+                      localStorage.setItem(
+                        "commitflow_local_snapshot",
+                        JSON.stringify(snap),
+                      );
+                    } catch (e) {
+                      console.warn("persist snapshot failed", e);
+                    }
+
+                    return next;
+                  });
+
+                  qcRef.current.invalidateQueries(["tasks", activeProjectId]);
                 }}
               />
             )}
