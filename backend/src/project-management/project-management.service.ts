@@ -521,24 +521,8 @@ export class ProjectManagementService {
     startDate?: string,
     endDate?: string,
   ) {
-    const now = new Date();
-
-    // default 60 days
-    const defaultStart = new Date();
-    defaultStart.setDate(now.getDate() - 60);
-
-    // default end tomorrow (to ensure today's tasks are always included)
-    const defaultEnd = new Date();
-    defaultEnd.setDate(now.getDate() + 1);
-
     const parsedStart = parseDateSafe(startDate);
     const parsedEnd = parseDateSafe(endDate);
-
-    const start = parsedStart
-      ? startOfDay(parsedStart)
-      : startOfDay(defaultStart);
-
-    const end = parsedEnd ? endOfDay(parsedEnd) : endOfDay(defaultEnd);
 
     const safeMemberId =
       memberId && memberId !== "undefined" && memberId !== "null"
@@ -547,10 +531,6 @@ export class ProjectManagementService {
 
     const where: any = {
       isTrash: false,
-      createdAt: {
-        gte: start,
-        lte: end,
-      },
       project: {
         workspaceId,
       },
@@ -560,6 +540,16 @@ export class ProjectManagementService {
         },
       }),
     };
+
+    if (parsedStart || parsedEnd) {
+      where.createdAt = {};
+      if (parsedStart) {
+        where.createdAt.gte = startOfDay(parsedStart);
+      }
+      if (parsedEnd) {
+        where.createdAt.lte = endOfDay(parsedEnd);
+      }
+    }
 
     const tasks = await prisma.task.findMany({
       where,

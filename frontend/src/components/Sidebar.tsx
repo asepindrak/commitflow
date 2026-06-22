@@ -708,7 +708,7 @@ export default function Sidebar({
           <div className="space-y-2 mb-4 mt-4">
             {projects.map((p: any, idx: number) => {
               const palette = PROJECT_PALETTE[idx % PROJECT_PALETTE.length];
-              const active = p.id === activeProjectId;
+              const active = p.id === activeProjectId && activeViewMode === "PROJECT";
 
               // --- NEW: compute avatar color from project name (same approach as team avatar) ---
               const hue = nameToHue(p.name ?? "project");

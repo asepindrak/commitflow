@@ -114,7 +114,10 @@ export default function ProjectManagement({
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [inviteLink, setInviteLink] = useState<string>("");
-  const [viewMode, setViewMode] = useState<ViewMode>("DASHBOARD");
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    const saved = getState("viewMode");
+    return saved ? (saved as ViewMode) : "DASHBOARD";
+  });
   const [tasksSearchQuery, setTasksSearchQuery] = useState("");
   // 🗓️ GLOBAL DATE RANGE (for TaskBoard)
   const [tasksStartDate, setTasksStartDate] = useState<string | undefined>(
@@ -227,20 +230,9 @@ export default function ProjectManagement({
   }, []);
 
   useEffect(() => {
-    if (
-      viewMode === "MY_TASKS" ||
-      viewMode === "REPORT" ||
-      viewMode === "GROUP_CHAT" ||
-      viewMode === "ACTIVITY_LOG" ||
-      viewMode === "DASHBOARD" ||
-      viewMode === "CALENDAR" ||
-      viewMode === "SPRINTS" ||
-      viewMode === "DM"
-    ) {
-      if (isLoaded) {
-        playSound("/sounds/close.mp3", isPlaySound);
-      }
-      setActiveProjectId("");
+    saveState("viewMode", viewMode);
+    if (isLoaded) {
+      playSound("/sounds/close.mp3", isPlaySound);
     }
   }, [viewMode]);
 
@@ -263,7 +255,9 @@ export default function ProjectManagement({
     }
     saveState("projectId", activeProjectId);
     setProjectId(activeProjectId);
-    setViewMode("PROJECT");
+    if (isLoaded) {
+      setViewMode("PROJECT");
+    }
   }, [activeProjectId]);
 
   const onOffSound = () => {
@@ -1681,6 +1675,7 @@ export default function ProjectManagement({
       );
 
       qcRef.current.invalidateQueries(["tasks", activeProjectId]);
+      qcRef.current.invalidateQueries(["report-tasks"]);
     } catch (err) {
       console.error(
         "[handleAddTask] create failed:",
@@ -1898,6 +1893,7 @@ export default function ProjectManagement({
         setTimeout(() => {
           try {
             qcRef.current.invalidateQueries(["tasks", activeProjectId]);
+            qcRef.current.invalidateQueries(["report-tasks"]);
             console.log("[handleUpdateTask] invalidateQueries fired (delayed)");
           } catch (e) {
             console.warn("invalidateQueries failed", e);
@@ -1917,6 +1913,7 @@ export default function ProjectManagement({
       await deleteTaskMutation.mutateAsync(id);
       try {
         qcRef.current.invalidateQueries(["tasks", activeProjectId]);
+        qcRef.current.invalidateQueries(["report-tasks"]);
       } catch (e) {
         console.log(e);
       }

@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from "react";
-import { Download, Loader2, RotateCcw } from "lucide-react";
+import React, { useMemo, useState, useEffect } from "react";
+import { Download, Loader2, RotateCcw, ChevronLeft, ChevronRight } from "lucide-react";
 import { useMyTasks, useReportTasks } from "../hooks/useTasks";
 import type { TeamMember } from "../types";
 import Select from "react-select";
@@ -98,6 +98,37 @@ function groupByWeekForTimeline(tasks: any[]) {
     return map;
 }
 
+function getPageNumbers(current: number, total: number) {
+    const pages: (number | string)[] = [];
+    if (total <= 5) {
+        for (let i = 1; i <= total; i++) {
+            pages.push(i);
+        }
+    } else {
+        pages.push(1);
+        if (current > 3) {
+            pages.push("...");
+        }
+
+        const start = Math.max(2, current - 1);
+        const end = Math.min(total - 1, current + 1);
+
+        for (let i = start; i <= end; i++) {
+            if (!pages.includes(i)) {
+                pages.push(i);
+            }
+        }
+
+        if (current < total - 2) {
+            pages.push("...");
+        }
+        if (!pages.includes(total)) {
+            pages.push(total);
+        }
+    }
+    return pages;
+}
+
 
 /* ================= types ================= */
 type Props = {
@@ -121,6 +152,12 @@ export default function TasksReportTable({
     type ViewMode = "table" | "timeline";
 
     const [viewMode, setViewMode] = useState<ViewMode>("table");
+    const [currentPage, setCurrentPage] = useState<number>(1);
+    const ITEMS_PER_PAGE = 20;
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchQuery, statusFilter, selectedMemberId, startDate, endDate]);
 
     const normalizedMemberId =
         selectedMemberId && selectedMemberId !== "undefined"
@@ -154,9 +191,15 @@ export default function TasksReportTable({
         });
     }, [data, statusFilter, searchQuery]);
 
+    const totalPages = Math.ceil(rows.length / ITEMS_PER_PAGE);
+
+    const paginatedRows = useMemo(() => {
+        return rows.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+    }, [rows, currentPage]);
+
     const timelineGroups = useMemo(() => {
-        return groupByWeekForTimeline(rows);
-    }, [rows]);
+        return groupByWeekForTimeline(paginatedRows);
+    }, [paginatedRows]);
 
     const memberOptions = useMemo<MemberOption[]>(() => {
         if (!Array.isArray(team) || team.length === 0) return [];
@@ -710,7 +753,7 @@ export default function TasksReportTable({
 
 
                         <tbody>
-                            {rows.map((t: any) => (
+                            {paginatedRows.map((t: any) => (
                                 <tr
                                     key={t.id}
                                     onClick={() => onSelectTask(t)}
@@ -756,10 +799,10 @@ export default function TasksReportTable({
                             ))}
 
 
-                            {rows.length === 0 && (
+                            {paginatedRows.length === 0 && (
                                 <tr>
                                     <td
-                                        colSpan={5}
+                                        colSpan={8}
                                         className="px-4 py-6 text-center text-gray-400"
                                     >
                                         No data in selected date range
@@ -774,9 +817,84 @@ export default function TasksReportTable({
 
             {viewMode === "timeline" && (
                 <ReportTimelineView
-                    rows={rows}
+                    rows={paginatedRows}
                     onSelectTask={onSelectTask}
                 />
+            )}
+
+            {/* ================= PAGINATION CONTROLS ================= */}
+            {totalPages > 1 && (
+                <div className="grid grid-cols-1 sm:grid-cols-3 items-center gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                    <div className="inline-flex items-center gap-1 justify-center sm:justify-start">
+                        <button
+                            onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                            disabled={currentPage === 1}
+                            className="
+                                px-2 py-1.5 rounded-lg border text-xs font-medium transition-all
+                                bg-white/60 dark:bg-gray-900/60
+                                border-gray-300 dark:border-gray-700
+                                text-gray-700 dark:text-gray-300
+                                hover:bg-gray-50 dark:hover:bg-gray-800
+                                active:scale-95 disabled:opacity-40 disabled:pointer-events-none
+                            "
+                        >
+                            <ChevronLeft size={14} />
+                        </button>
+
+                        {/* Page Numbers */}
+                        {getPageNumbers(currentPage, totalPages).map((p, idx) => (
+                            <button
+                                key={idx}
+                                onClick={() => typeof p === "number" && setCurrentPage(p)}
+                                disabled={p === "..."}
+                                className={`
+                                    px-3 py-1.5 rounded-lg text-xs font-semibold transition-all
+                                    ${p === currentPage
+                                        ? "bg-indigo-600 text-white shadow active:scale-95"
+                                        : p === "..."
+                                            ? "text-gray-400 dark:text-gray-500 cursor-default"
+                                            : "border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 bg-white/60 dark:bg-gray-900/60 hover:bg-gray-50 dark:hover:bg-gray-800 active:scale-95"
+                                    }
+                                `}
+                            >
+                                {p}
+                            </button>
+                        ))}
+
+                        <button
+                            onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+                            disabled={currentPage === totalPages}
+                            className="
+                                px-2 py-1.5 rounded-lg border text-xs font-medium transition-all
+                                bg-white/60 dark:bg-gray-900/60
+                                border-gray-300 dark:border-gray-700
+                                text-gray-700 dark:text-gray-300
+                                hover:bg-gray-50 dark:hover:bg-gray-800
+                                active:scale-95 disabled:opacity-40 disabled:pointer-events-none
+                            "
+                        >
+                            <ChevronRight size={14} />
+                        </button>
+                    </div>
+
+                    <div className="text-xs text-center text-gray-500 dark:text-gray-400">
+                        Showing{" "}
+                        <span className="font-semibold text-gray-900 dark:text-white">
+                            {(currentPage - 1) * ITEMS_PER_PAGE + 1}
+                        </span>{" "}
+                        to{" "}
+                        <span className="font-semibold text-gray-900 dark:text-white">
+                            {Math.min(currentPage * ITEMS_PER_PAGE, rows.length)}
+                        </span>{" "}
+                        of{" "}
+                        <span className="font-semibold text-gray-900 dark:text-white">
+                            {rows.length}
+                        </span>{" "}
+                        entries
+                    </div>
+
+                    <div className="hidden sm:block" />
+                </div>
             )}
 
 

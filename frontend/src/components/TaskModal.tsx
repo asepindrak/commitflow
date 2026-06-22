@@ -27,6 +27,16 @@ import MediaModal from "./MediaModal";
 import { useAuthStore } from "../utils/store";
 import { FaComment } from "react-icons/fa";
 import { getTaskAssignees } from "../utils/getTaskAssignees";
+import Select from "react-select";
+import { makeSelectStyles, makeSelectTheme } from "../utils/selectStyles";
+
+const statusOptions = [
+  { value: "todo", label: "Todo" },
+  { value: "inprogress", label: "In Progress" },
+  { value: "qa", label: "QA" },
+  { value: "deploy", label: "Deploy" },
+  { value: "done", label: "Done" },
+];
 
 export default function TaskModal({
   projects,
@@ -500,6 +510,27 @@ export default function TaskModal({
                         taskAssignees: memberIds.map((id) => ({ id })),
                       }));
                     }}
+                  />
+                </div>
+              </div>
+
+              {/* Status */}
+              <div className="flex items-center gap-4">
+                <span className="w-24 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider shrink-0">
+                  Status
+                </span>
+                <div className="flex-1">
+                  <Select
+                    options={statusOptions}
+                    value={statusOptions.find((o) => o.value === local.status) ?? null}
+                    onChange={(opt: any) => {
+                      if (opt) {
+                        setLocal({ ...local, status: opt.value });
+                      }
+                    }}
+                    styles={makeSelectStyles(dark)}
+                    theme={makeSelectTheme(dark)}
+                    classNamePrefix="cf-select"
                   />
                 </div>
               </div>
