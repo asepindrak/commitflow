@@ -202,7 +202,9 @@ export class ProjectManagementService {
       select: { email: true },
     });
 
-    const toEmails = teams.map((t) => t.email?.trim()).filter(Boolean);
+    const toEmails: string[] = teams
+      .map((t) => t.email?.trim())
+      .filter((email): email is string => Boolean(email));
 
     if (toEmails.length === 0) throw new Error("No recipient emails found");
 
@@ -912,8 +914,12 @@ export class ProjectManagementService {
       select: { email: true },
     });
 
-    const toEmails: any = Array.from(
-      new Set(teams.map((t) => t.email?.trim().toLowerCase()).filter(Boolean)),
+    const toEmails: string[] = Array.from(
+      new Set(
+        teams
+          .map((t) => t.email?.trim().toLowerCase())
+          .filter((email): email is string => Boolean(email)),
+      ),
     );
 
     if (!toEmails.length) return updated;
@@ -1148,8 +1154,12 @@ Due Date: ${format(updated.dueDate)}
       select: { email: true },
     });
 
-    const toEmails = Array.from(
-      new Set(teams.map((t) => t.email?.trim().toLowerCase()).filter(Boolean)),
+    const toEmails: string[] = Array.from(
+      new Set(
+        teams
+          .map((t) => t.email?.trim().toLowerCase())
+          .filter((email): email is string => Boolean(email)),
+      ),
     );
 
     if (!toEmails.length) {
